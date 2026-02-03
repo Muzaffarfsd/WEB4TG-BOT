@@ -7,6 +7,8 @@ from typing import Optional
 class Config:
     telegram_token: str
     gemini_api_key: str
+    elevenlabs_api_key: Optional[str] = None
+    elevenlabs_voice_id: str = "21m00Tcm4TlvDq8ikWAM"
     
     model_name: str = "gemini-3-pro-preview"
     max_tokens: int = 2000
@@ -21,6 +23,7 @@ class Config:
     def from_env(cls) -> "Config":
         telegram_token = os.environ.get("TELEGRAM_BOT_TOKEN")
         gemini_api_key = os.environ.get("GEMINI_API_KEY")
+        elevenlabs_api_key = os.environ.get("ELEVENLABS_API_KEY")
         
         if not telegram_token:
             raise ValueError("TELEGRAM_BOT_TOKEN is not set")
@@ -29,7 +32,8 @@ class Config:
         
         return cls(
             telegram_token=telegram_token,
-            gemini_api_key=gemini_api_key
+            gemini_api_key=gemini_api_key,
+            elevenlabs_api_key=elevenlabs_api_key
         )
 
 

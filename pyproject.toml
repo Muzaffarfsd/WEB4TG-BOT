@@ -4,6 +4,7 @@ version = "0.1.0"
 description = "Add your description here"
 requires-python = ">=3.11"
 dependencies = [
+    "elevenlabs>=2.34.0",
     "google-genai>=1.61.0",
     "openai>=2.16.0",
     "pydub>=0.25.1",

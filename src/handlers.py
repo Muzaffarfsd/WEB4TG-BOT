@@ -380,6 +380,22 @@ Courses — онлайн-школа с каталогом курсов, трек
         )
 
 
+async def generate_voice_response(text: str) -> bytes:
+    from elevenlabs import ElevenLabs
+    
+    client = ElevenLabs(api_key=config.elevenlabs_api_key)
+    
+    audio_generator = await asyncio.to_thread(
+        client.text_to_speech.convert,
+        voice_id=config.elevenlabs_voice_id,
+        text=text,
+        model_id="eleven_multilingual_v2"
+    )
+    
+    audio_bytes = b"".join(audio_generator)
+    return audio_bytes
+
+
 async def voice_handler(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
     user = update.effective_user
     
@@ -401,7 +417,6 @@ async def voice_handler(update: Update, context: ContextTypes.DEFAULT_TYPE) -> N
         
         from google import genai
         from google.genai import types
-        from src.config import config
         from src.knowledge_base import SYSTEM_PROMPT
         
         client = genai.Client(api_key=config.gemini_api_key)
@@ -425,7 +440,17 @@ async def voice_handler(update: Update, context: ContextTypes.DEFAULT_TYPE) -> N
         if response.text:
             session.add_message("user", "[Голосовое сообщение]", config.max_history_length)
             session.add_message("assistant", response.text, config.max_history_length)
-            await update.message.reply_text(response.text)
+            
+            if config.elevenlabs_api_key:
+                try:
+                    await update.effective_chat.send_action(ChatAction.RECORD_VOICE)
+                    voice_response = await generate_voice_response(response.text)
+                    await update.message.reply_voice(voice=voice_response)
+                except Exception as e:
+                    logger.error(f"ElevenLabs TTS error: {e}")
+                    await update.message.reply_text(response.text)
+            else:
+                await update.message.reply_text(response.text)
         else:
             await update.message.reply_text("Не удалось распознать сообщение. Попробуйте ещё раз или напишите текстом.")
             
