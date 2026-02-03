@@ -11,13 +11,7 @@ logger = logging.getLogger(__name__)
 
 class AIClient:
     def __init__(self):
-        self._client = genai.Client(
-            api_key=config.gemini_api_key,
-            http_options={
-                'api_version': '',
-                'base_url': config.gemini_base_url
-            }
-        )
+        self._client = genai.Client(api_key=config.gemini_api_key)
     
     async def generate_response(
         self,
