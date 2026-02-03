@@ -22,6 +22,12 @@ class LeadStatus(Enum):
     CONVERTED = "converted"
 
 
+class LeadPriority(Enum):
+    COLD = "cold"
+    WARM = "warm"
+    HOT = "hot"
+
+
 @dataclass
 class Lead:
     user_id: int
@@ -36,6 +42,11 @@ class Lead:
     selected_features: List[str] = field(default_factory=list)
     estimated_cost: int = 0
     id: Optional[int] = None
+    priority: LeadPriority = LeadPriority.COLD
+    tags: List[str] = field(default_factory=list)
+    score: int = 0
+    last_activity: Optional[float] = None
+    message_count: int = 0
 
 
 @dataclass
@@ -77,9 +88,26 @@ class LeadManager:
                             selected_features TEXT[],
                             estimated_cost INTEGER DEFAULT 0,
                             created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
-                            updated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
+                            updated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+                            priority VARCHAR(20) DEFAULT 'cold',
+                            tags TEXT[] DEFAULT '{}',
+                            score INTEGER DEFAULT 0,
+                            last_activity TIMESTAMP,
+                            message_count INTEGER DEFAULT 0
                         )
                     """)
+                    
+                    for col, col_def in [
+                        ("priority", "VARCHAR(20) DEFAULT 'cold'"),
+                        ("tags", "TEXT[] DEFAULT '{}'"),
+                        ("score", "INTEGER DEFAULT 0"),
+                        ("last_activity", "TIMESTAMP"),
+                        ("message_count", "INTEGER DEFAULT 0")
+                    ]:
+                        try:
+                            cur.execute(f"ALTER TABLE leads ADD COLUMN IF NOT EXISTS {col} {col_def}")
+                        except Exception:
+                            pass
                     
                     cur.execute("""
                         CREATE TABLE IF NOT EXISTS conversations (
@@ -225,6 +253,33 @@ class LeadManager:
         
         return lead
     
+    def _row_to_lead(self, row: dict) -> Lead:
+        priority = LeadPriority.COLD
+        try:
+            priority = LeadPriority(row.get('priority', 'cold') or 'cold')
+        except ValueError:
+            pass
+        
+        return Lead(
+            id=row['id'],
+            user_id=row['user_id'],
+            username=row['username'],
+            first_name=row['first_name'],
+            phone=row['phone'],
+            business_type=row['business_type'],
+            budget=row['budget'],
+            message=row['message'],
+            status=LeadStatus(row['status']),
+            selected_features=row['selected_features'] or [],
+            estimated_cost=row['estimated_cost'] or 0,
+            created_at=row['created_at'].timestamp() if row['created_at'] else time.time(),
+            priority=priority,
+            tags=row.get('tags') or [],
+            score=row.get('score') or 0,
+            last_activity=row['last_activity'].timestamp() if row.get('last_activity') else None,
+            message_count=row.get('message_count') or 0
+        )
+    
     def get_lead(self, user_id: int) -> Optional[Lead]:
         if not DATABASE_URL:
             return None
@@ -235,20 +290,7 @@ class LeadManager:
                     cur.execute("SELECT * FROM leads WHERE user_id = %s", (user_id,))
                     row = cur.fetchone()
                     if row:
-                        return Lead(
-                            id=row['id'],
-                            user_id=row['user_id'],
-                            username=row['username'],
-                            first_name=row['first_name'],
-                            phone=row['phone'],
-                            business_type=row['business_type'],
-                            budget=row['budget'],
-                            message=row['message'],
-                            status=LeadStatus(row['status']),
-                            selected_features=row['selected_features'] or [],
-                            estimated_cost=row['estimated_cost'] or 0,
-                            created_at=row['created_at'].timestamp() if row['created_at'] else time.time()
-                        )
+                        return self._row_to_lead(row)
         except Exception as e:
             logger.error(f"Failed to get lead: {e}")
         return None
@@ -262,7 +304,10 @@ class LeadManager:
         message: Optional[str] = None,
         selected_features: Optional[List[str]] = None,
         estimated_cost: Optional[int] = None,
-        status: Optional[LeadStatus] = None
+        status: Optional[LeadStatus] = None,
+        priority: Optional[LeadPriority] = None,
+        tags: Optional[List[str]] = None,
+        score: Optional[int] = None
     ) -> Optional[Lead]:
         if not DATABASE_URL:
             return None
@@ -291,6 +336,15 @@ class LeadManager:
         if status is not None:
             updates.append("status = %s")
             values.append(status.value)
+        if priority is not None:
+            updates.append("priority = %s")
+            values.append(priority.value)
+        if tags is not None:
+            updates.append("tags = %s")
+            values.append(tags)
+        if score is not None:
+            updates.append("score = %s")
+            values.append(score)
         
         if not updates:
             return self.get_lead(user_id)
@@ -334,6 +388,146 @@ class LeadManager:
         
         return "\n".join(lines)
     
+    def calculate_score(self, user_id: int) -> int:
+        score = 0
+        lead = self.get_lead(user_id)
+        if not lead:
+            return 0
+        
+        if lead.phone:
+            score += 20
+        if lead.business_type:
+            score += 15
+        if lead.budget:
+            score += 15
+        if lead.estimated_cost > 0:
+            score += 10
+        if lead.selected_features:
+            score += min(len(lead.selected_features) * 5, 20)
+        if lead.message_count >= 5:
+            score += 10
+        elif lead.message_count >= 2:
+            score += 5
+        
+        if lead.last_activity:
+            hours_since = (time.time() - lead.last_activity) / 3600
+            if hours_since < 24:
+                score += 10
+            elif hours_since < 72:
+                score += 5
+        
+        return min(score, 100)
+    
+    def update_activity(self, user_id: int) -> None:
+        if not DATABASE_URL:
+            return
+        
+        try:
+            with self._get_connection() as conn:
+                with conn.cursor() as cur:
+                    cur.execute("""
+                        UPDATE leads SET 
+                            last_activity = CURRENT_TIMESTAMP,
+                            message_count = COALESCE(message_count, 0) + 1,
+                            updated_at = CURRENT_TIMESTAMP
+                        WHERE user_id = %s
+                    """, (user_id,))
+                    conn.commit()
+            
+            score = self.calculate_score(user_id)
+            self.update_lead(user_id, score=score)
+            
+            lead = self.get_lead(user_id)
+            if lead and lead.score >= 50:
+                self.update_lead(user_id, priority=LeadPriority.HOT)
+            elif lead and lead.score >= 25:
+                self.update_lead(user_id, priority=LeadPriority.WARM)
+        except Exception as e:
+            logger.error(f"Failed to update activity: {e}")
+    
+    def add_tag(self, user_id: int, tag: str) -> Optional[Lead]:
+        lead = self.get_lead(user_id)
+        if not lead:
+            return None
+        
+        tags = list(lead.tags)
+        if tag not in tags:
+            tags.append(tag)
+            return self.update_lead(user_id, tags=tags)
+        return lead
+    
+    def remove_tag(self, user_id: int, tag: str) -> Optional[Lead]:
+        lead = self.get_lead(user_id)
+        if not lead:
+            return None
+        
+        tags = [t for t in lead.tags if t != tag]
+        return self.update_lead(user_id, tags=tags)
+    
+    def get_leads_by_priority(self, priority: LeadPriority, limit: int = 50) -> List[Lead]:
+        if not DATABASE_URL:
+            return []
+        
+        leads = []
+        try:
+            with self._get_connection() as conn:
+                with conn.cursor(cursor_factory=RealDictCursor) as cur:
+                    cur.execute(
+                        "SELECT * FROM leads WHERE priority = %s ORDER BY score DESC LIMIT %s",
+                        (priority.value, limit)
+                    )
+                    for row in cur.fetchall():
+                        leads.append(self._row_to_lead(row))
+        except Exception as e:
+            logger.error(f"Failed to get leads by priority: {e}")
+        return leads
+    
+    def get_leads_by_tag(self, tag: str, limit: int = 50) -> List[Lead]:
+        if not DATABASE_URL:
+            return []
+        
+        leads = []
+        try:
+            with self._get_connection() as conn:
+                with conn.cursor(cursor_factory=RealDictCursor) as cur:
+                    cur.execute(
+                        "SELECT * FROM leads WHERE %s = ANY(tags) ORDER BY score DESC LIMIT %s",
+                        (tag, limit)
+                    )
+                    for row in cur.fetchall():
+                        leads.append(self._row_to_lead(row))
+        except Exception as e:
+            logger.error(f"Failed to get leads by tag: {e}")
+        return leads
+    
+    def get_lead_history(self, user_id: int, limit: int = 100) -> List[Dict]:
+        if not DATABASE_URL:
+            return []
+        
+        history = []
+        try:
+            with self._get_connection() as conn:
+                with conn.cursor(cursor_factory=RealDictCursor) as cur:
+                    cur.execute("""
+                        SELECT 'message' as type, role, content, created_at
+                        FROM conversations WHERE user_id = %s
+                        UNION ALL
+                        SELECT 'event' as type, event_type as role, 
+                               COALESCE(data::text, '') as content, created_at
+                        FROM analytics WHERE user_id = %s
+                        ORDER BY created_at DESC LIMIT %s
+                    """, (user_id, user_id, limit))
+                    for row in cur.fetchall():
+                        history.append({
+                            'type': row['type'],
+                            'role': row['role'],
+                            'content': row['content'][:200] if row['content'] else '',
+                            'created_at': row['created_at']
+                        })
+        except Exception as e:
+            logger.error(f"Failed to get lead history: {e}")
+        return list(reversed(history))
+    
     def get_all_leads(self, limit: int = 100) -> List[Lead]:
         if not DATABASE_URL:
             return []
@@ -342,22 +536,9 @@ class LeadManager:
         try:
             with self._get_connection() as conn:
                 with conn.cursor(cursor_factory=RealDictCursor) as cur:
-                    cur.execute("SELECT * FROM leads ORDER BY created_at DESC LIMIT %s", (limit,))
+                    cur.execute("SELECT * FROM leads ORDER BY score DESC, created_at DESC LIMIT %s", (limit,))
                     for row in cur.fetchall():
-                        leads.append(Lead(
-                            id=row['id'],
-                            user_id=row['user_id'],
-                            username=row['username'],
-                            first_name=row['first_name'],
-                            phone=row['phone'],
-                            business_type=row['business_type'],
-                            budget=row['budget'],
-                            message=row['message'],
-                            status=LeadStatus(row['status']),
-                            selected_features=row['selected_features'] or [],
-                            estimated_cost=row['estimated_cost'] or 0,
-                            created_at=row['created_at'].timestamp() if row['created_at'] else time.time()
-                        ))
+                        leads.append(self._row_to_lead(row))
         except Exception as e:
             logger.error(f"Failed to get leads: {e}")
         return leads
