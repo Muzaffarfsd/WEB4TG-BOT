@@ -6,5 +6,7 @@ requires-python = ">=3.11"
 dependencies = [
     "google-genai>=1.61.0",
     "openai>=2.16.0",
+    "pydub>=0.25.1",
     "python-telegram-bot>=22.6",
+    "tenacity>=9.1.2",
 ]
