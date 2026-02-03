@@ -87,6 +87,19 @@ We develop Telegram Mini Apps for businesses.
 
 Tell me about your business — I'd like to understand how I can help."""
     
+    pinned_keyboard = InlineKeyboardMarkup([
+        [InlineKeyboardButton("🚀 Открыть приложение", callback_data="open_app")]
+    ])
+    pinned_msg = await update.message.reply_text(
+        "👋 Добро пожаловать в WEB4TG Studio!",
+        reply_markup=pinned_keyboard
+    )
+    
+    try:
+        await pinned_msg.pin(disable_notification=True)
+    except Exception as e:
+        logger.debug(f"Could not pin message: {e}")
+    
     await update.message.reply_text(
         welcome_text,
         reply_markup=get_quick_reply_keyboard()
@@ -157,7 +170,13 @@ async def callback_handler(update: Update, context: ContextTypes.DEFAULT_TYPE) -
     user_id = query.from_user.id
     data = query.data
     
-    if data == "menu_back":
+    if data == "open_app":
+        await query.message.reply_text(
+            "Вот что могу показать:",
+            reply_markup=get_main_menu_keyboard()
+        )
+    
+    elif data == "menu_back":
         await query.edit_message_text(
             "Вот что могу показать:",
             reply_markup=get_main_menu_keyboard()
