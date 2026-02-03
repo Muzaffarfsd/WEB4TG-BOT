@@ -49,6 +49,9 @@ AI-агент поддержки для WEB4TG Studio — премиальной
 - `/portfolio` - Примеры работ
 - `/contact` - Контакты
 - `/calc` - Калькулятор стоимости
+- `/leads` - Просмотр лидов (только менеджер)
+- `/stats` - Статистика бота (только менеджер)
+- `/export` - Экспорт лидов в CSV (только менеджер)
 
 ## Environment Variables
 - `TELEGRAM_BOT_TOKEN` - Bot token from @BotFather

@@ -10,7 +10,8 @@ from src.config import config
 from src.handlers import (
     start_handler, help_handler, clear_handler, menu_handler,
     price_handler, portfolio_handler, contact_handler, calc_handler,
-    message_handler, callback_handler, voice_handler, error_handler
+    message_handler, callback_handler, voice_handler, error_handler,
+    leads_handler, stats_handler, export_handler
 )
 
 logging.basicConfig(
@@ -34,6 +35,9 @@ def main() -> None:
     application.add_handler(CommandHandler("portfolio", portfolio_handler))
     application.add_handler(CommandHandler("contact", contact_handler))
     application.add_handler(CommandHandler("calc", calc_handler))
+    application.add_handler(CommandHandler("leads", leads_handler))
+    application.add_handler(CommandHandler("stats", stats_handler))
+    application.add_handler(CommandHandler("export", export_handler))
     
     application.add_handler(CallbackQueryHandler(callback_handler))
     

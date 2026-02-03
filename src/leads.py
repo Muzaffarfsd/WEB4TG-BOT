@@ -1,11 +1,14 @@
 import os
 import time
 import logging
+import csv
+import io
 import psycopg2
 from psycopg2.extras import RealDictCursor
 from dataclasses import dataclass, field
 from typing import Dict, List, Optional
 from enum import Enum
+from datetime import datetime, timedelta
 
 logger = logging.getLogger(__name__)
 
@@ -33,6 +36,15 @@ class Lead:
     selected_features: List[str] = field(default_factory=list)
     estimated_cost: int = 0
     id: Optional[int] = None
+
+
+@dataclass
+class Message:
+    id: Optional[int]
+    user_id: int
+    role: str
+    content: str
+    created_at: float
 
 
 class LeadManager:
@@ -68,10 +80,50 @@ class LeadManager:
                             updated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
                         )
                     """)
+                    
+                    cur.execute("""
+                        CREATE TABLE IF NOT EXISTS conversations (
+                            id SERIAL PRIMARY KEY,
+                            user_id BIGINT NOT NULL,
+                            role VARCHAR(20) NOT NULL,
+                            content TEXT NOT NULL,
+                            created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
+                        )
+                    """)
+                    
+                    cur.execute("""
+                        CREATE TABLE IF NOT EXISTS analytics (
+                            id SERIAL PRIMARY KEY,
+                            event_type VARCHAR(50) NOT NULL,
+                            user_id BIGINT,
+                            data JSONB,
+                            created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
+                        )
+                    """)
+                    
+                    cur.execute("""
+                        CREATE INDEX IF NOT EXISTS idx_leads_status ON leads(status)
+                    """)
+                    cur.execute("""
+                        CREATE INDEX IF NOT EXISTS idx_leads_created ON leads(created_at)
+                    """)
+                    cur.execute("""
+                        CREATE INDEX IF NOT EXISTS idx_conversations_user ON conversations(user_id)
+                    """)
+                    cur.execute("""
+                        CREATE INDEX IF NOT EXISTS idx_conversations_created ON conversations(created_at)
+                    """)
+                    cur.execute("""
+                        CREATE INDEX IF NOT EXISTS idx_analytics_type ON analytics(event_type)
+                    """)
+                    cur.execute("""
+                        CREATE INDEX IF NOT EXISTS idx_analytics_created ON analytics(created_at)
+                    """)
+                    
                     conn.commit()
-            logger.info("Leads table initialized")
+            logger.info("Database tables initialized")
         except Exception as e:
-            logger.error(f"Failed to init leads table: {e}")
+            logger.error(f"Failed to init database: {e}")
     
     def set_manager_chat_id(self, chat_id: int) -> None:
         self._manager_chat_id = chat_id
@@ -79,6 +131,63 @@ class LeadManager:
     
     def get_manager_chat_id(self) -> Optional[int]:
         return self._manager_chat_id
+    
+    def save_message(self, user_id: int, role: str, content: str) -> None:
+        if not DATABASE_URL:
+            return
+        
+        try:
+            with self._get_connection() as conn:
+                with conn.cursor() as cur:
+                    cur.execute("""
+                        INSERT INTO conversations (user_id, role, content)
+                        VALUES (%s, %s, %s)
+                    """, (user_id, role, content[:10000]))
+                    conn.commit()
+        except Exception as e:
+            logger.error(f"Failed to save message: {e}")
+    
+    def get_conversation_history(self, user_id: int, limit: int = 50) -> List[Message]:
+        if not DATABASE_URL:
+            return []
+        
+        messages = []
+        try:
+            with self._get_connection() as conn:
+                with conn.cursor(cursor_factory=RealDictCursor) as cur:
+                    cur.execute("""
+                        SELECT * FROM conversations 
+                        WHERE user_id = %s 
+                        ORDER BY created_at DESC 
+                        LIMIT %s
+                    """, (user_id, limit))
+                    for row in cur.fetchall():
+                        messages.append(Message(
+                            id=row['id'],
+                            user_id=row['user_id'],
+                            role=row['role'],
+                            content=row['content'],
+                            created_at=row['created_at'].timestamp() if row['created_at'] else time.time()
+                        ))
+        except Exception as e:
+            logger.error(f"Failed to get conversation: {e}")
+        return list(reversed(messages))
+    
+    def log_event(self, event_type: str, user_id: Optional[int] = None, data: Optional[Dict] = None) -> None:
+        if not DATABASE_URL:
+            return
+        
+        try:
+            with self._get_connection() as conn:
+                with conn.cursor() as cur:
+                    import json
+                    cur.execute("""
+                        INSERT INTO analytics (event_type, user_id, data)
+                        VALUES (%s, %s, %s)
+                    """, (event_type, user_id, json.dumps(data) if data else None))
+                    conn.commit()
+        except Exception as e:
+            logger.error(f"Failed to log event: {e}")
     
     def create_lead(
         self,
@@ -109,6 +218,8 @@ class LeadManager:
                         if result:
                             lead.id = result[0]
                         conn.commit()
+                
+                self.log_event("lead_created", user_id, {"username": username})
             except Exception as e:
                 logger.error(f"Failed to create lead: {e}")
         
@@ -223,7 +334,7 @@ class LeadManager:
         
         return "\n".join(lines)
     
-    def get_all_leads(self) -> List[Lead]:
+    def get_all_leads(self, limit: int = 100) -> List[Lead]:
         if not DATABASE_URL:
             return []
         
@@ -231,7 +342,7 @@ class LeadManager:
         try:
             with self._get_connection() as conn:
                 with conn.cursor(cursor_factory=RealDictCursor) as cur:
-                    cur.execute("SELECT * FROM leads ORDER BY created_at DESC")
+                    cur.execute("SELECT * FROM leads ORDER BY created_at DESC LIMIT %s", (limit,))
                     for row in cur.fetchall():
                         leads.append(Lead(
                             id=row['id'],
@@ -272,6 +383,96 @@ class LeadManager:
         except Exception as e:
             logger.error(f"Failed to get stats: {e}")
         return {"total": 0, "new": 0, "contacted": 0, "qualified": 0, "converted": 0}
+    
+    def get_analytics_stats(self) -> Dict:
+        if not DATABASE_URL:
+            return {}
+        
+        try:
+            with self._get_connection() as conn:
+                with conn.cursor(cursor_factory=RealDictCursor) as cur:
+                    cur.execute("""
+                        SELECT 
+                            COUNT(*) FILTER (WHERE event_type = 'message') as total_messages,
+                            COUNT(*) FILTER (WHERE event_type = 'voice_message') as voice_messages,
+                            COUNT(*) FILTER (WHERE event_type = 'calculator_used') as calculator_uses,
+                            COUNT(*) FILTER (WHERE event_type = 'lead_created') as leads_created,
+                            COUNT(DISTINCT user_id) as unique_users
+                        FROM analytics
+                    """)
+                    row = cur.fetchone()
+                    
+                    cur.execute("""
+                        SELECT COUNT(DISTINCT user_id) as today_users
+                        FROM analytics 
+                        WHERE created_at >= CURRENT_DATE
+                    """)
+                    today = cur.fetchone()
+                    
+                    cur.execute("""
+                        SELECT COUNT(DISTINCT user_id) as week_users
+                        FROM analytics 
+                        WHERE created_at >= CURRENT_DATE - INTERVAL '7 days'
+                    """)
+                    week = cur.fetchone()
+                    
+                    result = dict(row) if row else {}
+                    result['today_users'] = today['today_users'] if today else 0
+                    result['week_users'] = week['week_users'] if week else 0
+                    return result
+        except Exception as e:
+            logger.error(f"Failed to get analytics: {e}")
+        return {}
+    
+    def get_popular_topics(self, limit: int = 10) -> List[Dict]:
+        if not DATABASE_URL:
+            return []
+        
+        try:
+            with self._get_connection() as conn:
+                with conn.cursor(cursor_factory=RealDictCursor) as cur:
+                    cur.execute("""
+                        SELECT data->>'topic' as topic, COUNT(*) as count
+                        FROM analytics 
+                        WHERE event_type = 'message' AND data->>'topic' IS NOT NULL
+                        GROUP BY data->>'topic'
+                        ORDER BY count DESC
+                        LIMIT %s
+                    """, (limit,))
+                    return [dict(row) for row in cur.fetchall()]
+        except Exception as e:
+            logger.error(f"Failed to get popular topics: {e}")
+        return []
+    
+    def export_leads_csv(self) -> str:
+        leads = self.get_all_leads(limit=1000)
+        
+        output = io.StringIO()
+        writer = csv.writer(output)
+        
+        writer.writerow([
+            'ID', 'User ID', 'Username', 'Имя', 'Телефон', 
+            'Тип бизнеса', 'Бюджет', 'Расчёт', 'Статус', 
+            'Функции', 'Сообщение', 'Дата создания'
+        ])
+        
+        for lead in leads:
+            writer.writerow([
+                lead.id,
+                lead.user_id,
+                f"@{lead.username}" if lead.username else "",
+                lead.first_name or "",
+                lead.phone or "",
+                lead.business_type or "",
+                lead.budget or "",
+                lead.estimated_cost,
+                lead.status.value,
+                ", ".join(lead.selected_features),
+                lead.message or "",
+                datetime.fromtimestamp(lead.created_at).strftime("%Y-%m-%d %H:%M")
+            ])
+        
+        return output.getvalue()
 
 
 lead_manager = LeadManager()

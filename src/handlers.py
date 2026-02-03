@@ -224,6 +224,10 @@ async def callback_handler(update: Update, context: ContextTypes.DEFAULT_TYPE) -
                     selected_features=list(calc.selected_features),
                     estimated_cost=calc.get_total()
                 )
+                lead_manager.log_event("calculator_used", user_id, {
+                    "features": list(calc.selected_features),
+                    "total": calc.get_total()
+                })
                 
                 text = f"""{calc.get_summary()}
 
@@ -557,6 +561,10 @@ async def voice_handler(update: Update, context: ContextTypes.DEFAULT_TYPE) -> N
             session.add_message("user", "[Голосовое сообщение]", config.max_history_length)
             session.add_message("assistant", response.text, config.max_history_length)
             
+            lead_manager.save_message(user.id, "user", "[Голосовое сообщение]")
+            lead_manager.save_message(user.id, "assistant", response.text)
+            lead_manager.log_event("voice_message", user.id)
+            
             if config.elevenlabs_api_key:
                 try:
                     await update.effective_chat.send_action(ChatAction.RECORD_VOICE)
@@ -578,6 +586,88 @@ async def voice_handler(update: Update, context: ContextTypes.DEFAULT_TYPE) -> N
         )
 
 
+async def leads_handler(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
+    user_id = update.effective_user.id
+    manager_id = lead_manager.get_manager_chat_id()
+    
+    if manager_id and user_id != manager_id:
+        await update.message.reply_text("Эта команда только для менеджера.")
+        return
+    
+    leads = lead_manager.get_all_leads(limit=20)
+    
+    if not leads:
+        await update.message.reply_text("Лидов пока нет.")
+        return
+    
+    text_parts = ["📋 **Последние лиды:**\n"]
+    for lead in leads[:10]:
+        status_emoji = {"new": "🆕", "contacted": "📞", "qualified": "✅", "converted": "💰"}.get(lead.status.value, "❓")
+        name = lead.first_name or "Без имени"
+        username = f"@{lead.username}" if lead.username else "—"
+        cost = f"{lead.estimated_cost:,}₽".replace(",", " ") if lead.estimated_cost else "—"
+        text_parts.append(f"{status_emoji} {name} ({username}) — {cost}")
+    
+    await update.message.reply_text("\n".join(text_parts), parse_mode="Markdown")
+
+
+async def stats_handler(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
+    user_id = update.effective_user.id
+    manager_id = lead_manager.get_manager_chat_id()
+    
+    if manager_id and user_id != manager_id:
+        await update.message.reply_text("Эта команда только для менеджера.")
+        return
+    
+    stats = lead_manager.get_stats()
+    analytics = lead_manager.get_analytics_stats()
+    
+    text = f"""📊 **Статистика бота**
+
+**Лиды:**
+🆕 Новые: {stats.get('new', 0)}
+📞 В работе: {stats.get('contacted', 0)}
+✅ Квалифицированы: {stats.get('qualified', 0)}
+💰 Конвертированы: {stats.get('converted', 0)}
+📈 Всего: {stats.get('total', 0)}
+
+**Активность:**
+💬 Сообщений: {analytics.get('total_messages', 0)}
+🎙 Голосовых: {analytics.get('voice_messages', 0)}
+🧮 Калькулятор: {analytics.get('calculator_uses', 0)}
+👥 Всего юзеров: {analytics.get('unique_users', 0)}
+📅 Сегодня: {analytics.get('today_users', 0)}
+📆 За неделю: {analytics.get('week_users', 0)}"""
+
+    await update.message.reply_text(text, parse_mode="Markdown")
+
+
+async def export_handler(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
+    user_id = update.effective_user.id
+    manager_id = lead_manager.get_manager_chat_id()
+    
+    if manager_id and user_id != manager_id:
+        await update.message.reply_text("Эта команда только для менеджера.")
+        return
+    
+    csv_data = lead_manager.export_leads_csv()
+    
+    with tempfile.NamedTemporaryFile(mode='w', suffix='.csv', delete=False, encoding='utf-8') as f:
+        f.write(csv_data)
+        temp_path = f.name
+    
+    try:
+        with open(temp_path, 'rb') as f:
+            await update.message.reply_document(
+                document=f,
+                filename="leads_export.csv",
+                caption="📥 Экспорт лидов"
+            )
+    finally:
+        import os
+        os.unlink(temp_path)
+
+
 async def message_handler(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
     user = update.effective_user
     user_message = update.message.text
@@ -592,6 +682,9 @@ async def message_handler(update: Update, context: ContextTypes.DEFAULT_TYPE) ->
     )
     
     session.add_message("user", user_message, config.max_history_length)
+    
+    lead_manager.save_message(user.id, "user", user_message)
+    lead_manager.log_event("message", user.id, {"length": len(user_message)})
     
     typing_task = asyncio.create_task(
         send_typing_action(update, duration=60.0)
@@ -608,6 +701,8 @@ async def message_handler(update: Update, context: ContextTypes.DEFAULT_TYPE) ->
         )
         
         session.add_message("assistant", response, config.max_history_length)
+        
+        lead_manager.save_message(user.id, "assistant", response)
         
         typing_task.cancel()
         try:
