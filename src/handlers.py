@@ -382,14 +382,23 @@ Courses — онлайн-школа с каталогом курсов, трек
 
 async def generate_voice_response(text: str) -> bytes:
     from elevenlabs import ElevenLabs
+    from elevenlabs.types import VoiceSettings
     
     client = ElevenLabs(api_key=config.elevenlabs_api_key)
+    
+    voice_settings = VoiceSettings(
+        stability=0.3,
+        similarity_boost=0.75,
+        style=0.4,
+        use_speaker_boost=True
+    )
     
     audio_generator = await asyncio.to_thread(
         client.text_to_speech.convert,
         voice_id=config.elevenlabs_voice_id,
         text=text,
-        model_id="eleven_multilingual_v2"
+        model_id="eleven_multilingual_v2",
+        voice_settings=voice_settings
     )
     
     audio_bytes = b"".join(audio_generator)
