@@ -406,17 +406,13 @@ async def voice_handler(update: Update, context: ContextTypes.DEFAULT_TYPE) -> N
         
         client = genai.Client(api_key=config.gemini_api_key)
         
+        audio_part = types.Part.from_bytes(data=bytes(voice_bytes), mime_type="audio/ogg")
+        text_part = types.Part(text="Это голосовое сообщение от клиента. Сначала расшифруй что он сказал, затем ответь на его вопрос как консультант WEB4TG Studio.")
+        
         response = await asyncio.to_thread(
             client.models.generate_content,
             model=config.model_name,
-            contents=[
-                types.Content(
-                    parts=[
-                        types.Part.from_bytes(data=bytes(voice_bytes), mime_type="audio/ogg"),
-                        types.Part.from_text("Это голосовое сообщение от клиента. Сначала расшифруй что он сказал, затем ответь на его вопрос как консультант WEB4TG Studio.")
-                    ]
-                )
-            ],
+            contents=[audio_part, text_part],
             config=types.GenerateContentConfig(
                 system_instruction=SYSTEM_PROMPT,
                 max_output_tokens=1000,
