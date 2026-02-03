@@ -1,0 +1,98 @@
+ValueError: TELEGRAM_BOT_TOKEN is not set
+  File "/app/src/config.py", line 42, in <module>
+    raise ValueError("TELEGRAM_BOT_TOKEN is not set")
+    config = Config.from_env()
+Traceback (most recent call last):
+             ^^^^^^^^^^^^^^^^^
+  File "/app/bot.py", line 9, in <module>
+  File "/app/src/config.py", line 31, in from_env
+    from src.config import config
+Traceback (most recent call last):
+  File "/app/bot.py", line 9, in <module>
+    from src.config import config
+  File "/app/src/config.py", line 42, in <module>
+    config = Config.from_env()
+             ^^^^^^^^^^^^^^^^^
+  File "/app/src/config.py", line 31, in from_env
+    raise ValueError("TELEGRAM_BOT_TOKEN is not set")
+ValueError: TELEGRAM_BOT_TOKEN is not set
+    from src.config import config
+  File "/app/src/config.py", line 42, in <module>
+    config = Config.from_env()
+             ^^^^^^^^^^^^^^^^^
+  File "/app/src/config.py", line 31, in from_env
+    raise ValueError("TELEGRAM_BOT_TOKEN is not set")
+ValueError: TELEGRAM_BOT_TOKEN is not set
+Traceback (most recent call last):
+  File "/app/bot.py", line 9, in <module>
+Traceback (most recent call last):
+  File "/app/bot.py", line 9, in <module>
+    from src.config import config
+  File "/app/src/config.py", line 42, in <module>
+    config = Config.from_env()
+             ^^^^^^^^^^^^^^^^^
+  File "/app/src/config.py", line 31, in from_env
+    raise ValueError("TELEGRAM_BOT_TOKEN is not set")
+ValueError: TELEGRAM_BOT_TOKEN is not set
+ValueError: TELEGRAM_BOT_TOKEN is not set
+Traceback (most recent call last):
+  File "/app/bot.py", line 9, in <module>
+    from src.config import config
+  File "/app/src/config.py", line 42, in <module>
+    config = Config.from_env()
+             ^^^^^^^^^^^^^^^^^
+  File "/app/src/config.py", line 31, in from_env
+    raise ValueError("TELEGRAM_BOT_TOKEN is not set")
+Traceback (most recent call last):
+  File "/app/bot.py", line 9, in <module>
+    from src.config import config
+  File "/app/src/config.py", line 42, in <module>
+    config = Config.from_env()
+             ^^^^^^^^^^^^^^^^^
+  File "/app/src/config.py", line 31, in from_env
+    raise ValueError("TELEGRAM_BOT_TOKEN is not set")
+ValueError: TELEGRAM_BOT_TOKEN is not set
+Traceback (most recent call last):
+  File "/app/bot.py", line 9, in <module>
+    from src.config import config
+  File "/app/src/config.py", line 42, in <module>
+    config = Config.from_env()
+             ^^^^^^^^^^^^^^^^^
+  File "/app/src/config.py", line 31, in from_env
+    raise ValueError("TELEGRAM_BOT_TOKEN is not set")
+ValueError: TELEGRAM_BOT_TOKEN is not set
+             ^^^^^^^^^^^^^^^^^
+  File "/app/src/config.py", line 31, in from_env
+    raise ValueError("TELEGRAM_BOT_TOKEN is not set")
+ValueError: TELEGRAM_BOT_TOKEN is not set
+Traceback (most recent call last):
+  File "/app/bot.py", line 9, in <module>
+    from src.config import config
+  File "/app/src/config.py", line 42, in <module>
+    config = Config.from_env()
+  File "/app/src/config.py", line 31, in from_env
+    raise ValueError("TELEGRAM_BOT_TOKEN is not set")
+ValueError: TELEGRAM_BOT_TOKEN is not set
+    from src.config import config
+  File "/app/src/config.py", line 42, in <module>
+    config = Config.from_env()
+Traceback (most recent call last):
+             ^^^^^^^^^^^^^^^^^
+  File "/app/bot.py", line 9, in <module>
+Traceback (most recent call last):
+  File "/app/bot.py", line 9, in <module>
+    from src.config import config
+  File "/app/src/config.py", line 42, in <module>
+    config = Config.from_env()
+             ^^^^^^^^^^^^^^^^^
+  File "/app/src/config.py", line 31, in from_env
+    raise ValueError("TELEGRAM_BOT_TOKEN is not set")
+ValueError: TELEGRAM_BOT_TOKEN is not set
+Traceback (most recent call last):
+  File "/app/bot.py", line 9, in <module>
+    from src.config import config
+  File "/app/src/config.py", line 42, in <module>
+    config = Config.from_env()
+             ^^^^^^^^^^^^^^^^^
+  File "/app/src/config.py", line 31, in from_env
+    raise ValueError("TELEGRAM_BOT_TOKEN is not set")
