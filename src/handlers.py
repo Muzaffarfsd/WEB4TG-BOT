@@ -56,18 +56,25 @@ async def start_handler(update: Update, context: ContextTypes.DEFAULT_TYPE) -> N
     
     await send_typing_action(update)
     
-    prompt = f"""Generate a short welcome message for WEB4TG Studio consultant named Alex.
+    prompt = f"""Generate a welcome message for WEB4TG Studio consultant named Alex.
 Language code: {lang_code}
 User name: {name if name else "unknown"}
 
-The message should:
+Requirements:
 1. Greet the user (use their name if provided)
 2. Introduce Alex as consultant at WEB4TG Studio
 3. Briefly mention we develop Telegram Mini Apps for businesses
 4. Ask about their business to understand how to help
 
+CRITICAL LANGUAGE RULES:
+- Write in the language matching the language code
+- Use PERFECT grammar — no errors in cases, tenses, agreements
+- Write like an educated native speaker, NOT machine translation
+- Use natural idioms and expressions for that language
+- Proper punctuation according to language rules
+
 Keep it SHORT (3-4 sentences max). Friendly but professional tone.
-Write ONLY the message text, nothing else. Use the language matching the language code."""
+Write ONLY the message text, nothing else."""
 
     try:
         welcome_text = await ai_client.quick_response(prompt)
