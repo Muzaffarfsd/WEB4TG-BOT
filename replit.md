@@ -1,10 +1,18 @@
-# WEB4TG-BOT
+# WEB4TG Studio AI Agent Bot
 
 ## Overview
-A Telegram bot with AI capabilities powered by OpenAI's GPT model. The bot maintains conversation history per user and can engage in helpful dialogues.
+AI-агент поддержки для WEB4TG Studio — премиальной студии разработки Telegram Mini Apps. Бот консультирует клиентов по услугам, ценам, помогает подобрать решение и рассчитать стоимость приложения.
 
 ## Project Structure
 - `bot.py` - Main bot application with Telegram handlers and OpenAI integration
+- `attached_assets/ai-agent-knowledge-base_1770135411189.md` - Full knowledge base
+
+## Bot Capabilities
+- Ответы на вопросы об услугах и ценах WEB4TG Studio
+- Консультации по выбору шаблона и функций
+- Расчёт примерной стоимости приложения
+- Примеры из портфолио
+- Подведение к заказу
 
 ## Commands
 - `/start` - Start the bot and reset conversation
