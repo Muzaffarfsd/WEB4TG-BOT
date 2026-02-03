@@ -8,7 +8,7 @@ class Config:
     telegram_token: str
     gemini_api_key: str
     elevenlabs_api_key: Optional[str] = None
-    elevenlabs_voice_id: str = "rQOBu7YxCDxGiFdTm28w"
+    elevenlabs_voice_id: str = "cYtsVoFd8OotcgweGd2W"
     
     model_name: str = "gemini-3-pro-preview"
     max_tokens: int = 2000

@@ -389,7 +389,7 @@ async def generate_voice_response(text: str) -> bytes:
         client.text_to_speech.convert,
         voice_id=config.elevenlabs_voice_id,
         text=text,
-        model_id="eleven_v3_alpha",
+        model_id="eleven_v3",
         output_format="mp3_44100_192"
     )
     
