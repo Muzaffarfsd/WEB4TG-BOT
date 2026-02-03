@@ -64,8 +64,8 @@ AI-агент поддержки для WEB4TG Studio — премиальной
 - `MANAGER_CHAT_ID` - (Optional) Chat ID for lead notifications
 
 ## AI Models
-- **Fast responses**: Gemini 2.0 Flash (instant replies)
-- **Complex queries**: Gemini 2.5 Pro Preview (thinking mode, 4096 budget)
+- **Fast responses**: Gemini 3 Pro Preview (instant replies)
+- **Complex queries**: Gemini 3 Pro Preview (thinking mode, 4096 budget)
 
 ## Running
 ```bash
