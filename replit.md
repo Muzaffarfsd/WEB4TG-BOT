@@ -20,7 +20,11 @@ AI-агент поддержки для WEB4TG Studio — премиальной
 
 ## Environment Variables Required
 - `TELEGRAM_BOT_TOKEN` - Bot token from @BotFather on Telegram
-- `OPENAI_API_KEY` - OpenAI API key
+- `AI_INTEGRATIONS_GEMINI_API_KEY` - Auto-configured via Replit AI Integrations
+- `AI_INTEGRATIONS_GEMINI_BASE_URL` - Auto-configured via Replit AI Integrations
+
+## AI Model
+- Gemini 3 Pro Preview (via Replit AI Integrations - no separate API key needed)
 
 ## Running
 The bot runs as a console application using polling mode.
