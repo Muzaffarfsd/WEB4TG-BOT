@@ -123,11 +123,11 @@ def get_quick_reply_keyboard() -> ReplyKeyboardMarkup:
     """Quick action buttons at the bottom of chat (funnel stages)."""
     keyboard = [
         [
-            KeyboardButton("🔍 Узнать больше"),
-            KeyboardButton("💬 Консультация")
+            KeyboardButton("💰 Узнать цену"),
+            KeyboardButton("🎯 Подобрать решение")
         ],
         [
-            KeyboardButton("📱 Рассчитать стоимость")
+            KeyboardButton("🚀 Хочу приложение!")
         ]
     ]
     return ReplyKeyboardMarkup(
