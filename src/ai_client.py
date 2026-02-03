@@ -13,9 +13,10 @@ class AIClient:
     def __init__(self):
         self._client = genai.Client(
             api_key=config.gemini_api_key,
-            http_options=genai.types.HttpOptions(
-                base_url=config.gemini_base_url
-            )
+            http_options={
+                'api_version': '',
+                'base_url': config.gemini_base_url
+            }
         )
     
     async def generate_response(
