@@ -1,4 +1,4 @@
-from telegram import InlineKeyboardButton, InlineKeyboardMarkup, ReplyKeyboardMarkup, KeyboardButton
+from telegram import InlineKeyboardButton, InlineKeyboardMarkup, ReplyKeyboardMarkup, KeyboardButton, WebAppInfo
 
 
 def get_main_menu_keyboard() -> InlineKeyboardMarkup:
@@ -127,6 +127,7 @@ def get_quick_reply_keyboard() -> ReplyKeyboardMarkup:
             KeyboardButton("🎯 Подобрать решение")
         ],
         [
+            KeyboardButton("📱 Открыть приложение", web_app=WebAppInfo(url="https://w4tg.up.railway.app/")),
             KeyboardButton("🚀 Хочу приложение!")
         ]
     ]
