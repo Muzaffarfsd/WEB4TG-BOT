@@ -9,7 +9,7 @@ class Config:
     gemini_api_key: str
     gemini_base_url: str
     
-    model_name: str = "gemini-3-pro-preview"
+    model_name: str = "gemini-2.5-pro"
     max_tokens: int = 2000
     temperature: float = 0.7
     
