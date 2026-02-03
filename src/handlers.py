@@ -12,7 +12,8 @@ from src.config import config
 from src.keyboards import (
     get_main_menu_keyboard, get_services_keyboard, 
     get_portfolio_keyboard, get_calculator_keyboard,
-    get_lead_keyboard, get_back_keyboard, get_subscription_keyboard
+    get_lead_keyboard, get_back_keyboard, get_subscription_keyboard,
+    get_quick_reply_keyboard
 )
 from src.calculator import calculator_manager, FEATURES
 from src.leads import lead_manager
@@ -86,7 +87,10 @@ We develop Telegram Mini Apps for businesses.
 
 Tell me about your business — I'd like to understand how I can help."""
     
-    await update.message.reply_text(welcome_text)
+    await update.message.reply_text(
+        welcome_text,
+        reply_markup=get_quick_reply_keyboard()
+    )
 
 
 async def help_handler(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
@@ -842,6 +846,19 @@ async def message_handler(update: Update, context: ContextTypes.DEFAULT_TYPE) ->
     
     if not user_message or not user_message.strip():
         return
+    
+    quick_buttons = {
+        "🔍 Узнать больше": "Расскажи подробнее о ваших услугах и что вы можете сделать",
+        "💬 Консультация": "Хочу получить консультацию по разработке приложения",
+        "📱 Рассчитать стоимость": "calc"
+    }
+    
+    if user_message in quick_buttons:
+        if user_message == "📱 Рассчитать стоимость":
+            await calc_handler(update, context)
+            return
+        else:
+            user_message = quick_buttons[user_message]
     
     session = session_manager.get_session(
         user_id=user.id,

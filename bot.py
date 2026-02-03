@@ -25,8 +25,24 @@ logging.getLogger("httpcore").setLevel(logging.WARNING)
 logger = logging.getLogger(__name__)
 
 
+async def post_init(application) -> None:
+    """Set up bot commands menu after initialization."""
+    commands = [
+        BotCommand("start", "🚀 Открыть приложение"),
+        BotCommand("menu", "📋 Главное меню"),
+        BotCommand("price", "💰 Цены на услуги"),
+        BotCommand("portfolio", "🎨 Примеры работ"),
+        BotCommand("calc", "📱 Калькулятор стоимости"),
+        BotCommand("contact", "📞 Связаться с нами"),
+        BotCommand("help", "❓ Помощь"),
+    ]
+    await application.bot.set_my_commands(commands)
+    await application.bot.set_chat_menu_button(menu_button=MenuButtonCommands())
+    logger.info("Bot commands menu configured")
+
+
 def main() -> None:
-    application = Application.builder().token(config.telegram_token).build()
+    application = Application.builder().token(config.telegram_token).post_init(post_init).build()
     
     application.add_handler(CommandHandler("start", start_handler))
     application.add_handler(CommandHandler("help", help_handler))

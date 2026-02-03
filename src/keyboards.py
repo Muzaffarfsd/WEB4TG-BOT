@@ -1,4 +1,4 @@
-from telegram import InlineKeyboardButton, InlineKeyboardMarkup
+from telegram import InlineKeyboardButton, InlineKeyboardMarkup, ReplyKeyboardMarkup, KeyboardButton
 
 
 def get_main_menu_keyboard() -> InlineKeyboardMarkup:
@@ -117,3 +117,21 @@ def get_subscription_keyboard() -> InlineKeyboardMarkup:
         ]
     ]
     return InlineKeyboardMarkup(keyboard)
+
+
+def get_quick_reply_keyboard() -> ReplyKeyboardMarkup:
+    """Quick action buttons at the bottom of chat (funnel stages)."""
+    keyboard = [
+        [
+            KeyboardButton("🔍 Узнать больше"),
+            KeyboardButton("💬 Консультация")
+        ],
+        [
+            KeyboardButton("📱 Рассчитать стоимость")
+        ]
+    ]
+    return ReplyKeyboardMarkup(
+        keyboard,
+        resize_keyboard=True,
+        is_persistent=True
+    )
