@@ -2,7 +2,7 @@ import asyncio
 import logging
 import os
 import tempfile
-from telegram import Update, InlineKeyboardMarkup, InlineKeyboardButton
+from telegram import Update, InlineKeyboardMarkup, InlineKeyboardButton, WebAppInfo
 from telegram.ext import ContextTypes
 from telegram.constants import ChatAction
 
@@ -88,7 +88,7 @@ We develop Telegram Mini Apps for businesses.
 Tell me about your business — I'd like to understand how I can help."""
     
     pinned_keyboard = InlineKeyboardMarkup([
-        [InlineKeyboardButton("🚀 Открыть приложение", callback_data="open_app")]
+        [InlineKeyboardButton("🚀 Открыть приложение", web_app=WebAppInfo(url="https://w4tg.up.railway.app/"))]
     ])
     pinned_msg = await update.message.reply_text(
         "👋 Добро пожаловать в WEB4TG Studio!",
