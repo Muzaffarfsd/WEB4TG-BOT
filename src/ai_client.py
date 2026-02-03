@@ -30,28 +30,37 @@ class AIClient:
         self,
         messages: List[Dict],
         thinking_level: str = "medium",
-        max_retries: int = 3,
-        retry_delay: float = 1.0
+        max_retries: int = 2,
+        retry_delay: float = 0.5
     ) -> str:
+        if thinking_level == "high":
+            model = config.thinking_model_name
+            gen_config = types.GenerateContentConfig(
+                system_instruction=SYSTEM_PROMPT,
+                max_output_tokens=config.max_tokens,
+                temperature=config.temperature,
+                thinking_config=types.ThinkingConfig(thinking_budget=4096)
+            )
+        else:
+            model = config.fast_model_name
+            gen_config = types.GenerateContentConfig(
+                system_instruction=SYSTEM_PROMPT,
+                max_output_tokens=config.max_tokens,
+                temperature=config.temperature
+            )
+        
         @retry(
             stop=stop_after_attempt(max_retries),
-            wait=wait_exponential(multiplier=retry_delay, min=1, max=30),
+            wait=wait_exponential(multiplier=retry_delay, min=0.5, max=10),
             retry=retry_if_exception(is_rate_limit_error),
             reraise=True
         )
         async def _generate():
             response = await asyncio.to_thread(
                 self._client.models.generate_content,
-                model=config.model_name,
+                model=model,
                 contents=messages,
-                config=types.GenerateContentConfig(
-                    system_instruction=SYSTEM_PROMPT,
-                    max_output_tokens=config.max_tokens,
-                    temperature=config.temperature,
-                    thinking_config=types.ThinkingConfig(
-                        thinking_budget=8192 if thinking_level == "high" else 4096
-                    )
-                )
+                config=gen_config
             )
             return response
         

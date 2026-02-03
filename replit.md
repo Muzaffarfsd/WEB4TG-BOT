@@ -63,8 +63,9 @@ AI-агент поддержки для WEB4TG Studio — премиальной
 - `GEMINI_API_KEY` - Google AI API key for Gemini 3 Pro
 - `MANAGER_CHAT_ID` - (Optional) Chat ID for lead notifications
 
-## AI Model
-Gemini 3 Pro Preview with thinking mode (8192 token budget)
+## AI Models
+- **Fast responses**: Gemini 2.0 Flash (instant replies)
+- **Complex queries**: Gemini 2.5 Pro Preview (thinking mode, 4096 budget)
 
 ## Running
 ```bash

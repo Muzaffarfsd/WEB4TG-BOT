@@ -10,14 +10,16 @@ class Config:
     elevenlabs_api_key: Optional[str] = None
     elevenlabs_voice_id: str = "rQOBu7YxCDxGiFdTm28w"
     
-    model_name: str = "gemini-3-pro-preview"
-    max_tokens: int = 2000
+    model_name: str = "gemini-2.0-flash"
+    fast_model_name: str = "gemini-2.0-flash"
+    thinking_model_name: str = "gemini-2.5-pro-preview-05-06"
+    max_tokens: int = 1500
     temperature: float = 0.7
     
-    max_history_length: int = 30
+    max_history_length: int = 20
     typing_interval: float = 4.0
-    max_retries: int = 3
-    retry_delay: float = 1.0
+    max_retries: int = 2
+    retry_delay: float = 0.5
     
     @classmethod
     def from_env(cls) -> "Config":
