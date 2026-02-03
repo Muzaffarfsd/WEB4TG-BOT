@@ -8,7 +8,7 @@ class Config:
     telegram_token: str
     gemini_api_key: str
     
-    model_name: str = "gemini-2.5-pro-preview-06-05"
+    model_name: str = "gemini-3-pro-preview"
     max_tokens: int = 2000
     temperature: float = 0.7
     
