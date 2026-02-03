@@ -385,10 +385,15 @@ async def generate_voice_response(text: str) -> bytes:
     
     client = ElevenLabs(api_key=config.elevenlabs_api_key)
     
+    clean_text = text.replace("**", "").replace("*", "").replace("#", "").replace("•", ",")
+    clean_text = clean_text.replace("\n\n", ". ").replace("\n", ", ")
+    
+    voice_text = f"[friendly, warm tone] {clean_text}"
+    
     audio_generator = await asyncio.to_thread(
         client.text_to_speech.convert,
         voice_id=config.elevenlabs_voice_id,
-        text=text,
+        text=voice_text,
         model_id="eleven_v3",
         output_format="mp3_44100_192"
     )
