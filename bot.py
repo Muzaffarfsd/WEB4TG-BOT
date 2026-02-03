@@ -1,6 +1,6 @@
 #!/usr/bin/env python3
 import logging
-from telegram import Update
+from telegram import Update, BotCommand, MenuButtonCommands
 from telegram.ext import (
     Application, CommandHandler, MessageHandler, 
     CallbackQueryHandler, filters
