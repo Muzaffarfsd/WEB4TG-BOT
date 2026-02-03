@@ -49,52 +49,35 @@ async def start_handler(update: Update, context: ContextTypes.DEFAULT_TYPE) -> N
     )
     session.clear_history()
     
-    logger.info(f"User {user.id} ({user.username}) started bot, lang={user.language_code}")
+    lang_code = user.language_code or "en"
+    logger.info(f"User {user.id} ({user.username}) started bot, lang={lang_code}")
     
     name = user.first_name or ""
-    lang = (user.language_code or "").lower()[:2]
     
-    welcome_messages = {
-        "en": {
-            "with_name": f"""Hello, {name}! I'm Alex, consultant at WEB4TG Studio.
+    await send_typing_action(update)
+    
+    prompt = f"""Generate a short welcome message for WEB4TG Studio consultant named Alex.
+Language code: {lang_code}
+User name: {name if name else "unknown"}
 
-We develop Telegram Mini Apps for businesses.
+The message should:
+1. Greet the user (use their name if provided)
+2. Introduce Alex as consultant at WEB4TG Studio
+3. Briefly mention we develop Telegram Mini Apps for businesses
+4. Ask about their business to understand how to help
 
-Tell me about your business — I'd like to understand how I can help.""",
-            "no_name": """Hello! I'm Alex, consultant at WEB4TG Studio.
+Keep it SHORT (3-4 sentences max). Friendly but professional tone.
+Write ONLY the message text, nothing else. Use the language matching the language code."""
+
+    try:
+        welcome_text = await ai_client.quick_response(prompt)
+    except Exception as e:
+        logger.error(f"Failed to generate welcome: {e}")
+        welcome_text = f"""Hello{', ' + name if name else ''}! I'm Alex, consultant at WEB4TG Studio.
 
 We develop Telegram Mini Apps for businesses.
 
 Tell me about your business — I'd like to understand how I can help."""
-        },
-        "uk": {
-            "with_name": f"""Добрий день, {name}! Мене звати Алекс, я консультант WEB4TG Studio.
-
-Ми розробляємо додатки для Telegram під ключ.
-
-Розкажіть про ваш бізнес — хочу зрозуміти, як краще допомогти.""",
-            "no_name": """Добрий день! Мене звати Алекс, я консультант WEB4TG Studio.
-
-Ми розробляємо додатки для Telegram під ключ.
-
-Розкажіть про ваш бізнес — хочу зрозуміти, як краще допомогти."""
-        },
-        "ru": {
-            "with_name": f"""Добрый день, {name}! Меня зовут Алекс, я консультант WEB4TG Studio.
-
-Мы разрабатываем приложения для Telegram под ключ.
-
-Расскажите, какой у вас бизнес? Хочу понять, как лучше помочь.""",
-            "no_name": """Добрый день! Меня зовут Алекс, я консультант WEB4TG Studio.
-
-Мы разрабатываем приложения для Telegram под ключ.
-
-Расскажите, какой у вас бизнес? Хочу понять, как лучше помочь."""
-        }
-    }
-    
-    msgs = welcome_messages.get(lang, welcome_messages["en"])
-    welcome_text = msgs["with_name"] if name else msgs["no_name"]
     
     await update.message.reply_text(welcome_text)
 
