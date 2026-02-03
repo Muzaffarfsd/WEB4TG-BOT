@@ -383,9 +383,62 @@ Courses — онлайн-школа с каталогом курсов, трек
 async def voice_handler(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
     user = update.effective_user
     
-    await update.message.reply_text(
-        "К сожалению, голосовые сообщения пока не поддерживаются. Напишите текстом, пожалуйста)"
+    typing_task = asyncio.create_task(
+        send_typing_action(update, duration=30.0)
     )
+    
+    try:
+        voice = update.message.voice
+        file = await context.bot.get_file(voice.file_id)
+        
+        voice_bytes = await file.download_as_bytearray()
+        
+        session = session_manager.get_session(
+            user_id=user.id,
+            username=user.username,
+            first_name=user.first_name
+        )
+        
+        from google import genai
+        from google.genai import types
+        from src.config import config
+        from src.knowledge_base import SYSTEM_PROMPT
+        
+        client = genai.Client(api_key=config.gemini_api_key)
+        
+        response = await asyncio.to_thread(
+            client.models.generate_content,
+            model=config.model_name,
+            contents=[
+                types.Content(
+                    parts=[
+                        types.Part.from_bytes(data=bytes(voice_bytes), mime_type="audio/ogg"),
+                        types.Part.from_text("Это голосовое сообщение от клиента. Сначала расшифруй что он сказал, затем ответь на его вопрос как консультант WEB4TG Studio.")
+                    ]
+                )
+            ],
+            config=types.GenerateContentConfig(
+                system_instruction=SYSTEM_PROMPT,
+                max_output_tokens=1000,
+                temperature=0.7
+            )
+        )
+        
+        typing_task.cancel()
+        
+        if response.text:
+            session.add_message("user", "[Голосовое сообщение]", config.max_history_length)
+            session.add_message("assistant", response.text, config.max_history_length)
+            await update.message.reply_text(response.text)
+        else:
+            await update.message.reply_text("Не удалось распознать сообщение. Попробуйте ещё раз или напишите текстом.")
+            
+    except Exception as e:
+        typing_task.cancel()
+        logger.error(f"Voice processing error: {e}")
+        await update.message.reply_text(
+            "Не удалось обработать голосовое сообщение. Напишите текстом, пожалуйста."
+        )
 
 
 async def message_handler(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
