@@ -49,21 +49,52 @@ async def start_handler(update: Update, context: ContextTypes.DEFAULT_TYPE) -> N
     )
     session.clear_history()
     
-    logger.info(f"User {user.id} ({user.username}) started bot")
+    logger.info(f"User {user.id} ({user.username}) started bot, lang={user.language_code}")
     
     name = user.first_name or ""
-    if name:
-        welcome_text = f"""Добрый день, {name}! Меня зовут Алекс, я консультант WEB4TG Studio.
+    lang = (user.language_code or "").lower()[:2]
+    
+    welcome_messages = {
+        "en": {
+            "with_name": f"""Hello, {name}! I'm Alex, consultant at WEB4TG Studio.
+
+We develop Telegram Mini Apps for businesses.
+
+Tell me about your business — I'd like to understand how I can help.""",
+            "no_name": """Hello! I'm Alex, consultant at WEB4TG Studio.
+
+We develop Telegram Mini Apps for businesses.
+
+Tell me about your business — I'd like to understand how I can help."""
+        },
+        "uk": {
+            "with_name": f"""Добрий день, {name}! Мене звати Алекс, я консультант WEB4TG Studio.
+
+Ми розробляємо додатки для Telegram під ключ.
+
+Розкажіть про ваш бізнес — хочу зрозуміти, як краще допомогти.""",
+            "no_name": """Добрий день! Мене звати Алекс, я консультант WEB4TG Studio.
+
+Ми розробляємо додатки для Telegram під ключ.
+
+Розкажіть про ваш бізнес — хочу зрозуміти, як краще допомогти."""
+        },
+        "ru": {
+            "with_name": f"""Добрый день, {name}! Меня зовут Алекс, я консультант WEB4TG Studio.
+
+Мы разрабатываем приложения для Telegram под ключ.
+
+Расскажите, какой у вас бизнес? Хочу понять, как лучше помочь.""",
+            "no_name": """Добрый день! Меня зовут Алекс, я консультант WEB4TG Studio.
 
 Мы разрабатываем приложения для Telegram под ключ.
 
 Расскажите, какой у вас бизнес? Хочу понять, как лучше помочь."""
-    else:
-        welcome_text = """Добрый день! Меня зовут Алекс, я консультант WEB4TG Studio.
-
-Мы разрабатываем приложения для Telegram под ключ.
-
-Расскажите, какой у вас бизнес? Хочу понять, как лучше помочь."""
+        }
+    }
+    
+    msgs = welcome_messages.get(lang, welcome_messages["en"])
+    welcome_text = msgs["with_name"] if name else msgs["no_name"]
     
     await update.message.reply_text(welcome_text)
 
