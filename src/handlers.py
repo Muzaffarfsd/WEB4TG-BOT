@@ -380,6 +380,114 @@ Courses — онлайн-школа с каталогом курсов, трек
         )
 
 
+STRESS_DICTIONARY = {
+    "разработка": "разрабо́тка",
+    "приложение": "приложе́ние",
+    "приложения": "приложе́ния",
+    "стоимость": "сто́имость",
+    "договор": "догово́р",
+    "звонит": "звони́т",
+    "каталог": "катало́г",
+    "маркетинг": "ма́ркетинг",
+    "обеспечение": "обеспе́чение",
+    "средства": "сре́дства",
+    "процент": "проце́нт",
+    "квартал": "кварта́л",
+    "эксперт": "экспе́рт",
+    "оптовый": "опто́вый",
+    "украинский": "украи́нский",
+    "красивее": "краси́вее",
+    "мастерски": "мастерски́",
+    "включит": "включи́т",
+    "облегчить": "облегчи́ть",
+    "углубить": "углуби́ть",
+    "баловать": "балова́ть",
+    "досуг": "досу́г",
+    "жалюзи": "жалюзи́",
+    "торты": "то́рты",
+    "банты": "ба́нты",
+    "шарфы": "ша́рфы",
+    "порты": "по́рты",
+    "склады": "скла́ды",
+    "telegram": "телегра́м",
+    "функционал": "функциона́л",
+    "интерфейс": "интерфе́йс",
+    "дизайн": "диза́йн",
+    "контент": "конте́нт",
+    "проект": "прое́кт",
+    "клиент": "клие́нт",
+    "сервис": "се́рвис",
+    "бизнес": "би́знес",
+    "менеджер": "ме́неджер",
+    "маркетплейс": "маркетпле́йс",
+}
+
+
+async def analyze_emotions_and_prepare_text(text: str) -> str:
+    from google import genai
+    from google.genai import types
+    
+    client = genai.Client(api_key=config.gemini_api_key)
+    
+    prompt = """Ты эксперт по подготовке текста для естественного озвучивания.
+
+Твоя задача: добавить эмоциональные теги ElevenLabs v3 в текст для естественного звучания.
+
+Доступные теги (вставляй в квадратных скобках перед фразой):
+- [friendly] - дружелюбно
+- [excited] - с энтузиазмом  
+- [calm] - спокойно
+- [professional] - деловой тон
+- [warm] - тепло
+- [curious] - с интересом
+- [confident] - уверенно
+- [helpful] - услужливо
+
+Правила:
+1. Добавляй теги перед предложениями/фразами где меняется эмоция
+2. Не переусердствуй - 2-4 тега на абзац максимум
+3. Приветствия: [friendly, warm]
+4. Цены/факты: [confident, professional]  
+5. Предложения помощи: [helpful, warm]
+6. Интересные факты: [excited]
+7. Вопросы: [curious]
+8. Убери markdown разметку (**, *, #, •)
+9. Замени переносы строк на точки или запятые для пауз
+10. НЕ меняй смысл текста, только добавь теги
+
+Верни ТОЛЬКО обработанный текст, без объяснений.
+
+Текст для обработки:
+"""
+    
+    try:
+        response = await asyncio.to_thread(
+            client.models.generate_content,
+            model="gemini-2.0-flash",
+            contents=[prompt + text],
+            config=types.GenerateContentConfig(
+                max_output_tokens=2000,
+                temperature=0.3
+            )
+        )
+        
+        if response.text:
+            return response.text.strip()
+    except Exception as e:
+        logger.error(f"Emotion analysis error: {e}")
+    
+    return text
+
+
+def apply_stress_marks(text: str) -> str:
+    result = text
+    for word, stressed in STRESS_DICTIONARY.items():
+        import re
+        pattern = re.compile(re.escape(word), re.IGNORECASE)
+        result = pattern.sub(stressed, result)
+    return result
+
+
 async def generate_voice_response(text: str) -> bytes:
     from elevenlabs import ElevenLabs
     
@@ -388,7 +496,9 @@ async def generate_voice_response(text: str) -> bytes:
     clean_text = text.replace("**", "").replace("*", "").replace("#", "").replace("•", ",")
     clean_text = clean_text.replace("\n\n", ". ").replace("\n", ", ")
     
-    voice_text = f"[friendly, warm tone] {clean_text}"
+    voice_text = await analyze_emotions_and_prepare_text(clean_text)
+    
+    voice_text = apply_stress_marks(voice_text)
     
     audio_generator = await asyncio.to_thread(
         client.text_to_speech.convert,
