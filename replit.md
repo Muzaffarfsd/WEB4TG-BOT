@@ -3,9 +3,27 @@
 ## Overview
 AI-агент поддержки для WEB4TG Studio — премиальной студии разработки Telegram Mini Apps. Бот консультирует клиентов по услугам, ценам, помогает подобрать решение и рассчитать стоимость приложения.
 
-## Project Structure
-- `bot.py` - Main bot application with Telegram handlers and OpenAI integration
-- `attached_assets/ai-agent-knowledge-base_1770135411189.md` - Full knowledge base
+## Project Structure (2026 Best Practices)
+```
+├── bot.py                 # Entry point
+├── src/
+│   ├── __init__.py
+│   ├── config.py          # Configuration management
+│   ├── knowledge_base.py  # System prompts & messages
+│   ├── session.py         # User session management with TTL
+│   ├── ai_client.py       # Gemini AI client with retries
+│   └── handlers.py        # Telegram command & message handlers
+└── attached_assets/       # Knowledge base source
+```
+
+## Architecture Features
+- **Modular structure** - Separate modules for config, AI, sessions, handlers
+- **Session management** - Per-user conversation history with TTL (24h)
+- **Memory limits** - Max 30 messages per conversation, 10k sessions
+- **Retry logic** - Auto-retry on AI failures with exponential backoff
+- **Typing indicators** - Shows "typing..." while generating response
+- **Long message handling** - Splits messages >4096 chars
+- **Async processing** - Non-blocking AI calls
 
 ## Bot Capabilities
 - Ответы на вопросы об услугах и ценах WEB4TG Studio
@@ -15,16 +33,22 @@ AI-агент поддержки для WEB4TG Studio — премиальной
 - Подведение к заказу
 
 ## Commands
-- `/start` - Start the bot and reset conversation
-- `/clear` - Clear conversation history
+- `/start` - Начать диалог
+- `/help` - Список команд
+- `/clear` - Очистить историю
+- `/price` - Цены на услуги
+- `/portfolio` - Примеры работ
+- `/contact` - Контакты
 
-## Environment Variables Required
-- `TELEGRAM_BOT_TOKEN` - Bot token from @BotFather on Telegram
-- `AI_INTEGRATIONS_GEMINI_API_KEY` - Auto-configured via Replit AI Integrations
-- `AI_INTEGRATIONS_GEMINI_BASE_URL` - Auto-configured via Replit AI Integrations
+## Environment Variables
+- `TELEGRAM_BOT_TOKEN` - Bot token from @BotFather
+- `AI_INTEGRATIONS_GEMINI_API_KEY` - Auto-configured
+- `AI_INTEGRATIONS_GEMINI_BASE_URL` - Auto-configured
 
 ## AI Model
-- Gemini 3 Pro Preview (via Replit AI Integrations - no separate API key needed)
+Gemini 3 Pro Preview (via Replit AI Integrations)
 
 ## Running
-The bot runs as a console application using polling mode.
+```bash
+python bot.py
+```
