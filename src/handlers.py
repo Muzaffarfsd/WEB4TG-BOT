@@ -427,13 +427,10 @@ async def message_handler(update: Update, context: ContextTypes.DEFAULT_TYPE) ->
         
         if len(response) > 4096:
             chunks = [response[i:i+4096] for i in range(0, len(response), 4096)]
-            for i, chunk in enumerate(chunks):
-                if i == len(chunks) - 1:
-                    await update.message.reply_text(chunk, reply_markup=get_back_keyboard())
-                else:
-                    await update.message.reply_text(chunk)
+            for chunk in chunks:
+                await update.message.reply_text(chunk)
         else:
-            await update.message.reply_text(response, reply_markup=get_back_keyboard())
+            await update.message.reply_text(response)
         
         logger.info(f"User {user.id}: processed message #{session.message_count}")
         
