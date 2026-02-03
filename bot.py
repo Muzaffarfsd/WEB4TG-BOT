@@ -2,7 +2,7 @@ import os
 import logging
 from telegram import Update
 from telegram.ext import Application, CommandHandler, MessageHandler, filters, ContextTypes
-from openai import OpenAI
+from google import genai
 
 logging.basicConfig(
     format='%(asctime)s - %(name)s - %(levelname)s - %(message)s',
@@ -11,14 +11,16 @@ logging.basicConfig(
 logger = logging.getLogger(__name__)
 
 TELEGRAM_BOT_TOKEN = os.environ.get("TELEGRAM_BOT_TOKEN")
-OPENAI_API_KEY = os.environ.get("OPENAI_API_KEY")
 
 if not TELEGRAM_BOT_TOKEN:
     raise ValueError("TELEGRAM_BOT_TOKEN is not set")
-if not OPENAI_API_KEY:
-    raise ValueError("OPENAI_API_KEY is not set")
 
-client = OpenAI(api_key=OPENAI_API_KEY)
+client = genai.Client(
+    api_key=os.environ.get("AI_INTEGRATIONS_GEMINI_API_KEY"),
+    http_options=genai.types.HttpOptions(
+        base_url=os.environ.get("AI_INTEGRATIONS_GEMINI_BASE_URL")
+    )
+)
 
 conversation_history = {}
 
@@ -227,28 +229,28 @@ async def handle_message(update: Update, context: ContextTypes.DEFAULT_TYPE) -> 
 
     conversation_history[user_id].append({
         "role": "user",
-        "content": user_message
+        "parts": [{"text": user_message}]
     })
 
     if len(conversation_history[user_id]) > 20:
         conversation_history[user_id] = conversation_history[user_id][-20:]
 
     try:
-        messages = [{"role": "system", "content": SYSTEM_PROMPT}]
-        messages.extend(conversation_history[user_id])
-
-        response = client.chat.completions.create(
-            model="gpt-4o-mini",
-            messages=messages,
-            max_tokens=1500,
-            temperature=0.7
+        response = client.models.generate_content(
+            model="gemini-3-pro-preview",
+            contents=conversation_history[user_id],
+            config=genai.types.GenerateContentConfig(
+                system_instruction=SYSTEM_PROMPT,
+                max_output_tokens=1500,
+                temperature=0.7
+            )
         )
 
-        assistant_message = response.choices[0].message.content
+        assistant_message = response.text
 
         conversation_history[user_id].append({
-            "role": "assistant",
-            "content": assistant_message
+            "role": "model",
+            "parts": [{"text": assistant_message}]
         })
 
         await update.message.reply_text(assistant_message)
@@ -273,7 +275,7 @@ def main() -> None:
 
     application.add_error_handler(error_handler)
 
-    logger.info("WEB4TG Studio AI Agent started!")
+    logger.info("WEB4TG Studio AI Agent (Gemini 3 Pro) started!")
     application.run_polling(allowed_updates=Update.ALL_TYPES)
 
 
