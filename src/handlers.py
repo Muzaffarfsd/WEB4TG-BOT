@@ -652,12 +652,12 @@ async def callback_handler(update: Update, context: ContextTypes.DEFAULT_TYPE) -
             buttons = []
             for task in tasks:
                 status_icon = "✅" if task["status"] == "completed" else "⭐"
-                task_name = task["id"].replace(f"{platform}_", "").replace("_", " ").title()
-                text += f"{status_icon} {task_name} — {task['coins']} монет\n"
+                tname = task.get("name", task["id"])
+                text += f"{status_icon} {tname} — {task['coins']} монет\n"
                 
                 if task["status"] != "completed":
                     buttons.append([InlineKeyboardButton(
-                        f"▶️ {task_name} (+{task['coins']})",
+                        f"▶️ {tname} (+{task['coins']})",
                         callback_data=f"do_task_{task['id']}"
                     )])
             
@@ -682,17 +682,19 @@ async def callback_handler(update: Update, context: ContextTypes.DEFAULT_TYPE) -
             return
         
         task_type = task_config.get("type", "view")
-        task_name = task_id.replace(f"{platform}_", "").replace("_", " ").title()
+        task_name = task_config.get("name", task_id.replace(f"{platform}_", "").replace("_", " ").title())
+        task_desc = task_config.get("desc", "")
         coins = task_config.get("coins", 0)
+        task_url = task_config.get("url", "")
         
         platform_info = {
-            "telegram": {"emoji": "📱", "name": "Telegram", "app_url": task_config.get("url", "https://t.me/web4_tg")},
-            "youtube": {"emoji": "📺", "name": "YouTube", "app_url": "https://youtube.com/@WEB4TG"},
-            "instagram": {"emoji": "📸", "name": "Instagram", "app_url": "instagram://user?username=web4tg"},
-            "tiktok": {"emoji": "🎵", "name": "TikTok", "app_url": "https://www.tiktok.com/@web4tg"}
+            "telegram": {"emoji": "📱", "name": "Telegram"},
+            "youtube": {"emoji": "📺", "name": "YouTube"},
+            "instagram": {"emoji": "📸", "name": "Instagram"},
+            "tiktok": {"emoji": "🎵", "name": "TikTok"}
         }
         
-        pinfo = platform_info.get(platform, platform_info["telegram"])
+        pinfo = platform_info.get(platform, {"emoji": "📱", "name": platform})
         
         task_type_names = {
             "subscribe": "Подписаться",
@@ -711,14 +713,15 @@ async def callback_handler(update: Update, context: ContextTypes.DEFAULT_TYPE) -
             
             if not is_subscribed:
                 keyboard = InlineKeyboardMarkup([
-                    [InlineKeyboardButton(f"{pinfo['emoji']} Открыть канал", url=pinfo['app_url'])],
+                    [InlineKeyboardButton(f"{pinfo['emoji']} Открыть канал @web4_tg", url=task_url or "https://t.me/web4_tg")],
                     [InlineKeyboardButton("✅ Я подписался", callback_data=f"verify_task_{task_id}")],
                     [InlineKeyboardButton("◀️ Назад", callback_data=f"tasks_{platform}")]
                 ])
                 
                 await query.edit_message_text(
-                    f"{pinfo['emoji']} **{action_text}**\n\n"
-                    f"1️⃣ Нажми кнопку ниже — откроется {pinfo['name']}\n"
+                    f"{pinfo['emoji']} **{task_name}**\n\n"
+                    f"📌 {task_desc}\n\n"
+                    f"1️⃣ Нажми кнопку — откроется канал @web4_tg\n"
                     f"2️⃣ Подпишись на канал\n"
                     f"3️⃣ Вернись и нажми «Я подписался»\n\n"
                     f"🎁 Награда: **{coins} монет**",
@@ -727,17 +730,17 @@ async def callback_handler(update: Update, context: ContextTypes.DEFAULT_TYPE) -
                 )
                 return
         
-        if platform != "telegram":
+        if platform != "telegram" and task_url:
             keyboard = InlineKeyboardMarkup([
-                [InlineKeyboardButton(f"{pinfo['emoji']} Открыть {pinfo['name']}", url=pinfo['app_url'])],
+                [InlineKeyboardButton(f"{pinfo['emoji']} Открыть {pinfo['name']}", url=task_url)],
                 [InlineKeyboardButton("✅ Готово", callback_data=f"confirm_task_{task_id}")],
                 [InlineKeyboardButton("◀️ Назад", callback_data=f"tasks_{platform}")]
             ])
             
             await query.edit_message_text(
                 f"{pinfo['emoji']} **{task_name}**\n\n"
-                f"📌 Задание: {action_text}\n\n"
-                f"1️⃣ Нажми кнопку — откроется приложение {pinfo['name']}\n"
+                f"📌 {task_desc}\n\n"
+                f"1️⃣ Нажми кнопку — откроется {pinfo['name']}\n"
                 f"2️⃣ Выполни задание\n"
                 f"3️⃣ Вернись и нажми «Готово»\n\n"
                 f"🎁 Награда: **{coins} монет**",
@@ -760,7 +763,7 @@ async def callback_handler(update: Update, context: ContextTypes.DEFAULT_TYPE) -
         buttons = []
         for task in tasks:
             status_icon = "✅" if task["status"] == "completed" else "⭐"
-            tname = task["id"].replace(f"{platform}_", "").replace("_", " ").title()
+            tname = task.get("name", task["id"])
             text += f"{status_icon} {tname} — {task['coins']} монет\n"
             
             if task["status"] != "completed":
@@ -791,11 +794,11 @@ async def callback_handler(update: Update, context: ContextTypes.DEFAULT_TYPE) -
             buttons = []
             for task in tasks:
                 status_icon = "✅" if task["status"] == "completed" else "⭐"
-                task_name = task["id"].replace(f"{platform}_", "").replace("_", " ").title()
-                text += f"{status_icon} {task_name} — {task['coins']} монет\n"
+                tname = task.get("name", task["id"])
+                text += f"{status_icon} {tname} — {task['coins']} монет\n"
                 
                 if task["status"] != "completed":
-                    buttons.append([InlineKeyboardButton(f"▶️ {task_name} (+{task['coins']})", callback_data=f"do_task_{task['id']}")])
+                    buttons.append([InlineKeyboardButton(f"▶️ {tname} (+{task['coins']})", callback_data=f"do_task_{task['id']}")])
             
             buttons.append([InlineKeyboardButton("◀️ Назад", callback_data="tasks_back")])
             await query.edit_message_text(text, parse_mode="Markdown", reply_markup=InlineKeyboardMarkup(buttons))
@@ -824,11 +827,11 @@ async def callback_handler(update: Update, context: ContextTypes.DEFAULT_TYPE) -
             buttons = []
             for task in tasks:
                 status_icon = "✅" if task["status"] == "completed" else "⭐"
-                task_name = task["id"].replace(f"{platform}_", "").replace("_", " ").title()
-                text += f"{status_icon} {task_name} — {task['coins']} монет\n"
+                tname = task.get("name", task["id"])
+                text += f"{status_icon} {tname} — {task['coins']} монет\n"
                 
                 if task["status"] != "completed":
-                    buttons.append([InlineKeyboardButton(f"▶️ {task_name} (+{task['coins']})", callback_data=f"do_task_{task['id']}")])
+                    buttons.append([InlineKeyboardButton(f"▶️ {tname} (+{task['coins']})", callback_data=f"do_task_{task['id']}")])
             
             buttons.append([InlineKeyboardButton("◀️ Назад", callback_data="tasks_back")])
             await query.edit_message_text(text, parse_mode="Markdown", reply_markup=InlineKeyboardMarkup(buttons))
