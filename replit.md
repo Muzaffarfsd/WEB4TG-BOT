@@ -21,7 +21,8 @@ AI-агент поддержки для WEB4TG Studio — премиальной
 │   ├── keyboards.py       # Inline keyboard layouts
 │   ├── calculator.py      # Interactive cost calculator
 │   ├── leads.py           # Lead collection & manager notifications
-│   └── tasks_tracker.py   # Task gamification system (coins, discounts)
+│   ├── tasks_tracker.py   # Task gamification system (coins, discounts)
+│   └── referrals.py       # Referral program (invite friends, earn coins)
 └── attached_assets/       # Knowledge base source
 ```
 
@@ -47,6 +48,16 @@ Users earn coins by completing tasks, which convert to discounts:
 - **Telegram verification**: Auto-checks channel subscription via Bot API
 - **Streaks**: Daily activity tracking for bonus engagement
 - **Tables**: `tasks_progress`, `user_coins`
+
+## Referral Program
+Users can invite friends and earn coins:
+- **Referrer reward**: 100 coins per invited friend
+- **Referred reward**: 50 coins welcome bonus
+- **Tiers**: Bronze (0-9), Silver (10-29), Gold (30-99), Platinum (100+)
+- **Commission**: 10% → 15% → 20% → 30% based on tier
+- **Code format**: WEB4TG + 6 random chars (e.g., WEB4TG7X9K2M)
+- **Link format**: `https://t.me/w4tg_bot?start=ref_{CODE}`
+- **Tables**: `referral_users`, `referrals`
 
 ## Bot Capabilities
 - Ответы на вопросы об услугах и ценах WEB4TG Studio

@@ -22,6 +22,7 @@ from src.knowledge_base import (
     PORTFOLIO_MESSAGE, CONTACT_MESSAGE, CLEAR_MESSAGE, ERROR_MESSAGE
 )
 from src.tasks_tracker import tasks_tracker, TASKS_CONFIG
+from src.referrals import referral_manager, REFERRER_REWARD, REFERRED_REWARD
 
 logger = logging.getLogger(__name__)
 
@@ -73,6 +74,23 @@ async def start_handler(update: Update, context: ContextTypes.DEFAULT_TYPE) -> N
     lang_code = user.language_code or "en"
     logger.info(f"User {user.id} ({user.username}) started bot, lang={lang_code}")
     
+    referral_bonus_text = ""
+    if context.args and len(context.args) > 0:
+        arg = context.args[0]
+        if arg.startswith("ref_"):
+            referral_code = arg[4:]
+            result = referral_manager.apply_referral_code(
+                telegram_id=user.id,
+                referral_code=referral_code,
+                username=user.username,
+                first_name=user.first_name
+            )
+            if result["success"]:
+                referral_bonus_text = f"\n\n🎁 Вы получили {REFERRED_REWARD} монет по реферальному коду!"
+                logger.info(f"User {user.id} applied referral code {referral_code}")
+    
+    referral_manager.get_or_create_user(user.id, user.username, user.first_name)
+    
     name = user.first_name or ""
     name_part = f", {name}" if name else ""
     
@@ -82,6 +100,8 @@ async def start_handler(update: Update, context: ContextTypes.DEFAULT_TYPE) -> N
         welcome_text = WELCOME_MESSAGES["uk"].format(name=name_part)
     else:
         welcome_text = WELCOME_MESSAGES["en"].format(name=name_part)
+    
+    welcome_text += referral_bonus_text
     
     pinned_keyboard = InlineKeyboardMarkup([
         [InlineKeyboardButton("🚀 Открыть приложение", web_app=WebAppInfo(url="https://w4tg.up.railway.app/"))]
@@ -157,6 +177,52 @@ async def calc_handler(update: Update, context: ContextTypes.DEFAULT_TYPE) -> No
         parse_mode="Markdown",
         reply_markup=get_calculator_keyboard()
     )
+
+
+async def referral_handler(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
+    user = update.effective_user
+    stats = referral_manager.get_or_create_user(user.id, user.username, user.first_name)
+    
+    tier_emoji = stats.get_tier_emoji()
+    ref_link = referral_manager.get_bot_referral_link(stats.referral_code)
+    
+    text = f"""💰 **Реферальная программа**
+
+📊 **Ваша статистика:**
+{tier_emoji} Уровень: {stats.tier.value}
+👥 Приглашено: {stats.total_referrals}
+✅ Активных: {stats.active_referrals}
+💵 Заработано: {stats.total_earnings} монет
+
+🔗 **Ваш реферальный код:**
+`{stats.referral_code}`
+
+📤 **Ссылка для приглашения:**
+{ref_link}
+
+**Награды:**
+• Вы получаете: {REFERRER_REWARD} монет за каждого друга
+• Друг получает: {REFERRED_REWARD} монет при регистрации
+
+**Уровни партнёра:**
+🥉 Bronze (0-9) — 10% комиссия
+🥈 Silver (10-29) — 15% комиссия  
+🥇 Gold (30-99) — 20% комиссия
+💎 Platinum (100+) — 30% комиссия"""
+
+    next_tier = stats.get_next_tier_info()
+    if next_tier:
+        remaining, next_level = next_tier
+        text += f"\n\n🎯 До уровня {next_level.value}: ещё {remaining} рефералов"
+    
+    keyboard = InlineKeyboardMarkup([
+        [InlineKeyboardButton("📋 Скопировать код", callback_data="ref_copy_code")],
+        [InlineKeyboardButton("📤 Поделиться ссылкой", callback_data="ref_share")],
+        [InlineKeyboardButton("👥 Мои рефералы", callback_data="ref_list")],
+        [InlineKeyboardButton("Назад в меню", callback_data="menu_back")]
+    ])
+    
+    await update.message.reply_text(text, parse_mode="Markdown", reply_markup=keyboard)
 
 
 async def callback_handler(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
@@ -385,6 +451,66 @@ async def callback_handler(update: Update, context: ContextTypes.DEFAULT_TYPE) -
             parse_mode="Markdown",
             reply_markup=get_lead_keyboard()
         )
+    
+    elif data.startswith("ref_"):
+        user_id = query.from_user.id
+        user = query.from_user
+        stats = referral_manager.get_or_create_user(user_id, user.username, user.first_name)
+        
+        if data == "ref_copy_code":
+            await query.answer(f"Код: {stats.referral_code}", show_alert=True)
+        
+        elif data == "ref_share":
+            ref_link = referral_manager.get_bot_referral_link(stats.referral_code)
+            share_text = f"Присоединяйся к WEB4TG Studio! Получи 50 монет по моей ссылке: {ref_link}"
+            await query.answer()
+            await query.message.reply_text(
+                f"📤 **Поделитесь этой ссылкой:**\n\n{ref_link}\n\n"
+                f"Или отправьте друзьям это сообщение:\n\n_{share_text}_",
+                parse_mode="Markdown"
+            )
+        
+        elif data == "ref_list":
+            referrals = referral_manager.get_referrals_list(user_id)
+            
+            if not referrals:
+                text = "👥 **Мои рефералы**\n\nУ вас пока нет приглашённых друзей.\n\nПоделитесь своей ссылкой и получайте монеты!"
+            else:
+                text = f"👥 **Мои рефералы** ({len(referrals)})\n\n"
+                for i, ref in enumerate(referrals[:10], 1):
+                    name = ref.referred_first_name or ref.referred_username or f"User {ref.referred_telegram_id}"
+                    status_icon = "✅" if ref.status == "active" else "⏳"
+                    text += f"{i}. {status_icon} {name} — +{ref.bonus_amount} монет\n"
+                
+                if len(referrals) > 10:
+                    text += f"\n...и ещё {len(referrals) - 10}"
+            
+            keyboard = InlineKeyboardMarkup([
+                [InlineKeyboardButton("◀️ Назад", callback_data="ref_back")]
+            ])
+            await query.edit_message_text(text, parse_mode="Markdown", reply_markup=keyboard)
+        
+        elif data == "ref_back":
+            tier_emoji = stats.get_tier_emoji()
+            ref_link = referral_manager.get_bot_referral_link(stats.referral_code)
+            
+            text = f"""💰 **Реферальная программа**
+
+📊 **Ваша статистика:**
+{tier_emoji} Уровень: {stats.tier.value}
+👥 Приглашено: {stats.total_referrals}
+💵 Заработано: {stats.total_earnings} монет
+
+🔗 **Ваш код:** `{stats.referral_code}`
+📤 **Ссылка:** {ref_link}"""
+            
+            keyboard = InlineKeyboardMarkup([
+                [InlineKeyboardButton("📋 Скопировать код", callback_data="ref_copy_code")],
+                [InlineKeyboardButton("📤 Поделиться ссылкой", callback_data="ref_share")],
+                [InlineKeyboardButton("👥 Мои рефералы", callback_data="ref_list")],
+                [InlineKeyboardButton("Назад в меню", callback_data="menu_back")]
+            ])
+            await query.edit_message_text(text, parse_mode="Markdown", reply_markup=keyboard)
     
     elif data.startswith("tasks_"):
         user_id = query.from_user.id
