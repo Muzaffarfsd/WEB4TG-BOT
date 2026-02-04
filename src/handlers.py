@@ -681,22 +681,70 @@ async def callback_handler(update: Update, context: ContextTypes.DEFAULT_TYPE) -
             await query.answer("Задание не найдено", show_alert=True)
             return
         
-        if platform == "telegram" and task_config.get("type") == "subscribe":
+        task_type = task_config.get("type", "view")
+        task_name = task_id.replace(f"{platform}_", "").replace("_", " ").title()
+        coins = task_config.get("coins", 0)
+        
+        platform_info = {
+            "telegram": {"emoji": "📱", "name": "Telegram", "app_url": task_config.get("url", "https://t.me/web4_tg")},
+            "youtube": {"emoji": "📺", "name": "YouTube", "app_url": "https://youtube.com/@WEB4TG"},
+            "instagram": {"emoji": "📸", "name": "Instagram", "app_url": "instagram://user?username=web4tg"},
+            "tiktok": {"emoji": "🎵", "name": "TikTok", "app_url": "https://www.tiktok.com/@web4tg"}
+        }
+        
+        pinfo = platform_info.get(platform, platform_info["telegram"])
+        
+        task_type_names = {
+            "subscribe": "Подписаться",
+            "like": "Поставить лайк",
+            "comment": "Написать комментарий",
+            "share": "Поделиться",
+            "view": "Посмотреть",
+            "save": "Сохранить",
+            "bell": "Включить уведомления"
+        }
+        
+        action_text = task_type_names.get(task_type, "Выполнить")
+        
+        if platform == "telegram" and task_type == "subscribe":
             is_subscribed = await tasks_tracker.check_telegram_subscription(user_id, task_config.get("channel", "web4_tg"))
             
             if not is_subscribed:
                 keyboard = InlineKeyboardMarkup([
-                    [InlineKeyboardButton("📱 Подписаться на канал", url=task_config.get("url", "https://t.me/web4_tg"))],
+                    [InlineKeyboardButton(f"{pinfo['emoji']} Открыть канал", url=pinfo['app_url'])],
                     [InlineKeyboardButton("✅ Я подписался", callback_data=f"verify_task_{task_id}")],
                     [InlineKeyboardButton("◀️ Назад", callback_data=f"tasks_{platform}")]
                 ])
                 
                 await query.edit_message_text(
-                    "📱 **Подписка на Telegram канал**\n\nПодпишись на канал @web4_tg, затем нажми «Я подписался» для получения монет.",
+                    f"{pinfo['emoji']} **{action_text}**\n\n"
+                    f"1️⃣ Нажми кнопку ниже — откроется {pinfo['name']}\n"
+                    f"2️⃣ Подпишись на канал\n"
+                    f"3️⃣ Вернись и нажми «Я подписался»\n\n"
+                    f"🎁 Награда: **{coins} монет**",
                     parse_mode="Markdown",
                     reply_markup=keyboard
                 )
                 return
+        
+        if platform != "telegram":
+            keyboard = InlineKeyboardMarkup([
+                [InlineKeyboardButton(f"{pinfo['emoji']} Открыть {pinfo['name']}", url=pinfo['app_url'])],
+                [InlineKeyboardButton("✅ Готово", callback_data=f"confirm_task_{task_id}")],
+                [InlineKeyboardButton("◀️ Назад", callback_data=f"tasks_{platform}")]
+            ])
+            
+            await query.edit_message_text(
+                f"{pinfo['emoji']} **{task_name}**\n\n"
+                f"📌 Задание: {action_text}\n\n"
+                f"1️⃣ Нажми кнопку — откроется приложение {pinfo['name']}\n"
+                f"2️⃣ Выполни задание\n"
+                f"3️⃣ Вернись и нажми «Готово»\n\n"
+                f"🎁 Награда: **{coins} монет**",
+                parse_mode="Markdown",
+                reply_markup=keyboard
+            )
+            return
         
         result = await tasks_tracker.complete_task(user_id, task_id, platform)
         
@@ -712,11 +760,11 @@ async def callback_handler(update: Update, context: ContextTypes.DEFAULT_TYPE) -
         buttons = []
         for task in tasks:
             status_icon = "✅" if task["status"] == "completed" else "⭐"
-            task_name = task["id"].replace(f"{platform}_", "").replace("_", " ").title()
-            text += f"{status_icon} {task_name} — {task['coins']} монет\n"
+            tname = task["id"].replace(f"{platform}_", "").replace("_", " ").title()
+            text += f"{status_icon} {tname} — {task['coins']} монет\n"
             
             if task["status"] != "completed":
-                buttons.append([InlineKeyboardButton(f"▶️ {task_name} (+{task['coins']})", callback_data=f"do_task_{task['id']}")])
+                buttons.append([InlineKeyboardButton(f"▶️ {tname} (+{task['coins']})", callback_data=f"do_task_{task['id']}")])
         
         buttons.append([InlineKeyboardButton("◀️ Назад", callback_data="tasks_back")])
         await query.edit_message_text(text, parse_mode="Markdown", reply_markup=InlineKeyboardMarkup(buttons))
@@ -740,6 +788,39 @@ async def callback_handler(update: Update, context: ContextTypes.DEFAULT_TYPE) -
             platform_names = {"telegram": "📱 Telegram", "youtube": "📺 YouTube", "instagram": "📸 Instagram", "tiktok": "🎵 TikTok"}
             
             text = f"**{platform_names[platform]} задания**\n\n"
+            buttons = []
+            for task in tasks:
+                status_icon = "✅" if task["status"] == "completed" else "⭐"
+                task_name = task["id"].replace(f"{platform}_", "").replace("_", " ").title()
+                text += f"{status_icon} {task_name} — {task['coins']} монет\n"
+                
+                if task["status"] != "completed":
+                    buttons.append([InlineKeyboardButton(f"▶️ {task_name} (+{task['coins']})", callback_data=f"do_task_{task['id']}")])
+            
+            buttons.append([InlineKeyboardButton("◀️ Назад", callback_data="tasks_back")])
+            await query.edit_message_text(text, parse_mode="Markdown", reply_markup=InlineKeyboardMarkup(buttons))
+        else:
+            await query.answer(result["message"], show_alert=True)
+    
+    elif data.startswith("confirm_task_"):
+        task_id = data.replace("confirm_task_", "")
+        user_id = query.from_user.id
+        
+        platform = None
+        for plat, tasks in TASKS_CONFIG.items():
+            if task_id in tasks:
+                platform = plat
+                break
+        
+        result = await tasks_tracker.complete_task(user_id, task_id, platform or "youtube")
+        
+        if result["success"]:
+            await query.answer(f"🎉 +{result['coinsAwarded']} монет! Всего: {result['totalCoins']}", show_alert=True)
+            
+            tasks = tasks_tracker.get_available_tasks(user_id)["tasks"].get(platform, [])
+            platform_names = {"telegram": "📱 Telegram", "youtube": "📺 YouTube", "instagram": "📸 Instagram", "tiktok": "🎵 TikTok"}
+            
+            text = f"**{platform_names.get(platform, 'Задания')} задания**\n\n"
             buttons = []
             for task in tasks:
                 status_icon = "✅" if task["status"] == "completed" else "⭐"
