@@ -227,6 +227,37 @@ async def calc_handler(update: Update, context: ContextTypes.DEFAULT_TYPE) -> No
     )
 
 
+async def bonus_handler(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
+    user_id = update.effective_user.id
+    progress = tasks_tracker.get_user_progress(user_id)
+    tier_emoji = {0: "🔰", 5: "🥉", 10: "🥈", 15: "🥇"}
+    current_emoji = tier_emoji.get(progress.get_discount_percent(), "🔰")
+    
+    text = f"""🎁 <b>Получи скидку до 30%!</b>
+
+{current_emoji} Твоя скидка: <b>{progress.get_discount_percent()}%</b>
+💰 Монеты: <b>{progress.coins}</b>
+
+<b>Как получить скидку:</b>
+
+📱 <b>Задания</b> — подписки, лайки, комментарии
+👥 <b>Рефералы</b> — приглашай друзей  
+⭐ <b>Отзывы</b> — до 500 монет за видео-отзыв
+🔄 <b>Постоянный клиент</b> — +5% на повторный заказ
+📦 <b>Пакеты</b> — приложение + подписка = до -15%
+
+Выбери раздел:"""
+    
+    keyboard = InlineKeyboardMarkup([
+        [InlineKeyboardButton("📱 Задания", callback_data="tasks_menu"),
+         InlineKeyboardButton("👥 Рефералы", callback_data="referral_menu")],
+        [InlineKeyboardButton("⭐ Отзывы и бонусы", callback_data="loyalty_menu")],
+        [InlineKeyboardButton("📊 Мои скидки", callback_data="loyalty_my_discounts")]
+    ])
+    
+    await update.message.reply_text(text, parse_mode="HTML", reply_markup=keyboard)
+
+
 async def referral_handler(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
     user = update.effective_user
     stats = referral_manager.get_or_create_user(user.id, user.username, user.first_name)
