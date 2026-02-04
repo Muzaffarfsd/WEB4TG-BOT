@@ -41,6 +41,25 @@ async def send_typing_action(update: Update, duration: float = 4.0):
         logger.debug(f"Typing action error: {e}")
 
 
+WELCOME_MESSAGES = {
+    "ru": """Привет{name}! Я Алекс, консультант WEB4TG Studio.
+
+Мы разрабатываем Telegram Mini Apps для бизнеса — магазины, рестораны, салоны красоты и многое другое.
+
+Расскажите о вашем бизнесе — подскажу, как мы можем помочь!""",
+    "en": """Hi{name}! I'm Alex, consultant at WEB4TG Studio.
+
+We develop Telegram Mini Apps for businesses — shops, restaurants, beauty salons and more.
+
+Tell me about your business — I'll help you find the best solution!""",
+    "uk": """Привіт{name}! Я Алекс, консультант WEB4TG Studio.
+
+Ми розробляємо Telegram Mini Apps для бізнесу — магазини, ресторани, салони краси та багато іншого.
+
+Розкажіть про ваш бізнес — підкажу, як ми можемо допомогти!""",
+}
+
+
 async def start_handler(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
     user = update.effective_user
     session = session_manager.get_session(
@@ -54,38 +73,14 @@ async def start_handler(update: Update, context: ContextTypes.DEFAULT_TYPE) -> N
     logger.info(f"User {user.id} ({user.username}) started bot, lang={lang_code}")
     
     name = user.first_name or ""
+    name_part = f", {name}" if name else ""
     
-    await send_typing_action(update)
-    
-    prompt = f"""Generate a welcome message for WEB4TG Studio consultant named Alex.
-Language code: {lang_code}
-User name: {name if name else "unknown"}
-
-Requirements:
-1. Greet the user (use their name if provided)
-2. Introduce Alex as consultant at WEB4TG Studio
-3. Briefly mention we develop Telegram Mini Apps for businesses
-4. Ask about their business to understand how to help
-
-CRITICAL LANGUAGE RULES:
-- Write in the language matching the language code
-- Use PERFECT grammar — no errors in cases, tenses, agreements
-- Write like an educated native speaker, NOT machine translation
-- Use natural idioms and expressions for that language
-- Proper punctuation according to language rules
-
-Keep it SHORT (3-4 sentences max). Friendly but professional tone.
-Write ONLY the message text, nothing else."""
-
-    try:
-        welcome_text = await ai_client.quick_response(prompt)
-    except Exception as e:
-        logger.error(f"Failed to generate welcome: {e}")
-        welcome_text = f"""Hello{', ' + name if name else ''}! I'm Alex, consultant at WEB4TG Studio.
-
-We develop Telegram Mini Apps for businesses.
-
-Tell me about your business — I'd like to understand how I can help."""
+    if lang_code.startswith("ru"):
+        welcome_text = WELCOME_MESSAGES["ru"].format(name=name_part)
+    elif lang_code.startswith("uk"):
+        welcome_text = WELCOME_MESSAGES["uk"].format(name=name_part)
+    else:
+        welcome_text = WELCOME_MESSAGES["en"].format(name=name_part)
     
     pinned_keyboard = InlineKeyboardMarkup([
         [InlineKeyboardButton("🚀 Открыть приложение", web_app=WebAppInfo(url="https://w4tg.up.railway.app/"))]
