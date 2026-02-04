@@ -37,7 +37,6 @@ async def post_init(application) -> None:
         BotCommand("referral", "👥 Реферальная программа"),
         BotCommand("bonus", "🎁 Бонусы и скидки"),
         BotCommand("portfolio", "🎨 Примеры работ"),
-        BotCommand("calc", "📱 Калькулятор стоимости"),
         BotCommand("contact", "📞 Связаться с нами"),
         BotCommand("help", "❓ Помощь"),
     ]
