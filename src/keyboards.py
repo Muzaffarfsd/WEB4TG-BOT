@@ -124,7 +124,7 @@ def get_quick_reply_keyboard() -> ReplyKeyboardMarkup:
     keyboard = [
         [
             KeyboardButton("💰 Цены"),
-            KeyboardButton("📞 Связаться"),
+            KeyboardButton("🎁 Получить скидку"),
             KeyboardButton("🚀 Открыть приложение", web_app=WebAppInfo(url="https://w4tg.up.railway.app/"))
         ]
     ]
