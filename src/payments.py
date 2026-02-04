@@ -1,10 +1,13 @@
 """Payment information module for WEB4TG Studio bot."""
 
+import os
 from telegram import Update, InlineKeyboardButton, InlineKeyboardMarkup
 from telegram.ext import ContextTypes
 import logging
 
 logger = logging.getLogger(__name__)
+
+CONTRACT_PATH = os.path.join(os.path.dirname(os.path.dirname(__file__)), "assets", "contract.pdf")
 
 CARD_NUMBER = "4177 4901 1819 6304"
 CARD_NUMBER_PLAIN = "4177490118196304"
@@ -25,6 +28,7 @@ def get_payment_keyboard() -> InlineKeyboardMarkup:
     return InlineKeyboardMarkup([
         [InlineKeyboardButton("💳 Оплата картой Visa", callback_data="pay_card")],
         [InlineKeyboardButton("🏦 Банковский перевод", callback_data="pay_bank")],
+        [InlineKeyboardButton("📄 Скачать договор", callback_data="pay_contract")],
         [InlineKeyboardButton("✅ Я оплатил", callback_data="pay_confirm")],
         [InlineKeyboardButton("◀️ Назад", callback_data="menu")],
     ])
@@ -173,6 +177,22 @@ async def handle_payment_callback(update: Update, context: ContextTypes.DEFAULT_
             get_copy_bank_text(),
             parse_mode="Markdown"
         )
+    elif action == "pay_contract":
+        await query.answer("Отправляю договор...")
+        try:
+            with open(CONTRACT_PATH, "rb") as contract_file:
+                await query.message.reply_document(
+                    document=contract_file,
+                    filename="Договор_WEB4TG_Studio.pdf",
+                    caption="📄 **Договор на разработку ПО**\n\nОзнакомьтесь с условиями сотрудничества. Если есть вопросы — пишите!",
+                    parse_mode="Markdown"
+                )
+        except FileNotFoundError:
+            await query.message.reply_text(
+                "Договор временно недоступен. Свяжитесь с менеджером для получения.",
+                parse_mode="Markdown"
+            )
+    
     elif action == "pay_confirm":
         await query.edit_message_text(
             get_payment_confirm_text(),

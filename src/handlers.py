@@ -328,7 +328,7 @@ async def callback_handler(update: Update, context: ContextTypes.DEFAULT_TYPE) -
             reply_markup=get_lead_keyboard()
         )
     
-    elif data in ("payment", "pay_card", "pay_bank", "copy_card", "copy_bank", "pay_confirm"):
+    elif data in ("payment", "pay_card", "pay_bank", "copy_card", "copy_bank", "pay_confirm", "pay_contract"):
         await handle_payment_callback(update, context, data)
     
     elif data.startswith("calc_"):
