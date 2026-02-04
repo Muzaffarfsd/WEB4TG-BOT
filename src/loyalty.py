@@ -1,15 +1,12 @@
-import os
 import logging
-import psycopg2
-from psycopg2.extras import RealDictCursor
 from dataclasses import dataclass
 from typing import Optional, List
 from datetime import datetime
 from enum import Enum
+from src.database import get_connection, is_available as db_available, DATABASE_URL
+from psycopg2.extras import RealDictCursor
 
 logger = logging.getLogger(__name__)
-
-DATABASE_URL = os.environ.get("RAILWAY_DATABASE_URL") or os.environ.get("DATABASE_URL")
 
 REVIEW_REWARDS = {
     "video": 500,
@@ -82,7 +79,7 @@ class LoyaltySystem:
     def _get_connection(self):
         if not DATABASE_URL:
             raise Exception("DATABASE_URL not configured")
-        return psycopg2.connect(DATABASE_URL)
+        return get_connection()
     
     def _init_db(self):
         if not DATABASE_URL:
@@ -90,54 +87,49 @@ class LoyaltySystem:
             return
         
         try:
-            conn = self._get_connection()
-            cur = conn.cursor()
-            
-            cur.execute("""
-                CREATE TABLE IF NOT EXISTS customer_reviews (
-                    id SERIAL PRIMARY KEY,
-                    user_id BIGINT NOT NULL,
-                    review_type VARCHAR(20) NOT NULL,
-                    status VARCHAR(20) DEFAULT 'pending',
-                    content_url TEXT,
-                    comment TEXT,
-                    coins_awarded INTEGER DEFAULT 0,
-                    created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
-                    reviewed_at TIMESTAMP,
-                    reviewed_by BIGINT
-                )
-            """)
-            
-            cur.execute("""
-                CREATE TABLE IF NOT EXISTS customer_orders (
-                    id SERIAL PRIMARY KEY,
-                    user_id BIGINT NOT NULL,
-                    order_type VARCHAR(50) NOT NULL,
-                    amount INTEGER NOT NULL,
-                    package_deal VARCHAR(50),
-                    discount_applied INTEGER DEFAULT 0,
-                    created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
-                    completed_at TIMESTAMP,
-                    status VARCHAR(20) DEFAULT 'pending'
-                )
-            """)
-            
-            cur.execute("""
-                CREATE INDEX IF NOT EXISTS idx_reviews_user_id 
-                ON customer_reviews(user_id)
-            """)
-            cur.execute("""
-                CREATE INDEX IF NOT EXISTS idx_reviews_status 
-                ON customer_reviews(status)
-            """)
-            cur.execute("""
-                CREATE INDEX IF NOT EXISTS idx_orders_user_id 
-                ON customer_orders(user_id)
-            """)
-            
-            conn.commit()
-            cur.close()
-            conn.close()
+            with self._get_connection() as conn:
+                with conn.cursor() as cur:
+                    cur.execute("""
+                        CREATE TABLE IF NOT EXISTS customer_reviews (
+                            id SERIAL PRIMARY KEY,
+                            user_id BIGINT NOT NULL,
+                            review_type VARCHAR(20) NOT NULL,
+                            status VARCHAR(20) DEFAULT 'pending',
+                            content_url TEXT,
+                            comment TEXT,
+                            coins_awarded INTEGER DEFAULT 0,
+                            created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+                            reviewed_at TIMESTAMP,
+                            reviewed_by BIGINT
+                        )
+                    """)
+                    
+                    cur.execute("""
+                        CREATE TABLE IF NOT EXISTS customer_orders (
+                            id SERIAL PRIMARY KEY,
+                            user_id BIGINT NOT NULL,
+                            order_type VARCHAR(50) NOT NULL,
+                            amount INTEGER NOT NULL,
+                            package_deal VARCHAR(50),
+                            discount_applied INTEGER DEFAULT 0,
+                            created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+                            completed_at TIMESTAMP,
+                            status VARCHAR(20) DEFAULT 'pending'
+                        )
+                    """)
+                    
+                    cur.execute("""
+                        CREATE INDEX IF NOT EXISTS idx_reviews_user_id 
+                        ON customer_reviews(user_id)
+                    """)
+                    cur.execute("""
+                        CREATE INDEX IF NOT EXISTS idx_reviews_status 
+                        ON customer_reviews(status)
+                    """)
+                    cur.execute("""
+                        CREATE INDEX IF NOT EXISTS idx_orders_user_id 
+                        ON customer_orders(user_id)
+                    """)
             logger.info("Loyalty system tables initialized")
         except Exception as e:
             logger.error(f"Failed to init loyalty tables: {e}")
@@ -145,135 +137,108 @@ class LoyaltySystem:
     def submit_review(self, user_id: int, review_type: str, 
                       content_url: str = None, comment: str = None) -> Optional[int]:
         try:
-            conn = self._get_connection()
-            cur = conn.cursor()
-            
-            cur.execute("""
-                SELECT id FROM customer_reviews 
-                WHERE user_id = %s AND review_type = %s AND status != 'rejected'
-            """, (user_id, review_type))
-            
-            if cur.fetchone():
-                cur.close()
-                conn.close()
-                return None
-            
-            cur.execute("""
-                INSERT INTO customer_reviews (user_id, review_type, content_url, comment)
-                VALUES (%s, %s, %s, %s)
-                RETURNING id
-            """, (user_id, review_type, content_url, comment))
-            
-            review_id = cur.fetchone()[0]
-            conn.commit()
-            cur.close()
-            conn.close()
-            return review_id
+            with self._get_connection() as conn:
+                with conn.cursor() as cur:
+                    cur.execute("""
+                        SELECT id FROM customer_reviews 
+                        WHERE user_id = %s AND review_type = %s AND status != 'rejected'
+                    """, (user_id, review_type))
+                    
+                    if cur.fetchone():
+                        return None
+                    
+                    cur.execute("""
+                        INSERT INTO customer_reviews (user_id, review_type, content_url, comment)
+                        VALUES (%s, %s, %s, %s)
+                        RETURNING id
+                    """, (user_id, review_type, content_url, comment))
+                    
+                    review_id = cur.fetchone()[0]
+                    return review_id
         except Exception as e:
             logger.error(f"Failed to submit review: {e}")
             return None
     
     def approve_review(self, review_id: int, manager_id: int) -> Optional[int]:
         try:
-            conn = self._get_connection()
-            cur = conn.cursor()
-            
-            cur.execute("""
-                SELECT user_id, review_type, status FROM customer_reviews 
-                WHERE id = %s
-            """, (review_id,))
-            
-            row = cur.fetchone()
-            if not row:
-                cur.close()
-                conn.close()
-                return None
-            
-            user_id, review_type, status = row
-            
-            if status != 'pending':
-                cur.close()
-                conn.close()
-                return None
-            
-            coins = REVIEW_REWARDS.get(review_type, 0)
-            
-            cur.execute("""
-                UPDATE customer_reviews 
-                SET status = 'approved', 
-                    coins_awarded = %s,
-                    reviewed_at = CURRENT_TIMESTAMP,
-                    reviewed_by = %s
-                WHERE id = %s
-            """, (coins, manager_id, review_id))
-            
-            conn.commit()
-            cur.close()
-            conn.close()
-            
-            return coins
+            with self._get_connection() as conn:
+                with conn.cursor() as cur:
+                    cur.execute("""
+                        SELECT user_id, review_type, status FROM customer_reviews 
+                        WHERE id = %s
+                    """, (review_id,))
+                    
+                    row = cur.fetchone()
+                    if not row:
+                        return None
+                    
+                    user_id, review_type, status = row
+                    
+                    if status != 'pending':
+                        return None
+                    
+                    coins = REVIEW_REWARDS.get(review_type, 0)
+                    
+                    cur.execute("""
+                        UPDATE customer_reviews 
+                        SET status = 'approved', 
+                            coins_awarded = %s,
+                            reviewed_at = CURRENT_TIMESTAMP,
+                            reviewed_by = %s
+                        WHERE id = %s
+                    """, (coins, manager_id, review_id))
+                    
+                    return coins
         except Exception as e:
             logger.error(f"Failed to approve review: {e}")
             return None
     
     def reject_review(self, review_id: int, manager_id: int) -> bool:
         try:
-            conn = self._get_connection()
-            cur = conn.cursor()
-            
-            cur.execute("""
-                UPDATE customer_reviews 
-                SET status = 'rejected',
-                    reviewed_at = CURRENT_TIMESTAMP,
-                    reviewed_by = %s
-                WHERE id = %s AND status = 'pending'
-            """, (manager_id, review_id))
-            
-            affected = cur.rowcount
-            conn.commit()
-            cur.close()
-            conn.close()
-            return affected > 0
+            with self._get_connection() as conn:
+                with conn.cursor() as cur:
+                    cur.execute("""
+                        UPDATE customer_reviews 
+                        SET status = 'rejected',
+                            reviewed_at = CURRENT_TIMESTAMP,
+                            reviewed_by = %s
+                        WHERE id = %s AND status = 'pending'
+                    """, (manager_id, review_id))
+                    
+                    affected = cur.rowcount
+                    return affected > 0
         except Exception as e:
             logger.error(f"Failed to reject review: {e}")
             return False
     
     def get_pending_reviews(self) -> List[Review]:
         try:
-            conn = self._get_connection()
-            cur = conn.cursor(cursor_factory=RealDictCursor)
-            
-            cur.execute("""
-                SELECT * FROM customer_reviews 
-                WHERE status = 'pending'
-                ORDER BY created_at ASC
-            """)
-            
-            rows = cur.fetchall()
-            cur.close()
-            conn.close()
-            
-            return [Review(**row) for row in rows]
+            with self._get_connection() as conn:
+                with conn.cursor(cursor_factory=RealDictCursor) as cur:
+                    cur.execute("""
+                        SELECT * FROM customer_reviews 
+                        WHERE status = 'pending'
+                        ORDER BY created_at ASC
+                    """)
+                    
+                    rows = cur.fetchall()
+                    return [Review(**row) for row in rows]
         except Exception as e:
             logger.error(f"Failed to get pending reviews: {e}")
             return []
     
     def get_user_reviews(self, user_id: int) -> List[Review]:
         try:
-            conn = self._get_connection()
-            cur = conn.cursor(cursor_factory=RealDictCursor)
-            
-            cur.execute("""
-                SELECT * FROM customer_reviews 
-                WHERE user_id = %s
-                ORDER BY created_at DESC
-            """, (user_id,))
-            
-            rows = cur.fetchall()
-            cur.close()
-            conn.close()
-            
-            return [Review(**row) for row in rows]
+            with self._get_connection() as conn:
+                with conn.cursor(cursor_factory=RealDictCursor) as cur:
+                    cur.execute("""
+                        SELECT * FROM customer_reviews 
+                        WHERE user_id = %s
+                        ORDER BY created_at DESC
+                    """, (user_id,))
+                    
+                    rows = cur.fetchall()
+                    return [Review(**row) for row in rows]
         except Exception as e:
             logger.error(f"Failed to get user reviews: {e}")
             return []
@@ -288,80 +253,65 @@ class LoyaltySystem:
             if self.is_returning_customer(user_id):
                 discount += RETURNING_CUSTOMER_BONUS
             
-            conn = self._get_connection()
-            cur = conn.cursor()
-            
-            cur.execute("""
-                INSERT INTO customer_orders 
-                (user_id, order_type, amount, package_deal, discount_applied)
-                VALUES (%s, %s, %s, %s, %s)
-                RETURNING id
-            """, (user_id, order_type, amount, package_deal, discount))
-            
-            order_id = cur.fetchone()[0]
-            conn.commit()
-            cur.close()
-            conn.close()
-            return order_id
+            with self._get_connection() as conn:
+                with conn.cursor() as cur:
+                    cur.execute("""
+                        INSERT INTO customer_orders 
+                        (user_id, order_type, amount, package_deal, discount_applied)
+                        VALUES (%s, %s, %s, %s, %s)
+                        RETURNING id
+                    """, (user_id, order_type, amount, package_deal, discount))
+                    
+                    order_id = cur.fetchone()[0]
+                    return order_id
         except Exception as e:
             logger.error(f"Failed to create order: {e}")
             return None
     
     def complete_order(self, order_id: int) -> bool:
         try:
-            conn = self._get_connection()
-            cur = conn.cursor()
-            
-            cur.execute("""
-                UPDATE customer_orders 
-                SET status = 'completed',
-                    completed_at = CURRENT_TIMESTAMP
-                WHERE id = %s
-            """, (order_id,))
-            
-            affected = cur.rowcount
-            conn.commit()
-            cur.close()
-            conn.close()
-            return affected > 0
+            with self._get_connection() as conn:
+                with conn.cursor() as cur:
+                    cur.execute("""
+                        UPDATE customer_orders 
+                        SET status = 'completed',
+                            completed_at = CURRENT_TIMESTAMP
+                        WHERE id = %s
+                    """, (order_id,))
+                    
+                    affected = cur.rowcount
+                    return affected > 0
         except Exception as e:
             logger.error(f"Failed to complete order: {e}")
             return False
     
     def is_returning_customer(self, user_id: int) -> bool:
         try:
-            conn = self._get_connection()
-            cur = conn.cursor()
-            
-            cur.execute("""
-                SELECT COUNT(*) FROM customer_orders 
-                WHERE user_id = %s AND status = 'completed'
-            """, (user_id,))
-            
-            count = cur.fetchone()[0]
-            cur.close()
-            conn.close()
-            return count > 0
+            with self._get_connection() as conn:
+                with conn.cursor() as cur:
+                    cur.execute("""
+                        SELECT COUNT(*) FROM customer_orders 
+                        WHERE user_id = %s AND status = 'completed'
+                    """, (user_id,))
+                    
+                    count = cur.fetchone()[0]
+                    return count > 0
         except Exception as e:
             logger.error(f"Failed to check returning customer: {e}")
             return False
     
     def get_customer_orders(self, user_id: int) -> List[CustomerOrder]:
         try:
-            conn = self._get_connection()
-            cur = conn.cursor(cursor_factory=RealDictCursor)
-            
-            cur.execute("""
-                SELECT * FROM customer_orders 
-                WHERE user_id = %s
-                ORDER BY created_at DESC
-            """, (user_id,))
-            
-            rows = cur.fetchall()
-            cur.close()
-            conn.close()
-            
-            return [CustomerOrder(**row) for row in rows]
+            with self._get_connection() as conn:
+                with conn.cursor(cursor_factory=RealDictCursor) as cur:
+                    cur.execute("""
+                        SELECT * FROM customer_orders 
+                        WHERE user_id = %s
+                        ORDER BY created_at DESC
+                    """, (user_id,))
+                    
+                    rows = cur.fetchall()
+                    return [CustomerOrder(**row) for row in rows]
         except Exception as e:
             logger.error(f"Failed to get customer orders: {e}")
             return []
@@ -392,34 +342,30 @@ class LoyaltySystem:
     
     def get_loyalty_stats(self) -> dict:
         try:
-            conn = self._get_connection()
-            cur = conn.cursor()
-            
-            cur.execute("SELECT COUNT(*) FROM customer_reviews WHERE status = 'approved'")
-            approved_reviews = cur.fetchone()[0]
-            
-            cur.execute("SELECT COUNT(*) FROM customer_reviews WHERE status = 'pending'")
-            pending_reviews = cur.fetchone()[0]
-            
-            cur.execute("SELECT COUNT(*) FROM customer_orders WHERE status = 'completed'")
-            completed_orders = cur.fetchone()[0]
-            
-            cur.execute("""
-                SELECT COUNT(DISTINCT user_id) FROM customer_orders 
-                WHERE status = 'completed'
-                GROUP BY user_id HAVING COUNT(*) > 1
-            """)
-            returning_customers = len(cur.fetchall())
-            
-            cur.close()
-            conn.close()
-            
-            return {
-                "approved_reviews": approved_reviews,
-                "pending_reviews": pending_reviews,
-                "completed_orders": completed_orders,
-                "returning_customers": returning_customers,
-            }
+            with self._get_connection() as conn:
+                with conn.cursor() as cur:
+                    cur.execute("SELECT COUNT(*) FROM customer_reviews WHERE status = 'approved'")
+                    approved_reviews = cur.fetchone()[0]
+                    
+                    cur.execute("SELECT COUNT(*) FROM customer_reviews WHERE status = 'pending'")
+                    pending_reviews = cur.fetchone()[0]
+                    
+                    cur.execute("SELECT COUNT(*) FROM customer_orders WHERE status = 'completed'")
+                    completed_orders = cur.fetchone()[0]
+                    
+                    cur.execute("""
+                        SELECT COUNT(DISTINCT user_id) FROM customer_orders 
+                        WHERE status = 'completed'
+                        GROUP BY user_id HAVING COUNT(*) > 1
+                    """)
+                    returning_customers = len(cur.fetchall())
+                    
+                    return {
+                        "approved_reviews": approved_reviews,
+                        "pending_reviews": pending_reviews,
+                        "completed_orders": completed_orders,
+                        "returning_customers": returning_customers,
+                    }
         except Exception as e:
             logger.error(f"Failed to get loyalty stats: {e}")
             return {}

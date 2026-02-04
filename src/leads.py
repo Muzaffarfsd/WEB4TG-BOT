@@ -3,16 +3,14 @@ import time
 import logging
 import csv
 import io
-import psycopg2
-from psycopg2.extras import RealDictCursor
 from dataclasses import dataclass, field
 from typing import Dict, List, Optional
 from enum import Enum
 from datetime import datetime, timedelta
+from src.database import get_connection, is_available as db_available, DATABASE_URL
+from psycopg2.extras import RealDictCursor
 
 logger = logging.getLogger(__name__)
-
-DATABASE_URL = os.environ.get("RAILWAY_DATABASE_URL") or os.environ.get("DATABASE_URL")
 
 
 class LeadStatus(Enum):
@@ -64,7 +62,7 @@ class LeadManager:
         self._init_db()
     
     def _get_connection(self):
-        return psycopg2.connect(DATABASE_URL)
+        return get_connection()
     
     def _init_db(self):
         if not DATABASE_URL:
@@ -147,8 +145,6 @@ class LeadManager:
                     cur.execute("""
                         CREATE INDEX IF NOT EXISTS idx_analytics_created ON analytics(created_at)
                     """)
-                    
-                    conn.commit()
             logger.info("Database tables initialized")
         except Exception as e:
             logger.error(f"Failed to init database: {e}")
@@ -171,7 +167,6 @@ class LeadManager:
                         INSERT INTO conversations (user_id, role, content)
                         VALUES (%s, %s, %s)
                     """, (user_id, role, content[:10000]))
-                    conn.commit()
         except Exception as e:
             logger.error(f"Failed to save message: {e}")
     
@@ -213,7 +208,6 @@ class LeadManager:
                         INSERT INTO analytics (event_type, user_id, data)
                         VALUES (%s, %s, %s)
                     """, (event_type, user_id, json.dumps(data) if data else None))
-                    conn.commit()
         except Exception as e:
             logger.error(f"Failed to log event: {e}")
     
@@ -245,7 +239,6 @@ class LeadManager:
                         result = cur.fetchone()
                         if result:
                             lead.id = result[0]
-                        conn.commit()
                 
                 self.log_event("lead_created", user_id, {"username": username})
             except Exception as e:
@@ -359,7 +352,6 @@ class LeadManager:
                         f"UPDATE leads SET {', '.join(updates)} WHERE user_id = %s",
                         values
                     )
-                    conn.commit()
             return self.get_lead(user_id)
         except Exception as e:
             logger.error(f"Failed to update lead: {e}")
@@ -432,7 +424,6 @@ class LeadManager:
                             updated_at = CURRENT_TIMESTAMP
                         WHERE user_id = %s
                     """, (user_id,))
-                    conn.commit()
             
             score = self.calculate_score(user_id)
             self.update_lead(user_id, score=score)
