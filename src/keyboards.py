@@ -120,15 +120,12 @@ def get_subscription_keyboard() -> InlineKeyboardMarkup:
 
 
 def get_quick_reply_keyboard() -> ReplyKeyboardMarkup:
-    """Quick action buttons at the bottom of chat (funnel stages)."""
+    """Quick action buttons at the bottom of chat (3 buttons)."""
     keyboard = [
         [
-            KeyboardButton("💰 Узнать цену"),
-            KeyboardButton("🎯 Подобрать решение")
-        ],
-        [
-            KeyboardButton("📱 Открыть приложение", web_app=WebAppInfo(url="https://w4tg.up.railway.app/")),
-            KeyboardButton("🚀 Хочу приложение!")
+            KeyboardButton("💰 Цены"),
+            KeyboardButton("📞 Связаться"),
+            KeyboardButton("🚀 Открыть приложение", web_app=WebAppInfo(url="https://w4tg.up.railway.app/"))
         ]
     ]
     return ReplyKeyboardMarkup(
