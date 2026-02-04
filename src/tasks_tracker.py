@@ -229,23 +229,24 @@ class TasksTracker:
             logger.error(f"Error getting user progress: {e}")
             return UserProgress(telegram_id=telegram_id)
     
-    def _is_daily_task_completed_today(self, telegram_id: int, task_id: str) -> bool:
+    def _get_daily_tasks_completed_today(self, telegram_id: int) -> set:
+        """Get all daily tasks completed today in one query."""
+        if not DATABASE_URL:
+            return set()
+        
         try:
             with self._get_connection() as conn:
                 with conn.cursor(cursor_factory=RealDictCursor) as cur:
                     cur.execute("""
-                        SELECT completed_at FROM tasks_progress
-                        WHERE telegram_id = %s AND task_id = %s AND completed = TRUE
-                        ORDER BY completed_at DESC LIMIT 1
-                    """, (telegram_id, task_id))
-                    row = cur.fetchone()
-                    
-                    if row and row["completed_at"]:
-                        return row["completed_at"].date() == date.today()
-                    return False
+                        SELECT DISTINCT task_id FROM tasks_progress
+                        WHERE telegram_id = %s 
+                        AND completed = TRUE 
+                        AND DATE(completed_at) = CURRENT_DATE
+                    """, (telegram_id,))
+                    return {row["task_id"] for row in cur.fetchall()}
         except Exception as e:
-            logger.error(f"Error checking daily task: {e}")
-            return False
+            logger.error(f"Error checking daily tasks: {e}")
+            return set()
     
     def _update_streak(self, telegram_id: int):
         try:
@@ -382,6 +383,7 @@ class TasksTracker:
     
     def get_available_tasks(self, telegram_id: int) -> dict:
         progress = self.get_user_progress(telegram_id)
+        daily_completed_today = self._get_daily_tasks_completed_today(telegram_id)
         
         available = {}
         for platform, tasks in TASKS_CONFIG.items():
@@ -390,8 +392,7 @@ class TasksTracker:
                 is_daily = config.get("daily", False)
                 
                 if is_daily:
-                    completed_today = self._is_daily_task_completed_today(telegram_id, task_id)
-                    status = "completed" if completed_today else "available"
+                    status = "completed" if task_id in daily_completed_today else "available"
                 else:
                     status = "completed" if task_id in progress.completed_tasks else "available"
                 
