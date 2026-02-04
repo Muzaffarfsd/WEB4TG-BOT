@@ -35,7 +35,6 @@ AI-агент поддержки для WEB4TG Studio — премиальной
 ## Architecture Features (2026)
 - **Modular structure** - Separate modules for config, AI, sessions, handlers
 - **Unified DB pool** - Shared ThreadedConnectionPool (1-15 connections) across all modules
-- **OpenAI fallback** - Automatic fallback to GPT-4o-mini when Gemini fails
 - **A/B testing** - Welcome message variants with tracking (variant A/B)
 - **Photo reviews** - Direct video/photo upload in chat for reviews
 - **Inline keyboards** - Interactive navigation with callback queries
@@ -121,14 +120,12 @@ Manual payment integration with downloadable contract:
 ## Environment Variables
 - `TELEGRAM_BOT_TOKEN` - Bot token from @BotFather
 - `GEMINI_API_KEY` - Google AI API key for Gemini 3 Pro
-- `OPENAI_API_KEY` - (Optional) OpenAI API key for fallback
 - `ELEVENLABS_API_KEY` - (Optional) ElevenLabs for voice greeting
 - `MANAGER_CHAT_ID` - (Optional) Chat ID for lead notifications
 - `RAILWAY_DATABASE_URL` - PostgreSQL database URL
 
 ## AI Models
 - **Primary**: Gemini 3 Pro Preview (thinking mode, 4096 budget)
-- **Fallback**: GPT-4o-mini (when Gemini fails/rate limited)
 
 ## A/B Testing
 - **welcome_voice** test: variant A (short informal) vs B (detailed professional)

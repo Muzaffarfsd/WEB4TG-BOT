@@ -10,13 +10,6 @@ from src.knowledge_base import SYSTEM_PROMPT
 
 logger = logging.getLogger(__name__)
 
-try:
-    import openai
-    OPENAI_AVAILABLE = True
-except ImportError:
-    OPENAI_AVAILABLE = False
-    logger.warning("OpenAI not installed, fallback disabled")
-
 
 def is_rate_limit_error(exception: BaseException) -> bool:
     error_msg = str(exception)
@@ -32,47 +25,6 @@ def is_rate_limit_error(exception: BaseException) -> bool:
 class AIClient:
     def __init__(self):
         self._client = genai.Client(api_key=config.gemini_api_key)
-        self._openai_client = None
-        if OPENAI_AVAILABLE and config.openai_api_key:
-            self._openai_client = openai.AsyncOpenAI(api_key=config.openai_api_key)
-            logger.info("OpenAI fallback enabled")
-    
-    async def _openai_fallback(self, messages: List[Dict]) -> Optional[str]:
-        """Fallback to OpenAI when Gemini fails."""
-        if not self._openai_client:
-            return None
-        
-        try:
-            openai_messages = [{"role": "system", "content": SYSTEM_PROMPT}]
-            for msg in messages:
-                role = msg.get("role", "user")
-                if role == "model":
-                    role = "assistant"
-                parts = msg.get("parts", [])
-                content = ""
-                for part in parts:
-                    if isinstance(part, dict) and "text" in part:
-                        content += part["text"]
-                    elif isinstance(part, str):
-                        content += part
-                if content:
-                    openai_messages.append({"role": role, "content": content})
-            
-            response = await self._openai_client.chat.completions.create(
-                model="gpt-4o-mini",
-                messages=openai_messages,
-                max_tokens=config.max_tokens,
-                temperature=config.temperature
-            )
-            
-            if response.choices and response.choices[0].message.content:
-                logger.info("Used OpenAI fallback successfully")
-                return response.choices[0].message.content
-            return None
-            
-        except Exception as e:
-            logger.error(f"OpenAI fallback failed: {e}")
-            return None
     
     async def generate_response(
         self,
@@ -118,17 +70,11 @@ class AIClient:
             if response.text:
                 return response.text
             else:
-                logger.warning("Empty response from Gemini, trying fallback")
-                fallback_response = await self._openai_fallback(messages)
-                if fallback_response:
-                    return fallback_response
+                logger.warning("Empty response from Gemini")
                 return "Извините, не удалось сформировать ответ. Попробуйте переформулировать вопрос."
                 
         except Exception as e:
-            logger.error(f"Gemini request failed: {e}, trying OpenAI fallback")
-            fallback_response = await self._openai_fallback(messages)
-            if fallback_response:
-                return fallback_response
+            logger.error(f"Gemini request failed: {e}")
             raise
     
     async def analyze_complex_query(

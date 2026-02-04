@@ -9,7 +9,6 @@ class Config:
     gemini_api_key: str
     elevenlabs_api_key: Optional[str] = None
     elevenlabs_voice_id: str = "rQOBu7YxCDxGiFdTm28w"
-    openai_api_key: Optional[str] = None
     
     model_name: str = "gemini-3-pro-preview"
     fast_model_name: str = "gemini-3-pro-preview"
@@ -33,7 +32,6 @@ class Config:
         telegram_token = os.environ.get("TELEGRAM_BOT_TOKEN")
         gemini_api_key = os.environ.get("GEMINI_API_KEY")
         elevenlabs_api_key = os.environ.get("ELEVENLABS_API_KEY")
-        openai_api_key = os.environ.get("OPENAI_API_KEY")
         
         if not telegram_token:
             raise ValueError("TELEGRAM_BOT_TOKEN is not set")
@@ -43,8 +41,7 @@ class Config:
         return cls(
             telegram_token=telegram_token,
             gemini_api_key=gemini_api_key,
-            elevenlabs_api_key=elevenlabs_api_key,
-            openai_api_key=openai_api_key
+            elevenlabs_api_key=elevenlabs_api_key
         )
 
 
