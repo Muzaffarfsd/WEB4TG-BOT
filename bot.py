@@ -10,7 +10,7 @@ from src.config import config
 from src.handlers import (
     start_handler, help_handler, clear_handler, menu_handler,
     price_handler, portfolio_handler, contact_handler, calc_handler,
-    message_handler, callback_handler, voice_handler, video_handler, error_handler,
+    message_handler, callback_handler, voice_handler, video_handler, photo_handler, error_handler,
     leads_handler, stats_handler, export_handler, reviews_handler,
     history_handler, hot_handler, tag_handler, priority_handler,
     referral_handler, payment_handler, contract_handler, bonus_handler
@@ -73,6 +73,7 @@ def main() -> None:
     
     application.add_handler(MessageHandler(filters.VOICE, voice_handler))
     application.add_handler(MessageHandler(filters.VIDEO | filters.VIDEO_NOTE, video_handler))
+    application.add_handler(MessageHandler(filters.PHOTO, photo_handler))
     application.add_handler(MessageHandler(
         filters.TEXT & ~filters.COMMAND,
         message_handler

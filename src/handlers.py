@@ -1407,6 +1407,82 @@ async def video_handler(update: Update, context: ContextTypes.DEFAULT_TYPE) -> N
         context.user_data.pop("pending_review_type", None)
 
 
+async def photo_handler(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
+    """Handle photo messages for text+photo reviews."""
+    user = update.effective_user
+    user_id = user.id
+    pending_review_type = context.user_data.get("pending_review_type")
+    
+    if pending_review_type != "text_photo":
+        return
+    
+    photo = update.message.photo[-1] if update.message.photo else None
+    if not photo:
+        return
+    
+    file_id = photo.file_id
+    caption = update.message.caption or ""
+    
+    try:
+        review_id = loyalty_system.submit_review(
+            user_id=user_id,
+            review_type="text_photo",
+            content_url=f"[PHOTO] file_id: {file_id}",
+            comment=caption if caption else None
+        )
+        
+        if review_id:
+            context.user_data.pop("pending_review_type", None)
+            
+            from src.loyalty import REVIEW_REWARDS
+            coins = REVIEW_REWARDS.get("text_photo", 200)
+            
+            await update.message.reply_text(
+                f"""✅ <b>Отзыв с фото принят!</b>
+
+Спасибо за ваш отзыв! После модерации вы получите <b>{coins} монет</b>.
+
+Обычно модерация занимает до 24 часов.""",
+                parse_mode="HTML",
+                reply_markup=get_loyalty_menu_keyboard()
+            )
+            
+            if MANAGER_CHAT_ID:
+                try:
+                    manager_text = f"""📸 <b>Новый текстовый отзыв с фото!</b>
+
+👤 {user.first_name or 'Пользователь'} (@{user.username or 'no_username'})
+🆔 ID: {user_id}
+💬 Текст: {caption or '(без подписи)'}"""
+                    
+                    await context.bot.send_message(
+                        chat_id=MANAGER_CHAT_ID,
+                        text=manager_text,
+                        parse_mode="HTML"
+                    )
+                    await context.bot.forward_message(
+                        chat_id=MANAGER_CHAT_ID,
+                        from_chat_id=update.effective_chat.id,
+                        message_id=update.message.message_id
+                    )
+                except Exception as e:
+                    logger.warning(f"Failed to notify manager about photo review: {e}")
+        else:
+            await update.message.reply_text(
+                "❌ Вы уже отправляли отзыв этого типа или произошла ошибка.",
+                reply_markup=get_loyalty_menu_keyboard()
+            )
+            context.user_data.pop("pending_review_type", None)
+            
+    except Exception as e:
+        logger.error(f"Error processing photo review: {e}")
+        await update.message.reply_text(
+            "Произошла ошибка. Попробуйте позже.",
+            reply_markup=get_loyalty_menu_keyboard()
+        )
+        context.user_data.pop("pending_review_type", None)
+
+
 async def leads_handler(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
     user_id = update.effective_user.id
     manager_id = lead_manager.get_manager_chat_id()
