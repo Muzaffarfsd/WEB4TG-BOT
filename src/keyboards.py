@@ -12,6 +12,7 @@ def get_main_menu_keyboard() -> InlineKeyboardMarkup:
             InlineKeyboardButton("AI-агент", callback_data="menu_ai_agent")
         ],
         [
+            InlineKeyboardButton("💳 Оплата", callback_data="payment"),
             InlineKeyboardButton("Оставить заявку", callback_data="menu_lead")
         ]
     ]
