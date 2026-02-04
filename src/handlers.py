@@ -24,6 +24,7 @@ from src.knowledge_base import (
 from src.tasks_tracker import tasks_tracker, TASKS_CONFIG
 from src.referrals import referral_manager, REFERRER_REWARD, REFERRED_REWARD
 from src.payments import handle_payment_callback
+from src.pricing import get_price_main_text, get_price_main_keyboard, handle_price_callback
 
 logger = logging.getLogger(__name__)
 
@@ -170,9 +171,9 @@ async def menu_handler(update: Update, context: ContextTypes.DEFAULT_TYPE) -> No
 
 async def price_handler(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
     await update.message.reply_text(
-        PRICE_MESSAGE, 
+        get_price_main_text(), 
         parse_mode="Markdown",
-        reply_markup=get_subscription_keyboard()
+        reply_markup=get_price_main_keyboard()
     )
 
 
@@ -357,6 +358,9 @@ async def callback_handler(update: Update, context: ContextTypes.DEFAULT_TYPE) -
     
     elif data in ("payment", "pay_card", "pay_bank", "copy_card", "copy_bank", "pay_confirm", "pay_contract"):
         await handle_payment_callback(update, context, data)
+    
+    elif data.startswith("price_"):
+        await handle_price_callback(update, context, data)
     
     elif data.startswith("calc_"):
         calc = calculator_manager.get_calculation(user_id)
