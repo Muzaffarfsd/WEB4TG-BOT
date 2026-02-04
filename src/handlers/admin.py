@@ -190,6 +190,7 @@ async def hot_handler(update: Update, context: ContextTypes.DEFAULT_TYPE) -> Non
 @admin_required
 async def tag_handler(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
     user_id = update.effective_user.id
+    log_admin_action(user_id, "add_tag")
     args = context.args
     if len(args) < 2:
         await update.message.reply_text("Использование: /tag <user_id> <тег>\nПример: /tag 123456 vip")
@@ -212,6 +213,7 @@ async def tag_handler(update: Update, context: ContextTypes.DEFAULT_TYPE) -> Non
 @admin_required
 async def priority_handler(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
     user_id = update.effective_user.id
+    log_admin_action(user_id, "set_priority")
     args = context.args
     if len(args) < 2:
         await update.message.reply_text("Использование: /priority <user_id> <cold|warm|hot>")

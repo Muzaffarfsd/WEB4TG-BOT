@@ -20,6 +20,7 @@ from src.loyalty import (
     RETURNING_CUSTOMER_BONUS, PACKAGE_DEALS,
     format_package_deals, format_returning_customer_info, format_review_bonus_info
 )
+from src import analytics
 
 from src.handlers.utils import loyalty_system, MANAGER_CHAT_ID
 
@@ -68,6 +69,7 @@ async def callback_handler(update: Update, context: ContextTypes.DEFAULT_TYPE) -
         )
     
     elif data == "menu_calculator":
+        analytics.track(user_id, analytics.FunnelEvent.CALCULATOR)
         calc = calculator_manager.get_calculation(user_id)
         await query.edit_message_text(
             f"**Калькулятор стоимости**\n\n{calc.get_summary()}",
@@ -92,6 +94,7 @@ async def callback_handler(update: Update, context: ContextTypes.DEFAULT_TYPE) -
         )
     
     elif data == "menu_lead":
+        analytics.track(user_id, analytics.FunnelEvent.LEAD)
         text = """Отлично, давайте обсудим ваш проект!
 
 Напишите мне:
