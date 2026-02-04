@@ -1485,6 +1485,55 @@ async def message_handler(update: Update, context: ContextTypes.DEFAULT_TYPE) ->
     user = update.effective_user
     user_message = update.message.text
     
+    pending_review_type = context.user_data.get("pending_review_type")
+    if pending_review_type and user_message:
+        review_id = loyalty_system.submit_review(
+            user_id=user.id,
+            review_type=pending_review_type,
+            content_url=user_message if user_message.startswith("http") else None,
+            comment=user_message if not user_message.startswith("http") else None
+        )
+        
+        if review_id:
+            context.user_data.pop("pending_review_type", None)
+            
+            coins = REVIEW_REWARDS.get(pending_review_type, 0)
+            await update.message.reply_text(
+                f"✅ <b>Отзыв отправлен на модерацию!</b>\n\n"
+                f"После проверки вам будет начислено <b>{coins} монет</b>.\n"
+                f"Обычно это занимает до 24 часов.",
+                parse_mode="HTML",
+                reply_markup=get_loyalty_menu_keyboard()
+            )
+            
+            if MANAGER_CHAT_ID:
+                try:
+                    review = None
+                    reviews = loyalty_system.get_pending_reviews()
+                    for r in reviews:
+                        if r.id == review_id:
+                            review = r
+                            break
+                    
+                    if review:
+                        await context.bot.send_message(
+                            int(MANAGER_CHAT_ID),
+                            format_review_notification(review, user.username or user.first_name),
+                            parse_mode="HTML",
+                            reply_markup=get_review_moderation_keyboard(review_id)
+                        )
+                except Exception as e:
+                    logger.error(f"Failed to notify manager about review: {e}")
+            
+            return
+        else:
+            await update.message.reply_text(
+                "❌ Вы уже отправляли отзыв этого типа.",
+                reply_markup=get_loyalty_menu_keyboard()
+            )
+            context.user_data.pop("pending_review_type", None)
+            return
+    
     if not user_message or not user_message.strip():
         return
     
@@ -1499,28 +1548,31 @@ async def message_handler(update: Update, context: ContextTypes.DEFAULT_TYPE) ->
     if user_message == "🎁 Получить скидку":
         progress = tasks_tracker.get_user_progress(user.id)
         
-        tier_emoji = {0: "🔰", 5: "🥉", 10: "🥈", 15: "🥇", 20: "💎", 25: "👑"}
+        tier_emoji = {0: "🔰", 5: "🥉", 10: "🥈", 15: "🥇"}
         current_emoji = tier_emoji.get(progress.get_discount_percent(), "🔰")
         
-        discount_text = f"""🎁 **Получи скидку до 25% на разработку!**
+        is_returning = loyalty_system.is_returning_customer(user.id)
+        returning_bonus = f"\n🔄 **Бонус постоянного клиента:** +{RETURNING_CUSTOMER_BONUS}%" if is_returning else ""
+        
+        discount_text = f"""🎁 **Получи скидку до 15% на разработку!**
 
 {current_emoji} **Твой уровень:** {progress.get_tier_name()}
 💰 **Монеты:** {progress.total_coins}
 🔥 **Стрик:** {progress.current_streak} дней
-💵 **Текущая скидка:** {progress.get_discount_percent()}%
+💵 **Текущая скидка:** {progress.get_discount_percent()}%{returning_bonus}
 
 **Как это работает:**
 1. Подписывайся на наши соцсети
 2. Лайкай, комментируй, делись постами
-3. За каждое действие получаешь монеты
+3. Приглашай друзей (+200 монет за друга)
 4. Монеты = скидка на разработку
 
 **Уровни скидок:**
-🥉 200+ монет → 5%
-🥈 500+ монет → 10%
-🥇 800+ монет → 15%
-💎 1200+ монет → 20%
-👑 1500+ монет → 25%
+🥉 500+ монет → 5%
+🥈 1000+ монет → 10%
+🥇 1500+ монет → 15% (максимум)
+
+⏰ **Монеты действуют 90 дней**
 
 Выбери задание:"""
         
