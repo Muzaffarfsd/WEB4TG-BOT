@@ -48,21 +48,21 @@ WELCOME_MESSAGES = {
 
 Мы разрабатываем Telegram Mini Apps для бизнеса — магазины, рестораны, салоны красоты и многое другое.
 
-Можете писать текстом или отправлять голосовые сообщения — я отвечу!
+Пишите текстом или голосовым — как вам удобнее. Я тоже могу отвечать голосом!
 
 Расскажите о вашем бизнесе — подскажу, как мы можем помочь.""",
     "en": """Hi{name}! I'm Alex, consultant at WEB4TG Studio.
 
 We develop Telegram Mini Apps for businesses — shops, restaurants, beauty salons and more.
 
-You can type or send voice messages — I'll respond!
+Text or voice — whatever suits you. I can reply with voice too!
 
 Tell me about your business — I'll help you find the best solution.""",
     "uk": """Привіт{name}! Я Алекс, консультант WEB4TG Studio.
 
 Ми розробляємо Telegram Mini Apps для бізнесу — магазини, ресторани, салони краси та багато іншого.
 
-Можете писати текстом або надсилати голосові — я відповім!
+Пишіть текстом або голосовим — як вам зручніше. Я теж можу відповідати голосом!
 
 Розкажіть про ваш бізнес — підкажу, як ми можемо допомогти.""",
 }
