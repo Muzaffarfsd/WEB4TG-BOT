@@ -94,6 +94,22 @@ async def start_handler(update: Update, context: ContextTypes.DEFAULT_TYPE) -> N
             if result["success"]:
                 referral_bonus_text = f"\n\n🎁 Вы получили {REFERRED_REWARD} монет по реферальному коду!"
                 logger.info(f"User {user.id} applied referral code {referral_code}")
+                
+                referrer_id = result.get("referrer_telegram_id")
+                if referrer_id:
+                    try:
+                        new_user_name = user.first_name or user.username or "Новый пользователь"
+                        await context.bot.send_message(
+                            chat_id=referrer_id,
+                            text=f"🎉 Отличные новости!\n\n"
+                                 f"Ваш друг **{new_user_name}** присоединился по вашей ссылке!\n\n"
+                                 f"💰 Вам начислено **+{REFERRER_REWARD} монет**\n\n"
+                                 f"Продолжайте приглашать друзей и зарабатывайте ещё больше!",
+                            parse_mode="Markdown"
+                        )
+                        logger.info(f"Sent referral notification to {referrer_id}")
+                    except Exception as e:
+                        logger.warning(f"Failed to notify referrer {referrer_id}: {e}")
     
     referral_manager.get_or_create_user(user.id, user.username, user.first_name)
     
