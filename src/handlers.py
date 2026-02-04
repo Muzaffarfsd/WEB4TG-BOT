@@ -248,6 +248,33 @@ async def referral_handler(update: Update, context: ContextTypes.DEFAULT_TYPE) -
     await update.message.reply_text(text, parse_mode="Markdown", reply_markup=keyboard)
 
 
+async def payment_handler(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
+    """Show payment options."""
+    from src.payments import get_payment_main_text, get_payment_keyboard
+    await update.message.reply_text(
+        get_payment_main_text(),
+        parse_mode="Markdown",
+        reply_markup=get_payment_keyboard()
+    )
+
+
+async def contract_handler(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
+    """Send contract PDF."""
+    from src.payments import CONTRACT_PATH, BANK_DETAILS
+    try:
+        with open(CONTRACT_PATH, "rb") as contract_file:
+            await update.message.reply_document(
+                document=contract_file,
+                filename="Договор_WEB4TG_Studio.pdf",
+                caption="📄 **Договор на разработку ПО**\n\nОзнакомьтесь с условиями сотрудничества. Если есть вопросы — пишите!",
+                parse_mode="Markdown"
+            )
+    except FileNotFoundError:
+        await update.message.reply_text(
+            "Договор временно недоступен. Свяжитесь с менеджером для получения."
+        )
+
+
 async def callback_handler(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
     query = update.callback_query
     await query.answer()

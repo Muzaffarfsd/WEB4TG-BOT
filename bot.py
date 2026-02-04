@@ -13,7 +13,7 @@ from src.handlers import (
     message_handler, callback_handler, voice_handler, error_handler,
     leads_handler, stats_handler, export_handler,
     history_handler, hot_handler, tag_handler, priority_handler,
-    referral_handler
+    referral_handler, payment_handler, contract_handler
 )
 
 logging.basicConfig(
@@ -32,6 +32,8 @@ async def post_init(application) -> None:
         BotCommand("start", "🚀 Открыть приложение"),
         BotCommand("menu", "📋 Главное меню"),
         BotCommand("price", "💰 Цены на услуги"),
+        BotCommand("payment", "💳 Оплата услуг"),
+        BotCommand("contract", "📄 Скачать договор"),
         BotCommand("referral", "👥 Реферальная программа"),
         BotCommand("portfolio", "🎨 Примеры работ"),
         BotCommand("calc", "📱 Калькулятор стоимости"),
@@ -62,6 +64,8 @@ def main() -> None:
     application.add_handler(CommandHandler("tag", tag_handler))
     application.add_handler(CommandHandler("priority", priority_handler))
     application.add_handler(CommandHandler("referral", referral_handler))
+    application.add_handler(CommandHandler("payment", payment_handler))
+    application.add_handler(CommandHandler("contract", contract_handler))
     
     application.add_handler(CallbackQueryHandler(callback_handler))
     
