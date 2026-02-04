@@ -3,6 +3,11 @@
 ## Overview
 AI-агент поддержки для WEB4TG Studio — премиальной студии разработки Telegram Mini Apps. Бот консультирует клиентов по услугам, ценам, помогает подобрать решение и рассчитать стоимость приложения.
 
+## Deployment
+- **Development**: Replit (code only, no running)
+- **Production**: Railway (deployment only)
+- Database: Railway PostgreSQL
+
 ## Project Structure (2026 Best Practices)
 ```
 ├── bot.py                 # Entry point
@@ -15,7 +20,8 @@ AI-агент поддержки для WEB4TG Studio — премиальной
 │   ├── handlers.py        # Telegram command, message & callback handlers
 │   ├── keyboards.py       # Inline keyboard layouts
 │   ├── calculator.py      # Interactive cost calculator
-│   └── leads.py           # Lead collection & manager notifications
+│   ├── leads.py           # Lead collection & manager notifications
+│   └── tasks_tracker.py   # Task gamification system (coins, discounts)
 └── attached_assets/       # Knowledge base source
 ```
 
@@ -31,6 +37,16 @@ AI-агент поддержки для WEB4TG Studio — премиальной
 - **Typing indicators** - Shows "typing..." while generating response
 - **Long message handling** - Splits messages >4096 chars
 - **Async processing** - Non-blocking AI calls
+- **Gamification system** - Tasks, coins, streaks, discount tiers
+
+## Gamification System
+Users earn coins by completing tasks, which convert to discounts:
+- **Discount tiers**: 200→5%, 500→10%, 800→15%, 1200→20%, 1500→25%
+- **Platforms**: Telegram, YouTube, Instagram, TikTok
+- **Task types**: Subscribe, Like, Comment, Share, View
+- **Telegram verification**: Auto-checks channel subscription via Bot API
+- **Streaks**: Daily activity tracking for bonus engagement
+- **Tables**: `tasks_progress`, `user_coins`
 
 ## Bot Capabilities
 - Ответы на вопросы об услугах и ценах WEB4TG Studio
