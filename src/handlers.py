@@ -80,38 +80,6 @@ So what's your business about? Let's see how we can help.""",
 Розкажіть, чим займаєтесь? Подивимось, чим можемо бути корисні.""",
 }
 
-FIRST_TIME_WELCOME = """🚀 <b>Добро пожаловать в WEB4TG Studio!</b>
-
-Мы создаём <b>Telegram Mini Apps</b>, которые помогают бизнесу:
-• Продавать больше — прямо в Telegram
-• Принимать оплату без сайта
-• Получать заказы 24/7
-
-━━━━━━━━━━━━━━━━━━━━
-
-💡 <b>Почему клиенты выбирают нас:</b>
-
-✅ <b>Быстро</b> — приложение за 7-14 дней
-✅ <b>Выгодно</b> — дешевле сайта в 3 раза
-✅ <b>Просто</b> — не нужны программисты
-
-━━━━━━━━━━━━━━━━━━━━
-
-🎁 <b>Бонус новым клиентам:</b>
-Получите <b>до 30% скидки</b> — выполняйте задания, приглашайте друзей, оставляйте отзывы!
-
-━━━━━━━━━━━━━━━━━━━━
-
-👇 <b>С чего начнём?</b>"""
-
-FIRST_TIME_BUTTONS = [
-    ("📱 Посмотреть демо", "menu_portfolio"),
-    ("💰 Узнать цены", "menu_services"),
-    ("🎁 Получить скидку", "earn_coins"),
-    ("🧮 Калькулятор", "menu_calculator"),
-]
-
-
 async def start_handler(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
     user = update.effective_user
     session = session_manager.get_session(
@@ -160,6 +128,15 @@ async def start_handler(update: Update, context: ContextTypes.DEFAULT_TYPE) -> N
     name = user.first_name or ""
     name_part = f", {name}" if name else ""
     
+    if lang_code.startswith("ru"):
+        welcome_text = WELCOME_MESSAGES["ru"].format(name=name_part)
+    elif lang_code.startswith("uk"):
+        welcome_text = WELCOME_MESSAGES["uk"].format(name=name_part)
+    else:
+        welcome_text = WELCOME_MESSAGES["en"].format(name=name_part)
+    
+    welcome_text += referral_bonus_text
+    
     pinned_keyboard = InlineKeyboardMarkup([
         [InlineKeyboardButton("🚀 Открыть приложение", web_app=WebAppInfo(url="https://w4tg.up.railway.app/"))]
     ])
@@ -173,29 +150,20 @@ async def start_handler(update: Update, context: ContextTypes.DEFAULT_TYPE) -> N
     except Exception as e:
         logger.debug(f"Could not pin message: {e}")
     
-    first_time_keyboard = InlineKeyboardMarkup([
-        [InlineKeyboardButton("📱 Посмотреть демо", callback_data="menu_portfolio"),
-         InlineKeyboardButton("💰 Узнать цены", callback_data="menu_services")],
-        [InlineKeyboardButton("🎁 Получить скидку", callback_data="earn_coins"),
-         InlineKeyboardButton("🧮 Калькулятор", callback_data="menu_calculator")],
-        [InlineKeyboardButton("💬 Задать вопрос", callback_data="menu_lead")]
-    ])
-    
     await update.message.reply_text(
-        FIRST_TIME_WELCOME + referral_bonus_text,
-        parse_mode="HTML",
-        reply_markup=first_time_keyboard
+        welcome_text,
+        reply_markup=get_quick_reply_keyboard()
     )
     
-    voice_greeting = f"""Привет{name_part}! Это Алекс из WEB4TG Studio. 
-    
-Рад что ты заглянул! Мы делаем крутые Telegram приложения для бизнеса — магазины, рестораны, салоны красоты. 
+    voice_greeting = f"""Привет{name_part}! Это Алекс из WEB4TG Studio.
 
-Приложение готово за 7-14 дней, и это в 3 раза дешевле чем сайт. 
+Очень рад, что ты заглянул к нам! Слушай, у меня для тебя кое-что интересное.
 
-Можешь посмотреть наши демо, узнать цены, или просто напиши мне — я отвечу на все вопросы. 
+Мы создаём мобильные приложения прямо внутри Telegram. Представь: твой бизнес — интернет-магазин, ресторан, салон красоты — работает 24 на 7, принимает заказы и оплату, а клиентам даже не нужно ничего скачивать.
 
-Кстати, у нас есть программа скидок до 30% — выполняй задания и приглашай друзей!"""
+Самое крутое — это быстро и выгодно. Готовое приложение за одну-две недели, и стоит в разы дешевле обычного сайта или приложения.
+
+Расскажи, чем занимаешься? Я подскажу, как Telegram может помочь твоему бизнесу расти. Можешь писать текстом или голосовым — как удобнее!"""
 
     try:
         await update.effective_chat.send_action(ChatAction.RECORD_VOICE)
@@ -204,13 +172,6 @@ async def start_handler(update: Update, context: ContextTypes.DEFAULT_TYPE) -> N
         logger.info(f"Sent voice greeting to user {user.id}")
     except Exception as e:
         logger.warning(f"Failed to send voice greeting: {e}")
-        if lang_code.startswith("ru"):
-            welcome_text = WELCOME_MESSAGES["ru"].format(name=name_part)
-        elif lang_code.startswith("uk"):
-            welcome_text = WELCOME_MESSAGES["uk"].format(name=name_part)
-        else:
-            welcome_text = WELCOME_MESSAGES["en"].format(name=name_part)
-        await update.message.reply_text(welcome_text, reply_markup=get_quick_reply_keyboard())
 
 
 async def help_handler(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
