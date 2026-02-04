@@ -2,14 +2,29 @@ import os
 import logging
 import psycopg2
 from psycopg2.extras import RealDictCursor
+from psycopg2 import pool
 from dataclasses import dataclass
 from typing import List, Optional, Set
 from datetime import datetime, date
 from enum import Enum
+from functools import lru_cache
+import time
 
 logger = logging.getLogger(__name__)
 
 DATABASE_URL = os.environ.get("RAILWAY_DATABASE_URL") or os.environ.get("DATABASE_URL")
+
+_connection_pool = None
+
+def get_connection_pool():
+    global _connection_pool
+    if _connection_pool is None and DATABASE_URL:
+        try:
+            _connection_pool = pool.ThreadedConnectionPool(1, 10, DATABASE_URL)
+            logger.info("Database connection pool created")
+        except Exception as e:
+            logger.error(f"Failed to create connection pool: {e}")
+    return _connection_pool
 
 TASKS_CONFIG = {
     "daily": {
@@ -113,10 +128,22 @@ class UserProgress:
 class TasksTracker:
     def __init__(self, bot_token: str = None):
         self.bot_token = bot_token or os.environ.get("TELEGRAM_BOT_TOKEN")
+        self._user_cache = {}
+        self._cache_ttl = 30
         self._init_db()
     
     def _get_connection(self):
+        pool = get_connection_pool()
+        if pool:
+            return pool.getconn()
         return psycopg2.connect(DATABASE_URL)
+    
+    def _put_connection(self, conn):
+        pool = get_connection_pool()
+        if pool:
+            pool.putconn(conn)
+        else:
+            conn.close()
     
     def _init_db(self):
         if not DATABASE_URL:
@@ -197,99 +224,130 @@ class TasksTracker:
         if not DATABASE_URL:
             return UserProgress(telegram_id=telegram_id)
         
+        cache_key = f"progress_{telegram_id}"
+        cached = self._user_cache.get(cache_key)
+        if cached and (time.time() - cached["ts"]) < self._cache_ttl:
+            return cached["data"]
+        
+        conn = None
         try:
-            with self._get_connection() as conn:
-                with conn.cursor(cursor_factory=RealDictCursor) as cur:
-                    cur.execute("""
-                        SELECT total_coins, current_streak, max_streak, last_activity_date
-                        FROM user_coins WHERE telegram_id = %s
-                    """, (telegram_id,))
-                    coins_row = cur.fetchone()
-                    
+            conn = self._get_connection()
+            with conn.cursor(cursor_factory=RealDictCursor) as cur:
+                cur.execute("""
+                    SELECT uc.total_coins, uc.current_streak, uc.max_streak, uc.last_activity_date,
+                           ARRAY_AGG(tp.task_id) FILTER (WHERE tp.completed = TRUE) as completed_tasks
+                    FROM user_coins uc
+                    LEFT JOIN tasks_progress tp ON tp.telegram_id = uc.telegram_id
+                    WHERE uc.telegram_id = %s
+                    GROUP BY uc.telegram_id, uc.total_coins, uc.current_streak, uc.max_streak, uc.last_activity_date
+                """, (telegram_id,))
+                row = cur.fetchone()
+                
+                if row:
+                    completed = set(row["completed_tasks"] or [])
+                    progress = UserProgress(
+                        telegram_id=telegram_id,
+                        total_coins=row["total_coins"],
+                        completed_tasks=completed,
+                        current_streak=row["current_streak"],
+                        max_streak=row["max_streak"],
+                        last_activity_date=row["last_activity_date"]
+                    )
+                else:
                     cur.execute("""
                         SELECT task_id FROM tasks_progress
                         WHERE telegram_id = %s AND completed = TRUE
                     """, (telegram_id,))
-                    completed = {row["task_id"] for row in cur.fetchall()}
-                    
-                    if coins_row:
-                        return UserProgress(
-                            telegram_id=telegram_id,
-                            total_coins=coins_row["total_coins"],
-                            completed_tasks=completed,
-                            current_streak=coins_row["current_streak"],
-                            max_streak=coins_row["max_streak"],
-                            last_activity_date=coins_row["last_activity_date"]
-                        )
-                    else:
-                        return UserProgress(telegram_id=telegram_id, completed_tasks=completed)
+                    completed = {r["task_id"] for r in cur.fetchall()}
+                    progress = UserProgress(telegram_id=telegram_id, completed_tasks=completed)
+                
+                self._user_cache[cache_key] = {"data": progress, "ts": time.time()}
+                return progress
         except Exception as e:
             logger.error(f"Error getting user progress: {e}")
             return UserProgress(telegram_id=telegram_id)
+        finally:
+            if conn:
+                self._put_connection(conn)
     
     def _get_daily_tasks_completed_today(self, telegram_id: int) -> set:
         """Get all daily tasks completed today in one query."""
         if not DATABASE_URL:
             return set()
         
+        cache_key = f"daily_{telegram_id}"
+        cached = self._user_cache.get(cache_key)
+        if cached and (time.time() - cached["ts"]) < 60:
+            return cached["data"]
+        
+        conn = None
         try:
-            with self._get_connection() as conn:
-                with conn.cursor(cursor_factory=RealDictCursor) as cur:
-                    cur.execute("""
-                        SELECT DISTINCT task_id FROM tasks_progress
-                        WHERE telegram_id = %s 
-                        AND completed = TRUE 
-                        AND DATE(completed_at) = CURRENT_DATE
-                    """, (telegram_id,))
-                    return {row["task_id"] for row in cur.fetchall()}
+            conn = self._get_connection()
+            with conn.cursor(cursor_factory=RealDictCursor) as cur:
+                cur.execute("""
+                    SELECT DISTINCT task_id FROM tasks_progress
+                    WHERE telegram_id = %s 
+                    AND completed = TRUE 
+                    AND DATE(completed_at) = CURRENT_DATE
+                """, (telegram_id,))
+                result = {row["task_id"] for row in cur.fetchall()}
+                self._user_cache[cache_key] = {"data": result, "ts": time.time()}
+                return result
         except Exception as e:
             logger.error(f"Error checking daily tasks: {e}")
             return set()
+        finally:
+            if conn:
+                self._put_connection(conn)
     
     def _update_streak(self, telegram_id: int):
+        conn = None
         try:
-            with self._get_connection() as conn:
-                with conn.cursor(cursor_factory=RealDictCursor) as cur:
-                    cur.execute("""
-                        SELECT current_streak, max_streak, last_activity_date
-                        FROM user_coins WHERE telegram_id = %s
-                    """, (telegram_id,))
-                    row = cur.fetchone()
+            conn = self._get_connection()
+            with conn.cursor(cursor_factory=RealDictCursor) as cur:
+                cur.execute("""
+                    SELECT current_streak, max_streak, last_activity_date
+                    FROM user_coins WHERE telegram_id = %s
+                """, (telegram_id,))
+                row = cur.fetchone()
+                
+                today = date.today()
+                
+                if row:
+                    last_date = row["last_activity_date"]
+                    current_streak = row["current_streak"]
+                    max_streak = row["max_streak"]
                     
-                    today = date.today()
-                    
-                    if row:
-                        last_date = row["last_activity_date"]
-                        current_streak = row["current_streak"]
-                        max_streak = row["max_streak"]
-                        
-                        if last_date == today:
-                            return current_streak
-                        elif last_date and (today - last_date).days == 1:
-                            current_streak += 1
-                        else:
-                            current_streak = 1
-                        
-                        max_streak = max(max_streak, current_streak)
-                        
-                        cur.execute("""
-                            UPDATE user_coins 
-                            SET current_streak = %s, max_streak = %s, 
-                                last_activity_date = %s, updated_at = NOW()
-                            WHERE telegram_id = %s
-                        """, (current_streak, max_streak, today, telegram_id))
+                    if last_date == today:
+                        return current_streak
+                    elif last_date and (today - last_date).days == 1:
+                        current_streak += 1
                     else:
-                        cur.execute("""
-                            INSERT INTO user_coins (telegram_id, current_streak, max_streak, last_activity_date)
-                            VALUES (%s, 1, 1, %s)
-                        """, (telegram_id, today))
                         current_streak = 1
                     
-                    conn.commit()
-                    return current_streak
+                    max_streak = max(max_streak, current_streak)
+                    
+                    cur.execute("""
+                        UPDATE user_coins 
+                        SET current_streak = %s, max_streak = %s, 
+                            last_activity_date = %s, updated_at = NOW()
+                        WHERE telegram_id = %s
+                    """, (current_streak, max_streak, today, telegram_id))
+                else:
+                    cur.execute("""
+                        INSERT INTO user_coins (telegram_id, current_streak, max_streak, last_activity_date)
+                        VALUES (%s, 1, 1, %s)
+                    """, (telegram_id, today))
+                    current_streak = 1
+                
+                conn.commit()
+                return current_streak
         except Exception as e:
             logger.error(f"Error updating streak: {e}")
             return 0
+        finally:
+            if conn:
+                self._put_connection(conn)
     
     async def complete_task(self, telegram_id: int, task_id: str, platform: str) -> dict:
         task_config = None
@@ -333,34 +391,42 @@ class TasksTracker:
         coins = task_config["coins"]
         task_type = task_config["type"]
         
+        conn = None
         try:
-            with self._get_connection() as conn:
-                with conn.cursor() as cur:
-                    if is_daily:
-                        cur.execute("""
-                            INSERT INTO tasks_progress 
-                            (telegram_id, task_id, platform, task_type, coins_reward, completed, verification_status, completed_at)
-                            VALUES (%s, %s, %s, %s, %s, TRUE, 'verified', NOW())
-                        """, (telegram_id, task_id, platform, task_type, coins))
-                    else:
-                        cur.execute("""
-                            INSERT INTO tasks_progress 
-                            (telegram_id, task_id, platform, task_type, coins_reward, completed, verification_status, completed_at)
-                            VALUES (%s, %s, %s, %s, %s, TRUE, 'verified', NOW())
-                            ON CONFLICT (telegram_id, task_id) 
-                            DO UPDATE SET completed = TRUE, verification_status = 'verified', completed_at = NOW()
-                        """, (telegram_id, task_id, platform, task_type, coins))
-                    
+            conn = self._get_connection()
+            with conn.cursor() as cur:
+                if is_daily:
                     cur.execute("""
-                        INSERT INTO user_coins (telegram_id, total_coins, last_activity_date)
-                        VALUES (%s, %s, CURRENT_DATE)
-                        ON CONFLICT (telegram_id) 
-                        DO UPDATE SET total_coins = user_coins.total_coins + %s, 
-                                      last_activity_date = CURRENT_DATE,
-                                      updated_at = NOW()
-                    """, (telegram_id, coins, coins))
-                    
-                    conn.commit()
+                        INSERT INTO tasks_progress 
+                        (telegram_id, task_id, platform, task_type, coins_reward, completed, verification_status, completed_at)
+                        VALUES (%s, %s, %s, %s, %s, TRUE, 'verified', NOW())
+                    """, (telegram_id, task_id, platform, task_type, coins))
+                else:
+                    cur.execute("""
+                        INSERT INTO tasks_progress 
+                        (telegram_id, task_id, platform, task_type, coins_reward, completed, verification_status, completed_at)
+                        VALUES (%s, %s, %s, %s, %s, TRUE, 'verified', NOW())
+                        ON CONFLICT (telegram_id, task_id) 
+                        DO UPDATE SET completed = TRUE, verification_status = 'verified', completed_at = NOW()
+                    """, (telegram_id, task_id, platform, task_type, coins))
+                
+                cur.execute("""
+                    INSERT INTO user_coins (telegram_id, total_coins, last_activity_date)
+                    VALUES (%s, %s, CURRENT_DATE)
+                    ON CONFLICT (telegram_id) 
+                    DO UPDATE SET total_coins = user_coins.total_coins + %s, 
+                                  last_activity_date = CURRENT_DATE,
+                                  updated_at = NOW()
+                """, (telegram_id, coins, coins))
+                
+                conn.commit()
+            
+            self._put_connection(conn)
+            conn = None
+            
+            cache_key = f"progress_{telegram_id}"
+            self._user_cache.pop(cache_key, None)
+            self._user_cache.pop(f"daily_{telegram_id}", None)
             
             streak = self._update_streak(telegram_id)
             progress = self.get_user_progress(telegram_id)
@@ -378,6 +444,9 @@ class TasksTracker:
         except Exception as e:
             logger.error(f"Error completing task: {e}")
             return {"success": False, "error": str(e), "message": "Ошибка при выполнении задания"}
+        finally:
+            if conn:
+                self._put_connection(conn)
     
     def get_available_tasks(self, telegram_id: int) -> dict:
         progress = self.get_user_progress(telegram_id)

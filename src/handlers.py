@@ -455,7 +455,8 @@ async def callback_handler(update: Update, context: ContextTypes.DEFAULT_TYPE) -
 📤 Загрузите видео на YouTube, TikTok или отправьте ссылку на Google Drive.
 
 Отправьте ссылку на видео в этот чат:"""
-        await query.edit_message_text(text, parse_mode="HTML")
+        keyboard = InlineKeyboardMarkup([[InlineKeyboardButton("◀️ Назад", callback_data="loyalty_review")]])
+        await query.edit_message_text(text, parse_mode="HTML", reply_markup=keyboard)
     
     elif data == "review_text":
         context.user_data["pending_review_type"] = "text_photo"
@@ -468,7 +469,8 @@ async def callback_handler(update: Update, context: ContextTypes.DEFAULT_TYPE) -
 2. Скриншот или фото приложения
 
 <i>Можно отправить одним или несколькими сообщениями</i>"""
-        await query.edit_message_text(text, parse_mode="HTML")
+        keyboard = InlineKeyboardMarkup([[InlineKeyboardButton("◀️ Назад", callback_data="loyalty_review")]])
+        await query.edit_message_text(text, parse_mode="HTML", reply_markup=keyboard)
     
     elif data.startswith("package_"):
         package_id = data.replace("package_", "")
@@ -882,13 +884,32 @@ async def callback_handler(update: Update, context: ContextTypes.DEFAULT_TYPE) -
         
         action_text = task_type_names.get(task_type, "Выполнить")
         
-        if platform == "telegram" and task_type == "subscribe":
-            is_subscribed = await tasks_tracker.check_telegram_subscription(user_id, task_config.get("channel", "web4_tg"))
-            
-            if not is_subscribed:
+        if platform == "telegram":
+            if task_type == "subscribe":
+                is_subscribed = await tasks_tracker.check_telegram_subscription(user_id, task_config.get("channel", "web4_tg"))
+                
+                if not is_subscribed:
+                    keyboard = InlineKeyboardMarkup([
+                        [InlineKeyboardButton(f"{pinfo['emoji']} Открыть канал @web4_tg", url=task_url or "https://t.me/web4_tg")],
+                        [InlineKeyboardButton("✅ Я подписался", callback_data=f"verify_task_{task_id}")],
+                        [InlineKeyboardButton("◀️ Назад", callback_data=f"tasks_{platform}")]
+                    ])
+                    
+                    await query.edit_message_text(
+                        f"{pinfo['emoji']} **{task_name}**\n\n"
+                        f"📌 {task_desc}\n\n"
+                        f"1️⃣ Нажми кнопку — откроется канал @web4_tg\n"
+                        f"2️⃣ Подпишись на канал\n"
+                        f"3️⃣ Вернись и нажми «Я подписался»\n\n"
+                        f"🎁 Награда: **{coins} монет**",
+                        parse_mode="Markdown",
+                        reply_markup=keyboard
+                    )
+                    return
+            else:
                 keyboard = InlineKeyboardMarkup([
                     [InlineKeyboardButton(f"{pinfo['emoji']} Открыть канал @web4_tg", url=task_url or "https://t.me/web4_tg")],
-                    [InlineKeyboardButton("✅ Я подписался", callback_data=f"verify_task_{task_id}")],
+                    [InlineKeyboardButton("✅ Готово", callback_data=f"confirm_task_{task_id}")],
                     [InlineKeyboardButton("◀️ Назад", callback_data=f"tasks_{platform}")]
                 ])
                 
@@ -896,15 +917,15 @@ async def callback_handler(update: Update, context: ContextTypes.DEFAULT_TYPE) -
                     f"{pinfo['emoji']} **{task_name}**\n\n"
                     f"📌 {task_desc}\n\n"
                     f"1️⃣ Нажми кнопку — откроется канал @web4_tg\n"
-                    f"2️⃣ Подпишись на канал\n"
-                    f"3️⃣ Вернись и нажми «Я подписался»\n\n"
+                    f"2️⃣ {action_text}\n"
+                    f"3️⃣ Вернись и нажми «Готово»\n\n"
                     f"🎁 Награда: **{coins} монет**",
                     parse_mode="Markdown",
                     reply_markup=keyboard
                 )
                 return
         
-        if platform != "telegram" and task_url:
+        if task_url:
             keyboard = InlineKeyboardMarkup([
                 [InlineKeyboardButton(f"{pinfo['emoji']} Открыть {pinfo['name']}", url=task_url)],
                 [InlineKeyboardButton("✅ Готово", callback_data=f"confirm_task_{task_id}")],
