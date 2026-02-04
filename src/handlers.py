@@ -21,6 +21,7 @@ from src.knowledge_base import (
     WELCOME_MESSAGE, HELP_MESSAGE, PRICE_MESSAGE,
     PORTFOLIO_MESSAGE, CONTACT_MESSAGE, CLEAR_MESSAGE, ERROR_MESSAGE
 )
+from src.tasks_tracker import tasks_tracker, TASKS_CONFIG
 
 logger = logging.getLogger(__name__)
 
@@ -384,6 +385,191 @@ async def callback_handler(update: Update, context: ContextTypes.DEFAULT_TYPE) -
             parse_mode="Markdown",
             reply_markup=get_lead_keyboard()
         )
+    
+    elif data.startswith("tasks_"):
+        user_id = query.from_user.id
+        
+        if data == "tasks_progress":
+            progress = tasks_tracker.get_user_progress(user_id)
+            available = tasks_tracker.get_available_tasks(user_id)
+            
+            completed_count = len(progress.completed_tasks)
+            total_tasks = sum(len(tasks) for tasks in TASKS_CONFIG.values())
+            
+            tier_emoji = {0: "🔰", 5: "🥉", 10: "🥈", 15: "🥇", 20: "💎", 25: "👑"}
+            current_emoji = tier_emoji.get(progress.get_discount_percent(), "🔰")
+            
+            text = f"""📊 **Твой прогресс**
+
+{current_emoji} **Уровень:** {progress.get_tier_name()}
+💰 **Монеты:** {progress.total_coins}
+🔥 **Стрик:** {progress.current_streak} дней (макс: {progress.max_streak})
+💵 **Скидка:** {progress.get_discount_percent()}%
+✅ **Выполнено:** {completed_count} из {total_tasks} заданий
+
+**До следующего уровня:**"""
+            
+            next_tiers = [(200, 5), (500, 10), (800, 15), (1200, 20), (1500, 25)]
+            for coins_need, discount in next_tiers:
+                if progress.total_coins < coins_need:
+                    remaining = coins_need - progress.total_coins
+                    text += f"\n🎯 Ещё {remaining} монет до {discount}% скидки"
+                    break
+            else:
+                text += "\n👑 Максимальный уровень достигнут!"
+            
+            keyboard = InlineKeyboardMarkup([
+                [InlineKeyboardButton("📱 Telegram", callback_data="tasks_telegram"),
+                 InlineKeyboardButton("📺 YouTube", callback_data="tasks_youtube")],
+                [InlineKeyboardButton("📸 Instagram", callback_data="tasks_instagram"),
+                 InlineKeyboardButton("🎵 TikTok", callback_data="tasks_tiktok")],
+                [InlineKeyboardButton("Назад", callback_data="tasks_back")]
+            ])
+            
+            await query.edit_message_text(text, parse_mode="Markdown", reply_markup=keyboard)
+        
+        elif data == "tasks_back":
+            progress = tasks_tracker.get_user_progress(user_id)
+            tier_emoji = {0: "🔰", 5: "🥉", 10: "🥈", 15: "🥇", 20: "💎", 25: "👑"}
+            current_emoji = tier_emoji.get(progress.get_discount_percent(), "🔰")
+            
+            text = f"""🎁 **Получи скидку до 25%!**
+
+{current_emoji} **Уровень:** {progress.get_tier_name()}
+💰 **Монеты:** {progress.total_coins}
+💵 **Скидка:** {progress.get_discount_percent()}%
+
+Выбери задание:"""
+            
+            keyboard = InlineKeyboardMarkup([
+                [InlineKeyboardButton("📱 Telegram", callback_data="tasks_telegram")],
+                [InlineKeyboardButton("📺 YouTube", callback_data="tasks_youtube")],
+                [InlineKeyboardButton("📸 Instagram", callback_data="tasks_instagram")],
+                [InlineKeyboardButton("🎵 TikTok", callback_data="tasks_tiktok")],
+                [InlineKeyboardButton("📊 Мой прогресс", callback_data="tasks_progress")],
+                [InlineKeyboardButton("Назад в меню", callback_data="menu_back")]
+            ])
+            
+            await query.edit_message_text(text, parse_mode="Markdown", reply_markup=keyboard)
+        
+        elif data in ["tasks_telegram", "tasks_youtube", "tasks_instagram", "tasks_tiktok"]:
+            platform = data.replace("tasks_", "")
+            platform_names = {
+                "telegram": "📱 Telegram",
+                "youtube": "📺 YouTube", 
+                "instagram": "📸 Instagram",
+                "tiktok": "🎵 TikTok"
+            }
+            
+            tasks = tasks_tracker.get_available_tasks(user_id)["tasks"].get(platform, [])
+            progress = tasks_tracker.get_user_progress(user_id)
+            
+            text = f"**{platform_names[platform]} задания**\n\n"
+            
+            buttons = []
+            for task in tasks:
+                status_icon = "✅" if task["status"] == "completed" else "⭐"
+                task_name = task["id"].replace(f"{platform}_", "").replace("_", " ").title()
+                text += f"{status_icon} {task_name} — {task['coins']} монет\n"
+                
+                if task["status"] != "completed":
+                    buttons.append([InlineKeyboardButton(
+                        f"▶️ {task_name} (+{task['coins']})",
+                        callback_data=f"do_task_{task['id']}"
+                    )])
+            
+            buttons.append([InlineKeyboardButton("◀️ Назад", callback_data="tasks_back")])
+            
+            await query.edit_message_text(text, parse_mode="Markdown", reply_markup=InlineKeyboardMarkup(buttons))
+    
+    elif data.startswith("do_task_"):
+        task_id = data.replace("do_task_", "")
+        user_id = query.from_user.id
+        
+        task_config = None
+        platform = None
+        for plat, tasks in TASKS_CONFIG.items():
+            if task_id in tasks:
+                task_config = tasks[task_id]
+                platform = plat
+                break
+        
+        if not task_config:
+            await query.answer("Задание не найдено", show_alert=True)
+            return
+        
+        if platform == "telegram" and task_config.get("type") == "subscribe":
+            is_subscribed = await tasks_tracker.check_telegram_subscription(user_id, task_config.get("channel", "web4_tg"))
+            
+            if not is_subscribed:
+                keyboard = InlineKeyboardMarkup([
+                    [InlineKeyboardButton("📱 Подписаться на канал", url=task_config.get("url", "https://t.me/web4_tg"))],
+                    [InlineKeyboardButton("✅ Я подписался", callback_data=f"verify_task_{task_id}")],
+                    [InlineKeyboardButton("◀️ Назад", callback_data=f"tasks_{platform}")]
+                ])
+                
+                await query.edit_message_text(
+                    "📱 **Подписка на Telegram канал**\n\nПодпишись на канал @web4_tg, затем нажми «Я подписался» для получения монет.",
+                    parse_mode="Markdown",
+                    reply_markup=keyboard
+                )
+                return
+        
+        result = await tasks_tracker.complete_task(user_id, task_id, platform)
+        
+        if result["success"]:
+            await query.answer(f"🎉 +{result['coinsAwarded']} монет! Всего: {result['totalCoins']}", show_alert=True)
+        else:
+            await query.answer(result["message"], show_alert=True)
+        
+        tasks = tasks_tracker.get_available_tasks(user_id)["tasks"].get(platform, [])
+        platform_names = {"telegram": "📱 Telegram", "youtube": "📺 YouTube", "instagram": "📸 Instagram", "tiktok": "🎵 TikTok"}
+        
+        text = f"**{platform_names[platform]} задания**\n\n"
+        buttons = []
+        for task in tasks:
+            status_icon = "✅" if task["status"] == "completed" else "⭐"
+            task_name = task["id"].replace(f"{platform}_", "").replace("_", " ").title()
+            text += f"{status_icon} {task_name} — {task['coins']} монет\n"
+            
+            if task["status"] != "completed":
+                buttons.append([InlineKeyboardButton(f"▶️ {task_name} (+{task['coins']})", callback_data=f"do_task_{task['id']}")])
+        
+        buttons.append([InlineKeyboardButton("◀️ Назад", callback_data="tasks_back")])
+        await query.edit_message_text(text, parse_mode="Markdown", reply_markup=InlineKeyboardMarkup(buttons))
+    
+    elif data.startswith("verify_task_"):
+        task_id = data.replace("verify_task_", "")
+        user_id = query.from_user.id
+        
+        platform = None
+        for plat, tasks in TASKS_CONFIG.items():
+            if task_id in tasks:
+                platform = plat
+                break
+        
+        result = await tasks_tracker.complete_task(user_id, task_id, platform or "telegram")
+        
+        if result["success"]:
+            await query.answer(f"🎉 +{result['coinsAwarded']} монет! Всего: {result['totalCoins']}", show_alert=True)
+            
+            tasks = tasks_tracker.get_available_tasks(user_id)["tasks"].get(platform, [])
+            platform_names = {"telegram": "📱 Telegram", "youtube": "📺 YouTube", "instagram": "📸 Instagram", "tiktok": "🎵 TikTok"}
+            
+            text = f"**{platform_names[platform]} задания**\n\n"
+            buttons = []
+            for task in tasks:
+                status_icon = "✅" if task["status"] == "completed" else "⭐"
+                task_name = task["id"].replace(f"{platform}_", "").replace("_", " ").title()
+                text += f"{status_icon} {task_name} — {task['coins']} монет\n"
+                
+                if task["status"] != "completed":
+                    buttons.append([InlineKeyboardButton(f"▶️ {task_name} (+{task['coins']})", callback_data=f"do_task_{task['id']}")])
+            
+            buttons.append([InlineKeyboardButton("◀️ Назад", callback_data="tasks_back")])
+            await query.edit_message_text(text, parse_mode="Markdown", reply_markup=InlineKeyboardMarkup(buttons))
+        else:
+            await query.answer(result["message"], show_alert=True)
     
     elif data.startswith("portfolio_"):
         portfolio_info = {
@@ -870,9 +1056,17 @@ async def message_handler(update: Update, context: ContextTypes.DEFAULT_TYPE) ->
         return
     
     if user_message == "🎁 Получить скидку":
-        discount_text = """🎁 **Получи скидку до 25% на разработку!**
+        progress = tasks_tracker.get_user_progress(user.id)
+        
+        tier_emoji = {0: "🔰", 5: "🥉", 10: "🥈", 15: "🥇", 20: "💎", 25: "👑"}
+        current_emoji = tier_emoji.get(progress.get_discount_percent(), "🔰")
+        
+        discount_text = f"""🎁 **Получи скидку до 25% на разработку!**
 
-Выполняй задания — копи монеты — получай скидку.
+{current_emoji} **Твой уровень:** {progress.get_tier_name()}
+💰 **Монеты:** {progress.total_coins}
+🔥 **Стрик:** {progress.current_streak} дней
+💵 **Текущая скидка:** {progress.get_discount_percent()}%
 
 **Как это работает:**
 1. Подписывайся на наши соцсети
@@ -881,22 +1075,20 @@ async def message_handler(update: Update, context: ContextTypes.DEFAULT_TYPE) ->
 4. Монеты = скидка на разработку
 
 **Уровни скидок:**
-🥉 200+ монет → 5% скидка
-🥈 500+ монет → 10% скидка
-🥇 800+ монет → 15% скидка
-💎 1200+ монет → 20% скидка
-👑 1500+ монет → 25% скидка
+🥉 200+ монет → 5%
+🥈 500+ монет → 10%
+🥇 800+ монет → 15%
+💎 1200+ монет → 20%
+👑 1500+ монет → 25%
 
-**Наши соцсети:**
-📱 Telegram: @web4_tg
-📺 YouTube: @WEB4TG
-📸 Instagram: @web4tg
-🎵 TikTok: @web4tg
-
-Открой приложение и начни выполнять задания! 👇"""
+Выбери задание:"""
         
         earn_keyboard = InlineKeyboardMarkup([
-            [InlineKeyboardButton("🚀 Начать зарабатывать монеты", web_app=WebAppInfo(url="https://w4tg.up.railway.app/earning"))],
+            [InlineKeyboardButton("📱 Telegram задания", callback_data="tasks_telegram")],
+            [InlineKeyboardButton("📺 YouTube задания", callback_data="tasks_youtube")],
+            [InlineKeyboardButton("📸 Instagram задания", callback_data="tasks_instagram")],
+            [InlineKeyboardButton("🎵 TikTok задания", callback_data="tasks_tiktok")],
+            [InlineKeyboardButton("📊 Мой прогресс", callback_data="tasks_progress")],
             [InlineKeyboardButton("Назад в меню", callback_data="menu_back")]
         ])
         
