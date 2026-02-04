@@ -4,7 +4,7 @@ import os
 from telegram import Update, InlineKeyboardButton, InlineKeyboardMarkup
 from telegram.ext import ContextTypes
 import logging
-from src import analytics
+from src.analytics import analytics, FunnelEvent
 
 logger = logging.getLogger(__name__)
 
@@ -150,7 +150,7 @@ async def handle_payment_callback(update: Update, context: ContextTypes.DEFAULT_
     await query.answer()
     
     if action == "payment":
-        analytics.track(user_id, analytics.FunnelEvent.PAYMENT)
+        analytics.track(user_id, FunnelEvent.PAYMENT_VIEW)
         await query.edit_message_text(
             get_payment_main_text(),
             reply_markup=get_payment_keyboard(),

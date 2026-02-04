@@ -16,7 +16,7 @@ from src.referrals import referral_manager, REFERRER_REWARD, REFERRED_REWARD
 from src.pricing import get_price_main_text, get_price_main_keyboard
 from src.ab_testing import ab_testing
 from src.keyboards import get_portfolio_keyboard
-from src import analytics
+from src.analytics import analytics, FunnelEvent
 
 from src.handlers.utils import WELCOME_MESSAGES
 from src.handlers.media import generate_voice_response
@@ -33,7 +33,7 @@ async def start_handler(update: Update, context: ContextTypes.DEFAULT_TYPE) -> N
     )
     session.clear_history()
     
-    analytics.track(user.id, analytics.FunnelEvent.START)
+    analytics.track(user.id, FunnelEvent.START)
     
     lang_code = user.language_code or "en"
     logger.info(f"User {user.id} ({user.username}) started bot, lang={lang_code}")
@@ -159,7 +159,7 @@ async def clear_handler(update: Update, context: ContextTypes.DEFAULT_TYPE) -> N
 
 async def menu_handler(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
     user_id = update.effective_user.id
-    analytics.track(user_id, analytics.FunnelEvent.MENU)
+    analytics.track(user_id, FunnelEvent.MENU_OPEN)
     await update.message.reply_text(
         "Вот что могу показать:",
         reply_markup=get_main_menu_keyboard()
@@ -191,7 +191,7 @@ async def contact_handler(update: Update, context: ContextTypes.DEFAULT_TYPE) ->
 
 async def calc_handler(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
     user_id = update.effective_user.id
-    analytics.track(user_id, analytics.FunnelEvent.CALCULATOR)
+    analytics.track(user_id, FunnelEvent.CALCULATOR_OPEN)
     calc = calculator_manager.get_calculation(user_id)
     
     await update.message.reply_text(
