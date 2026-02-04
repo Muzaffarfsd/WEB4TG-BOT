@@ -13,7 +13,10 @@ def get_main_menu_keyboard() -> InlineKeyboardMarkup:
         ],
         [
             InlineKeyboardButton("💳 Оплата", callback_data="payment"),
-            InlineKeyboardButton("Оставить заявку", callback_data="menu_lead")
+            InlineKeyboardButton("🎁 Бонусы", callback_data="loyalty_menu")
+        ],
+        [
+            InlineKeyboardButton("📝 Оставить заявку", callback_data="menu_lead")
         ]
     ]
     return InlineKeyboardMarkup(keyboard)
@@ -136,3 +139,67 @@ def get_quick_reply_keyboard() -> ReplyKeyboardMarkup:
         resize_keyboard=True,
         is_persistent=True
     )
+
+
+def get_loyalty_menu_keyboard() -> InlineKeyboardMarkup:
+    keyboard = [
+        [
+            InlineKeyboardButton("⭐ Оставить отзыв", callback_data="loyalty_review"),
+        ],
+        [
+            InlineKeyboardButton("📦 Пакетные предложения", callback_data="loyalty_packages"),
+        ],
+        [
+            InlineKeyboardButton("🔄 Бонус постоянного клиента", callback_data="loyalty_returning"),
+        ],
+        [
+            InlineKeyboardButton("📊 Мои скидки", callback_data="loyalty_my_discounts"),
+        ],
+        [
+            InlineKeyboardButton("◀️ Назад", callback_data="menu_back"),
+        ],
+    ]
+    return InlineKeyboardMarkup(keyboard)
+
+
+def get_review_type_keyboard() -> InlineKeyboardMarkup:
+    keyboard = [
+        [
+            InlineKeyboardButton("🎬 Видео-отзыв (+500)", callback_data="review_video"),
+        ],
+        [
+            InlineKeyboardButton("📝 Текст + фото (+200)", callback_data="review_text"),
+        ],
+        [
+            InlineKeyboardButton("◀️ Назад", callback_data="loyalty_menu"),
+        ],
+    ]
+    return InlineKeyboardMarkup(keyboard)
+
+
+def get_package_deals_keyboard() -> InlineKeyboardMarkup:
+    keyboard = [
+        [
+            InlineKeyboardButton("📱 + 3 мес подписки (-5%)", callback_data="package_app_subscription_3"),
+        ],
+        [
+            InlineKeyboardButton("📱 + 6 мес подписки (-10%)", callback_data="package_app_subscription_6"),
+        ],
+        [
+            InlineKeyboardButton("📱 + 12 мес подписки (-15%)", callback_data="package_app_subscription_12"),
+        ],
+        [
+            InlineKeyboardButton("◀️ Назад", callback_data="loyalty_menu"),
+        ],
+    ]
+    return InlineKeyboardMarkup(keyboard)
+
+
+def get_review_moderation_keyboard(review_id: int) -> InlineKeyboardMarkup:
+    keyboard = [
+        [
+            InlineKeyboardButton("✅ Одобрить", callback_data=f"mod_approve_{review_id}"),
+            InlineKeyboardButton("❌ Отклонить", callback_data=f"mod_reject_{review_id}"),
+        ],
+    ]
+    return InlineKeyboardMarkup(keyboard)

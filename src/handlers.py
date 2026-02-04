@@ -25,6 +25,17 @@ from src.tasks_tracker import tasks_tracker, TASKS_CONFIG
 from src.referrals import referral_manager, REFERRER_REWARD, REFERRED_REWARD
 from src.payments import handle_payment_callback
 from src.pricing import get_price_main_text, get_price_main_keyboard, handle_price_callback
+from src.loyalty import (
+    LoyaltySystem, REVIEW_REWARDS, RETURNING_CUSTOMER_BONUS, PACKAGE_DEALS,
+    format_review_notification, format_package_deals, 
+    format_returning_customer_info, format_review_bonus_info
+)
+from src.keyboards import (
+    get_loyalty_menu_keyboard, get_review_type_keyboard,
+    get_package_deals_keyboard, get_review_moderation_keyboard
+)
+
+loyalty_system = LoyaltySystem()
 
 logger = logging.getLogger(__name__)
 
@@ -361,6 +372,169 @@ async def callback_handler(update: Update, context: ContextTypes.DEFAULT_TYPE) -
     
     elif data.startswith("price_"):
         await handle_price_callback(update, context, data)
+    
+    elif data == "loyalty_menu":
+        text = """🎁 <b>Программа лояльности</b>
+
+Получайте дополнительные скидки и бонусы:
+
+⭐ <b>Отзывы</b> — до 500 монет за отзыв
+🔄 <b>Постоянным клиентам</b> — +5% на следующий заказ
+📦 <b>Пакеты</b> — до 15% при заказе с подпиской
+
+Выберите раздел:"""
+        await query.edit_message_text(
+            text,
+            parse_mode="HTML",
+            reply_markup=get_loyalty_menu_keyboard()
+        )
+    
+    elif data == "loyalty_review":
+        text = format_review_bonus_info()
+        await query.edit_message_text(
+            text,
+            parse_mode="HTML",
+            reply_markup=get_review_type_keyboard()
+        )
+    
+    elif data == "loyalty_packages":
+        text = format_package_deals()
+        await query.edit_message_text(
+            text,
+            parse_mode="HTML",
+            reply_markup=get_package_deals_keyboard()
+        )
+    
+    elif data == "loyalty_returning":
+        text = format_returning_customer_info()
+        await query.edit_message_text(
+            text,
+            parse_mode="HTML",
+            reply_markup=get_loyalty_menu_keyboard()
+        )
+    
+    elif data == "loyalty_my_discounts":
+        user_progress = tasks_tracker.get_user_progress(user_id)
+        base_discount = user_progress.get_discount_percent()
+        
+        discounts = loyalty_system.calculate_total_discount(user_id, base_discount)
+        is_returning = loyalty_system.is_returning_customer(user_id)
+        
+        text = f"""📊 <b>Ваши скидки</b>
+
+💰 <b>Монеты:</b> {user_progress.total_coins}
+🎯 <b>Скидка от монет:</b> {base_discount}%
+🏆 <b>Уровень:</b> {user_progress.get_tier_name()}
+
+"""
+        if is_returning:
+            text += f"🔄 <b>Бонус постоянного клиента:</b> +{RETURNING_CUSTOMER_BONUS}%\n"
+        else:
+            text += "🔄 <i>Бонус постоянного клиента: станет доступен после первого заказа</i>\n"
+        
+        text += f"""
+📦 <b>Пакетные скидки:</b> до 15% (при заказе с подпиской)
+
+━━━━━━━━━━━━━━━
+💎 <b>Максимальная скидка:</b> {discounts['total']}%
+
+<i>Скидки суммируются (макс. 30%)</i>"""
+        
+        await query.edit_message_text(
+            text,
+            parse_mode="HTML",
+            reply_markup=get_loyalty_menu_keyboard()
+        )
+    
+    elif data == "review_video":
+        context.user_data["pending_review_type"] = "video"
+        text = """🎬 <b>Видео-отзыв</b>
+
+Запишите короткое видео (30 сек — 2 мин) с отзывом о работе с WEB4TG Studio.
+
+📤 Загрузите видео на YouTube, TikTok или отправьте ссылку на Google Drive.
+
+Отправьте ссылку на видео в этот чат:"""
+        await query.edit_message_text(text, parse_mode="HTML")
+    
+    elif data == "review_text":
+        context.user_data["pending_review_type"] = "text_photo"
+        text = """📝 <b>Текстовый отзыв</b>
+
+Напишите отзыв и приложите скриншот вашего приложения.
+
+Отправьте в этот чат:
+1. Текст отзыва
+2. Скриншот или фото приложения
+
+<i>Можно отправить одним или несколькими сообщениями</i>"""
+        await query.edit_message_text(text, parse_mode="HTML")
+    
+    elif data.startswith("package_"):
+        package_id = data.replace("package_", "")
+        if package_id in PACKAGE_DEALS:
+            deal = PACKAGE_DEALS[package_id]
+            text = f"""📦 <b>{deal['name']}</b>
+
+{deal['description']}
+
+💰 <b>Скидка:</b> {deal['discount']}%
+
+Чтобы воспользоваться предложением, напишите менеджеру или оставьте заявку.
+
+<i>Скидка применяется к стоимости разработки</i>"""
+            await query.edit_message_text(
+                text,
+                parse_mode="HTML",
+                reply_markup=get_lead_keyboard()
+            )
+    
+    elif data.startswith("mod_approve_"):
+        review_id = int(data.replace("mod_approve_", ""))
+        manager_id = query.from_user.id
+        
+        if str(manager_id) != MANAGER_CHAT_ID:
+            await query.answer("Только менеджер может модерировать отзывы", show_alert=True)
+            return
+        
+        coins = loyalty_system.approve_review(review_id, manager_id)
+        if coins:
+            reviews = loyalty_system.get_pending_reviews()
+            for r in reviews:
+                if r.id == review_id:
+                    tasks_tracker.add_coins(r.user_id, coins, f"review_{r.review_type}")
+                    try:
+                        await context.bot.send_message(
+                            r.user_id,
+                            f"✅ Ваш отзыв одобрен! Начислено <b>{coins} монет</b>.",
+                            parse_mode="HTML"
+                        )
+                    except Exception as e:
+                        logger.error(f"Failed to notify user about review approval: {e}")
+                    break
+            
+            await query.edit_message_text(
+                query.message.text + f"\n\n✅ <b>Одобрено</b> — начислено {coins} монет",
+                parse_mode="HTML"
+            )
+        else:
+            await query.answer("Ошибка при одобрении отзыва", show_alert=True)
+    
+    elif data.startswith("mod_reject_"):
+        review_id = int(data.replace("mod_reject_", ""))
+        manager_id = query.from_user.id
+        
+        if str(manager_id) != MANAGER_CHAT_ID:
+            await query.answer("Только менеджер может модерировать отзывы", show_alert=True)
+            return
+        
+        if loyalty_system.reject_review(review_id, manager_id):
+            await query.edit_message_text(
+                query.message.text + "\n\n❌ <b>Отклонено</b>",
+                parse_mode="HTML"
+            )
+        else:
+            await query.answer("Ошибка при отклонении отзыва", show_alert=True)
     
     elif data.startswith("calc_"):
         calc = calculator_manager.get_calculation(user_id)
