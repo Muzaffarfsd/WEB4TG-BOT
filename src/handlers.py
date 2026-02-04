@@ -1310,6 +1310,31 @@ async def stats_handler(update: Update, context: ContextTypes.DEFAULT_TYPE) -> N
     await update.message.reply_text(text, parse_mode="Markdown")
 
 
+async def reviews_handler(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
+    user_id = update.effective_user.id
+    manager_id = lead_manager.get_manager_chat_id()
+    
+    if manager_id and user_id != manager_id:
+        await update.message.reply_text("Эта команда только для менеджера.")
+        return
+    
+    pending = loyalty_system.get_pending_reviews()
+    
+    if not pending:
+        await update.message.reply_text("✅ Нет отзывов на модерацию")
+        return
+    
+    await update.message.reply_text(f"📋 <b>Отзывы на модерацию: {len(pending)}</b>", parse_mode="HTML")
+    
+    for review in pending[:10]:
+        text = format_review_notification(review)
+        await update.message.reply_text(
+            text,
+            parse_mode="HTML",
+            reply_markup=get_review_moderation_keyboard(review.id)
+        )
+
+
 async def export_handler(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
     user_id = update.effective_user.id
     manager_id = lead_manager.get_manager_chat_id()

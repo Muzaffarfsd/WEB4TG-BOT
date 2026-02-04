@@ -22,7 +22,10 @@ AI-агент поддержки для WEB4TG Studio — премиальной
 │   ├── calculator.py      # Interactive cost calculator
 │   ├── leads.py           # Lead collection & manager notifications
 │   ├── tasks_tracker.py   # Task gamification system (coins, discounts)
-│   └── referrals.py       # Referral program (invite friends, earn coins)
+│   ├── referrals.py       # Referral program (invite friends, earn coins)
+│   ├── loyalty.py         # Loyalty system (reviews, packages, returning customers)
+│   ├── payments.py        # Manual payment integration
+│   └── pricing.py         # Pricing information and menus
 └── attached_assets/       # Knowledge base source
 ```
 
@@ -39,25 +42,43 @@ AI-агент поддержки для WEB4TG Studio — премиальной
 - **Long message handling** - Splits messages >4096 chars
 - **Async processing** - Non-blocking AI calls
 - **Gamification system** - Tasks, coins, streaks, discount tiers
+- **Loyalty program** - Reviews, packages, returning customer bonuses
 
-## Gamification System
+## Gamification System (Business Optimized)
 Users earn coins by completing tasks, which convert to discounts:
-- **Discount tiers**: 200→5%, 500→10%, 800→15%, 1200→20%, 1500→25%
+- **Discount tiers**: 500→5%, 1000→10%, 1500→15% (max)
+- **Coin expiry**: 90 days from earning
 - **Platforms**: Telegram, YouTube, Instagram, TikTok
 - **Task types**: Subscribe, Like, Comment, Share, View
+- **Task rewards**: Halved to encourage referrals
 - **Telegram verification**: Auto-checks channel subscription via Bot API
 - **Streaks**: Daily activity tracking for bonus engagement
 - **Tables**: `tasks_progress`, `user_coins`
 
 ## Referral Program
 Users can invite friends and earn coins:
-- **Referrer reward**: 100 coins per invited friend
+- **Referrer reward**: 200 coins per invited friend
 - **Referred reward**: 50 coins welcome bonus
 - **Tiers**: Bronze (0-9), Silver (10-29), Gold (30-99), Platinum (100+)
 - **Commission**: 10% → 15% → 20% → 30% based on tier
 - **Code format**: WEB4TG + 6 random chars (e.g., WEB4TG7X9K2M)
 - **Link format**: `https://t.me/w4tg_bot?start=ref_{CODE}`
 - **Tables**: `referral_users`, `referrals`
+
+## Loyalty Program (NEW)
+Additional ways to earn discounts:
+- **Review bonus**: Video review = 500 coins, Text+photo = 200 coins
+- **Returning customer**: +5% discount on repeat orders
+- **Package deals**: App + subscription bundles (3mo=-5%, 6mo=-10%, 12mo=-15%)
+- **Maximum total discount**: 30% (all bonuses combined)
+- **Tables**: `customer_reviews`, `customer_orders`
+
+## Payment System
+Manual payment integration with downloadable contract:
+- **Visa card**: 4177 4901 1819 6304 (Muzaparov M.Sh.)
+- **Bank transfer**: Mbank Bishkek
+- **Contract PDF**: Downloadable from bot
+- **Commands**: `/payment`, `/contract`
 
 ## Bot Capabilities
 - Ответы на вопросы об услугах и ценах WEB4TG Studio
@@ -66,6 +87,7 @@ Users can invite friends and earn coins:
 - Примеры из портфолио по категориям
 - Автоматический сбор лидов
 - Уведомления менеджеру о заявках
+- Программа лояльности с бонусами за отзывы
 - **Мультиязычность** — автоопределение языка клиента и ответ на его языке
 
 ## Commands
@@ -74,12 +96,16 @@ Users can invite friends and earn coins:
 - `/clear` - Очистить историю
 - `/menu` - Главное меню
 - `/price` - Цены на услуги
+- `/payment` - Оплата услуг
+- `/contract` - Скачать договор
 - `/portfolio` - Примеры работ
 - `/contact` - Контакты
 - `/calc` - Калькулятор стоимости
+- `/referral` - Реферальная программа
 - `/leads` - Просмотр лидов (только менеджер)
 - `/stats` - Статистика бота (только менеджер)
 - `/export` - Экспорт лидов в CSV (только менеджер)
+- `/reviews` - Отзывы на модерацию (только менеджер)
 - `/history <user_id>` - История взаимодействий с лидом (только менеджер)
 - `/hot` - Горячие лиды (только менеджер)
 - `/tag <user_id> <тег>` - Добавить тег лиду (только менеджер)
@@ -89,6 +115,7 @@ Users can invite friends and earn coins:
 - `TELEGRAM_BOT_TOKEN` - Bot token from @BotFather
 - `GEMINI_API_KEY` - Google AI API key for Gemini 3 Pro
 - `MANAGER_CHAT_ID` - (Optional) Chat ID for lead notifications
+- `RAILWAY_DATABASE_URL` - PostgreSQL database URL
 
 ## AI Models
 - **Fast responses**: Gemini 3 Pro Preview (instant replies)
