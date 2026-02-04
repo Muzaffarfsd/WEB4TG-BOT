@@ -160,15 +160,6 @@ async def start_handler(update: Update, context: ContextTypes.DEFAULT_TYPE) -> N
     name = user.first_name or ""
     name_part = f", {name}" if name else ""
     
-    if lang_code.startswith("ru"):
-        welcome_text = WELCOME_MESSAGES["ru"].format(name=name_part)
-    elif lang_code.startswith("uk"):
-        welcome_text = WELCOME_MESSAGES["uk"].format(name=name_part)
-    else:
-        welcome_text = WELCOME_MESSAGES["en"].format(name=name_part)
-    
-    welcome_text += referral_bonus_text
-    
     pinned_keyboard = InlineKeyboardMarkup([
         [InlineKeyboardButton("🚀 Открыть приложение", web_app=WebAppInfo(url="https://w4tg.up.railway.app/"))]
     ])
@@ -182,10 +173,44 @@ async def start_handler(update: Update, context: ContextTypes.DEFAULT_TYPE) -> N
     except Exception as e:
         logger.debug(f"Could not pin message: {e}")
     
+    first_time_keyboard = InlineKeyboardMarkup([
+        [InlineKeyboardButton("📱 Посмотреть демо", callback_data="menu_portfolio"),
+         InlineKeyboardButton("💰 Узнать цены", callback_data="menu_services")],
+        [InlineKeyboardButton("🎁 Получить скидку", callback_data="earn_coins"),
+         InlineKeyboardButton("🧮 Калькулятор", callback_data="menu_calculator")],
+        [InlineKeyboardButton("💬 Задать вопрос", callback_data="menu_lead")]
+    ])
+    
     await update.message.reply_text(
-        welcome_text,
-        reply_markup=get_quick_reply_keyboard()
+        FIRST_TIME_WELCOME + referral_bonus_text,
+        parse_mode="HTML",
+        reply_markup=first_time_keyboard
     )
+    
+    voice_greeting = f"""Привет{name_part}! Это Алекс из WEB4TG Studio. 
+    
+Рад что ты заглянул! Мы делаем крутые Telegram приложения для бизнеса — магазины, рестораны, салоны красоты. 
+
+Приложение готово за 7-14 дней, и это в 3 раза дешевле чем сайт. 
+
+Можешь посмотреть наши демо, узнать цены, или просто напиши мне — я отвечу на все вопросы. 
+
+Кстати, у нас есть программа скидок до 30% — выполняй задания и приглашай друзей!"""
+
+    try:
+        await update.effective_chat.send_action(ChatAction.RECORD_VOICE)
+        voice_audio = await generate_voice_response(voice_greeting)
+        await update.message.reply_voice(voice=voice_audio)
+        logger.info(f"Sent voice greeting to user {user.id}")
+    except Exception as e:
+        logger.warning(f"Failed to send voice greeting: {e}")
+        if lang_code.startswith("ru"):
+            welcome_text = WELCOME_MESSAGES["ru"].format(name=name_part)
+        elif lang_code.startswith("uk"):
+            welcome_text = WELCOME_MESSAGES["uk"].format(name=name_part)
+        else:
+            welcome_text = WELCOME_MESSAGES["en"].format(name=name_part)
+        await update.message.reply_text(welcome_text, reply_markup=get_quick_reply_keyboard())
 
 
 async def help_handler(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
@@ -818,29 +843,36 @@ async def callback_handler(update: Update, context: ContextTypes.DEFAULT_TYPE) -
             
             await query.edit_message_text(text, parse_mode="Markdown", reply_markup=keyboard)
         
-        elif data == "tasks_back":
+        elif data == "tasks_back" or data == "earn_coins":
             progress = tasks_tracker.get_user_progress(user_id)
-            tier_emoji = {0: "🔰", 5: "🥉", 10: "🥈", 15: "🥇", 20: "💎", 25: "👑"}
+            tier_emoji = {0: "🔰", 5: "🥉", 10: "🥈", 15: "🥇"}
             current_emoji = tier_emoji.get(progress.get_discount_percent(), "🔰")
             
-            text = f"""🎁 **Получи скидку до 25%!**
+            text = f"""🎁 <b>Получи скидку до 30%!</b>
 
-{current_emoji} **Уровень:** {progress.get_tier_name()}
-💰 **Монеты:** {progress.total_coins}
-💵 **Скидка:** {progress.get_discount_percent()}%
+{current_emoji} <b>Уровень:</b> {progress.get_tier_name()}
+💰 <b>Монеты:</b> {progress.total_coins}
+💵 <b>Скидка:</b> {progress.get_discount_percent()}%
 
-Выбери задание:"""
+<b>Как заработать скидку:</b>
+📱 Выполняй задания — до 15%
+👥 Приглашай друзей — 200 монет/друг
+⭐ Оставь отзыв — до 500 монет
+
+Выбери раздел:"""
             
             keyboard = InlineKeyboardMarkup([
-                [InlineKeyboardButton("📱 Telegram", callback_data="tasks_telegram")],
-                [InlineKeyboardButton("📺 YouTube", callback_data="tasks_youtube")],
-                [InlineKeyboardButton("📸 Instagram", callback_data="tasks_instagram")],
-                [InlineKeyboardButton("🎵 TikTok", callback_data="tasks_tiktok")],
+                [InlineKeyboardButton("📱 Telegram", callback_data="tasks_telegram"),
+                 InlineKeyboardButton("📺 YouTube", callback_data="tasks_youtube")],
+                [InlineKeyboardButton("📸 Instagram", callback_data="tasks_instagram"),
+                 InlineKeyboardButton("🎵 TikTok", callback_data="tasks_tiktok")],
+                [InlineKeyboardButton("👥 Пригласить друзей", callback_data="referral_menu")],
+                [InlineKeyboardButton("⭐ Оставить отзыв", callback_data="loyalty_review")],
                 [InlineKeyboardButton("📊 Мой прогресс", callback_data="tasks_progress")],
-                [InlineKeyboardButton("Назад в меню", callback_data="menu_back")]
+                [InlineKeyboardButton("◀️ Назад в меню", callback_data="menu_back")]
             ])
             
-            await query.edit_message_text(text, parse_mode="Markdown", reply_markup=keyboard)
+            await query.edit_message_text(text, parse_mode="HTML", reply_markup=keyboard)
         
         elif data in ["tasks_telegram", "tasks_youtube", "tasks_instagram", "tasks_tiktok"]:
             platform = data.replace("tasks_", "")
