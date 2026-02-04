@@ -496,9 +496,14 @@ async def callback_handler(update: Update, context: ContextTypes.DEFAULT_TYPE) -
 
 Запишите короткое видео (30 сек — 2 мин) с отзывом о работе с WEB4TG Studio.
 
-📤 Загрузите видео на YouTube, TikTok или отправьте ссылку на Google Drive.
+📹 <b>Отправьте видео прямо в этот чат!</b>
 
-Отправьте ссылку на видео в этот чат:"""
+Можно записать:
+• Кружочек (видеосообщение)
+• Обычное видео из галереи
+• Записать новое видео
+
+<i>Расскажите о вашем опыте работы с нами!</i>"""
         keyboard = InlineKeyboardMarkup([[InlineKeyboardButton("◀️ Назад", callback_data="loyalty_review")]])
         await query.edit_message_text(text, parse_mode="HTML", reply_markup=keyboard)
     
@@ -1324,6 +1329,82 @@ async def voice_handler(update: Update, context: ContextTypes.DEFAULT_TYPE) -> N
         await update.message.reply_text(
             "Не удалось обработать голосовое сообщение. Напишите текстом, пожалуйста."
         )
+
+
+async def video_handler(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
+    """Handle video and video note messages for reviews."""
+    user = update.effective_user
+    user_id = user.id
+    pending_review_type = context.user_data.get("pending_review_type")
+    
+    if pending_review_type != "video":
+        await update.message.reply_text(
+            "Если хотите оставить видео-отзыв, нажмите /bonus → Отзывы и бонусы → Видео-отзыв"
+        )
+        return
+    
+    video = update.message.video or update.message.video_note
+    if not video:
+        return
+    
+    file_id = video.file_id
+    
+    try:
+        review = loyalty_system.submit_review(
+            user_id=user_id,
+            review_type="video",
+            content=f"[VIDEO] file_id: {file_id}"
+        )
+        
+        if review:
+            context.user_data.pop("pending_review_type", None)
+            
+            from src.loyalty import REVIEW_REWARDS
+            coins = REVIEW_REWARDS.get("video", 500)
+            
+            await update.message.reply_text(
+                f"""✅ <b>Видео-отзыв принят!</b>
+
+Спасибо за ваш отзыв! После модерации вы получите <b>{coins} монет</b>.
+
+Обычно модерация занимает до 24 часов.""",
+                parse_mode="HTML",
+                reply_markup=get_loyalty_menu_keyboard()
+            )
+            
+            if MANAGER_CHAT_ID:
+                try:
+                    manager_text = f"""🎬 <b>Новый видео-отзыв!</b>
+
+👤 {user.first_name or 'Пользователь'} (@{user.username or 'no_username'})
+🆔 ID: {user_id}"""
+                    
+                    await context.bot.send_message(
+                        chat_id=MANAGER_CHAT_ID,
+                        text=manager_text,
+                        parse_mode="HTML"
+                    )
+                    await context.bot.forward_message(
+                        chat_id=MANAGER_CHAT_ID,
+                        from_chat_id=update.effective_chat.id,
+                        message_id=update.message.message_id
+                    )
+                except Exception as e:
+                    logger.warning(f"Failed to notify manager about video review: {e}")
+        else:
+            await update.message.reply_text(
+                "Не удалось сохранить отзыв. Попробуйте позже.",
+                reply_markup=get_loyalty_menu_keyboard()
+            )
+            context.user_data.pop("pending_review_type", None)
+            
+    except Exception as e:
+        logger.error(f"Error processing video review: {e}")
+        await update.message.reply_text(
+            "Произошла ошибка. Попробуйте позже.",
+            reply_markup=get_loyalty_menu_keyboard()
+        )
+        context.user_data.pop("pending_review_type", None)
 
 
 async def leads_handler(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
