@@ -7,19 +7,18 @@ from telegram.ext import ContextTypes
 from src.leads import lead_manager
 from src.loyalty import format_review_notification
 from src.keyboards import get_review_moderation_keyboard
+from src.security import admin_required, log_admin_action
+from src.analytics import analytics, FunnelEvent
 
 from src.handlers.utils import loyalty_system
 
 logger = logging.getLogger(__name__)
 
 
+@admin_required
 async def leads_handler(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
     user_id = update.effective_user.id
-    manager_id = lead_manager.get_manager_chat_id()
-    
-    if manager_id and user_id != manager_id:
-        await update.message.reply_text("Эта команда только для менеджера.")
-        return
+    log_admin_action(user_id, "view_leads")
     
     leads = lead_manager.get_all_leads(limit=20)
     
@@ -38,16 +37,15 @@ async def leads_handler(update: Update, context: ContextTypes.DEFAULT_TYPE) -> N
     await update.message.reply_text("\n".join(text_parts), parse_mode="Markdown")
 
 
+@admin_required
 async def stats_handler(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
     user_id = update.effective_user.id
-    manager_id = lead_manager.get_manager_chat_id()
-    
-    if manager_id and user_id != manager_id:
-        await update.message.reply_text("Эта команда только для менеджера.")
-        return
+    log_admin_action(user_id, "view_stats")
     
     stats = lead_manager.get_stats()
-    analytics = lead_manager.get_analytics_stats()
+    lead_analytics = lead_manager.get_analytics_stats()
+    
+    funnel_text = analytics.format_stats_message(30)
     
     text = f"""📊 **Статистика бота**
 
@@ -59,23 +57,21 @@ async def stats_handler(update: Update, context: ContextTypes.DEFAULT_TYPE) -> N
 📈 Всего: {stats.get('total', 0)}
 
 **Активность:**
-💬 Сообщений: {analytics.get('total_messages', 0)}
-🎙 Голосовых: {analytics.get('voice_messages', 0)}
-🧮 Калькулятор: {analytics.get('calculator_uses', 0)}
-👥 Всего юзеров: {analytics.get('unique_users', 0)}
-📅 Сегодня: {analytics.get('today_users', 0)}
-📆 За неделю: {analytics.get('week_users', 0)}"""
+💬 Сообщений: {lead_analytics.get('total_messages', 0)}
+🎙 Голосовых: {lead_analytics.get('voice_messages', 0)}
+🧮 Калькулятор: {lead_analytics.get('calculator_uses', 0)}
+👥 Всего юзеров: {lead_analytics.get('unique_users', 0)}
+📅 Сегодня: {lead_analytics.get('today_users', 0)}
+📆 За неделю: {lead_analytics.get('week_users', 0)}"""
 
     await update.message.reply_text(text, parse_mode="Markdown")
+    await update.message.reply_text(funnel_text, parse_mode="HTML")
 
 
+@admin_required
 async def reviews_handler(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
     user_id = update.effective_user.id
-    manager_id = lead_manager.get_manager_chat_id()
-    
-    if manager_id and user_id != manager_id:
-        await update.message.reply_text("Эта команда только для менеджера.")
-        return
+    log_admin_action(user_id, "view_reviews")
     
     pending = loyalty_system.get_pending_reviews()
     
@@ -94,13 +90,10 @@ async def reviews_handler(update: Update, context: ContextTypes.DEFAULT_TYPE) ->
         )
 
 
+@admin_required
 async def export_handler(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
     user_id = update.effective_user.id
-    manager_id = lead_manager.get_manager_chat_id()
-    
-    if manager_id and user_id != manager_id:
-        await update.message.reply_text("Эта команда только для менеджера.")
-        return
+    log_admin_action(user_id, "export_leads")
     
     csv_data = lead_manager.export_leads_csv()
     
@@ -119,14 +112,9 @@ async def export_handler(update: Update, context: ContextTypes.DEFAULT_TYPE) -> 
         os.unlink(temp_path)
 
 
+@admin_required
 async def history_handler(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
     user_id = update.effective_user.id
-    manager_id = lead_manager.get_manager_chat_id()
-    
-    if manager_id and user_id != manager_id:
-        await update.message.reply_text("Эта команда только для менеджера.")
-        return
-    
     args = context.args
     if not args:
         await update.message.reply_text("Использование: /history <user_id>")
@@ -177,13 +165,10 @@ async def history_handler(update: Update, context: ContextTypes.DEFAULT_TYPE) ->
     await update.message.reply_text("\n".join(text_parts))
 
 
+@admin_required
 async def hot_handler(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
     user_id = update.effective_user.id
-    manager_id = lead_manager.get_manager_chat_id()
-    
-    if manager_id and user_id != manager_id:
-        await update.message.reply_text("Эта команда только для менеджера.")
-        return
+    log_admin_action(user_id, "view_hot_leads")
     
     from src.leads import LeadPriority
     leads = lead_manager.get_leads_by_priority(LeadPriority.HOT, limit=15)
@@ -202,14 +187,9 @@ async def hot_handler(update: Update, context: ContextTypes.DEFAULT_TYPE) -> Non
     await update.message.reply_text("\n".join(text_parts), parse_mode="Markdown")
 
 
+@admin_required
 async def tag_handler(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
     user_id = update.effective_user.id
-    manager_id = lead_manager.get_manager_chat_id()
-    
-    if manager_id and user_id != manager_id:
-        await update.message.reply_text("Эта команда только для менеджера.")
-        return
-    
     args = context.args
     if len(args) < 2:
         await update.message.reply_text("Использование: /tag <user_id> <тег>\nПример: /tag 123456 vip")
@@ -229,14 +209,9 @@ async def tag_handler(update: Update, context: ContextTypes.DEFAULT_TYPE) -> Non
         await update.message.reply_text("Лид не найден")
 
 
+@admin_required
 async def priority_handler(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
     user_id = update.effective_user.id
-    manager_id = lead_manager.get_manager_chat_id()
-    
-    if manager_id and user_id != manager_id:
-        await update.message.reply_text("Эта команда только для менеджера.")
-        return
-    
     args = context.args
     if len(args) < 2:
         await update.message.reply_text("Использование: /priority <user_id> <cold|warm|hot>")

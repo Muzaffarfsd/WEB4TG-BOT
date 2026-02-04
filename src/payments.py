@@ -9,17 +9,17 @@ logger = logging.getLogger(__name__)
 
 CONTRACT_PATH = os.path.join(os.path.dirname(os.path.dirname(__file__)), "assets", "contract.pdf")
 
-CARD_NUMBER = "4177 4901 1819 6304"
-CARD_NUMBER_PLAIN = "4177490118196304"
+CARD_NUMBER = os.environ.get("PAYMENT_CARD_NUMBER", "")
+CARD_NUMBER_PLAIN = CARD_NUMBER.replace(" ", "")
 
 BANK_DETAILS = {
-    "recipient": "МУЗАПАРОВ МУЗАФФАР ШЕРЗОДОВИЧ",
-    "inn": "22908199900907",
-    "account": "1030220226371390",
-    "bank_name": "ОАО \"Мбанк\"",
-    "bank_address": "Кыргызская Республика, г. Бишкек, ул. Горького, 1/2",
-    "bik": "103002",
-    "bank_inn": "02712199110068",
+    "recipient": os.environ.get("PAYMENT_RECIPIENT", ""),
+    "inn": os.environ.get("PAYMENT_INN", ""),
+    "account": os.environ.get("PAYMENT_ACCOUNT", ""),
+    "bank_name": os.environ.get("PAYMENT_BANK_NAME", ""),
+    "bank_address": os.environ.get("PAYMENT_BANK_ADDRESS", ""),
+    "bik": os.environ.get("PAYMENT_BIK", ""),
+    "bank_inn": os.environ.get("PAYMENT_BANK_INN", ""),
 }
 
 

@@ -11,30 +11,43 @@ AI-агент поддержки для WEB4TG Studio — премиальной
 
 ## Project Structure (2026 Best Practices)
 ```
-├── bot.py                 # Entry point
+├── bot.py                     # Entry point
 ├── src/
 │   ├── __init__.py
-│   ├── config.py          # Configuration management (URLs, API keys)
-│   ├── database.py        # Shared database connection pool (1-15 connections)
-│   ├── knowledge_base.py  # System prompts & messages
-│   ├── session.py         # User session management with TTL
-│   ├── ai_client.py       # Gemini AI client with OpenAI fallback
-│   ├── handlers.py        # Telegram command, message & callback handlers
-│   ├── keyboards.py       # Inline keyboard layouts
-│   ├── calculator.py      # Interactive cost calculator
-│   ├── leads.py           # Lead collection & manager notifications
-│   ├── tasks_tracker.py   # Task gamification system (coins, discounts)
-│   ├── referrals.py       # Referral program (invite friends, earn coins)
-│   ├── loyalty.py         # Loyalty system (reviews, packages, returning customers)
-│   ├── payments.py        # Manual payment integration
-│   ├── pricing.py         # Pricing information and menus
-│   └── ab_testing.py      # A/B testing for welcome messages
-└── attached_assets/       # Knowledge base source
+│   ├── config.py              # Configuration management
+│   ├── database.py            # Shared DB connection pool (1-15 connections)
+│   ├── cache.py               # TTL cache for frequent queries
+│   ├── analytics.py           # Funnel tracking and events
+│   ├── security.py            # Admin access control
+│   ├── knowledge_base.py      # System prompts & messages
+│   ├── session.py             # User session management with TTL
+│   ├── ai_client.py           # Gemini AI client
+│   ├── keyboards.py           # Inline keyboard layouts
+│   ├── calculator.py          # Interactive cost calculator
+│   ├── leads.py               # Lead collection & manager notifications
+│   ├── tasks_tracker.py       # Task gamification system
+│   ├── referrals.py           # Referral program
+│   ├── loyalty.py             # Loyalty system (reviews, packages)
+│   ├── payments.py            # Manual payment integration
+│   ├── pricing.py             # Pricing information and menus
+│   ├── ab_testing.py          # A/B testing for welcome messages
+│   └── handlers/              # Modular handlers (refactored)
+│       ├── __init__.py        # Exports all handlers
+│       ├── utils.py           # Shared utilities
+│       ├── commands.py        # Command handlers (/start, /menu, etc)
+│       ├── callbacks.py       # Callback query handler
+│       ├── messages.py        # Message handler + AI responses
+│       ├── media.py           # Voice, video, photo handlers
+│       └── admin.py           # Admin commands with @admin_required
+└── attached_assets/           # Knowledge base source
 ```
 
 ## Architecture Features (2026)
-- **Modular structure** - Separate modules for config, AI, sessions, handlers
+- **Modular handlers** - Split into domain-specific modules (commands, callbacks, media, admin)
 - **Unified DB pool** - Shared ThreadedConnectionPool (1-15 connections) across all modules
+- **TTL caching** - Cache module for frequently accessed data (src/cache.py)
+- **Funnel analytics** - Event tracking for conversion optimization (src/analytics.py)
+- **Admin security** - @admin_required decorator, ADMIN_IDS env var, audit logging
 - **A/B testing** - Welcome message variants with tracking (variant A/B)
 - **Photo reviews** - Direct video/photo upload in chat for reviews
 - **Inline keyboards** - Interactive navigation with callback queries
@@ -44,9 +57,6 @@ AI-агент поддержки для WEB4TG Studio — премиальной
 - **Session management** - Per-user conversation history with TTL (24h)
 - **Memory limits** - Max 30 messages per conversation, 10k sessions
 - **Rate limiting** - Tenacity retry with exponential backoff
-- **Typing indicators** - Shows "typing..." while generating response
-- **Long message handling** - Splits messages >4096 chars
-- **Async processing** - Non-blocking AI calls
 - **Gamification system** - Tasks, coins, streaks, discount tiers
 - **Loyalty program** - Reviews, packages, returning customer bonuses
 
@@ -71,7 +81,7 @@ Users can invite friends and earn coins:
 - **Link format**: `https://t.me/w4tg_bot?start=ref_{CODE}`
 - **Tables**: `referral_users`, `referrals`
 
-## Loyalty Program (NEW)
+## Loyalty Program
 Additional ways to earn discounts:
 - **Review bonus**: Video review = 500 coins, Text+photo = 200 coins
 - **Returning customer**: +5% discount on repeat orders
@@ -81,8 +91,8 @@ Additional ways to earn discounts:
 
 ## Payment System
 Manual payment integration with downloadable contract:
-- **Visa card**: 4177 4901 1819 6304 (Muzaparov M.Sh.)
-- **Bank transfer**: Mbank Bishkek
+- **Visa card**: From env PAYMENT_CARD_NUMBER
+- **Bank transfer**: From env PAYMENT_* variables
 - **Contract PDF**: Downloadable from bot
 - **Commands**: `/payment`, `/contract`
 
@@ -108,21 +118,35 @@ Manual payment integration with downloadable contract:
 - `/contact` - Контакты
 - `/calc` - Калькулятор стоимости
 - `/referral` - Реферальная программа
-- `/leads` - Просмотр лидов (только менеджер)
-- `/stats` - Статистика бота (только менеджер)
-- `/export` - Экспорт лидов в CSV (только менеджер)
-- `/reviews` - Отзывы на модерацию (только менеджер)
-- `/history <user_id>` - История взаимодействий с лидом (только менеджер)
-- `/hot` - Горячие лиды (только менеджер)
-- `/tag <user_id> <тег>` - Добавить тег лиду (только менеджер)
-- `/priority <user_id> <cold|warm|hot>` - Установить приоритет (только менеджер)
+- `/leads` - Просмотр лидов (только админ)
+- `/stats` - Статистика бота (только админ)
+- `/export` - Экспорт лидов в CSV (только админ)
+- `/reviews` - Отзывы на модерацию (только админ)
+- `/history <user_id>` - История взаимодействий (только админ)
+- `/hot` - Горячие лиды (только админ)
+- `/tag <user_id> <тег>` - Добавить тег лиду (только админ)
+- `/priority <user_id> <cold|warm|hot>` - Установить приоритет (только админ)
 
 ## Environment Variables
+### Required
 - `TELEGRAM_BOT_TOKEN` - Bot token from @BotFather
 - `GEMINI_API_KEY` - Google AI API key for Gemini 3 Pro
-- `ELEVENLABS_API_KEY` - (Optional) ElevenLabs for voice greeting
-- `MANAGER_CHAT_ID` - (Optional) Chat ID for lead notifications
 - `RAILWAY_DATABASE_URL` - PostgreSQL database URL
+
+### Optional
+- `ELEVENLABS_API_KEY` - ElevenLabs for voice greeting
+- `MANAGER_CHAT_ID` - Chat ID for lead notifications
+- `ADMIN_IDS` - Comma-separated admin user IDs (additional to MANAGER_CHAT_ID)
+
+### Payment (moved from code for security)
+- `PAYMENT_CARD_NUMBER` - Visa card number
+- `PAYMENT_RECIPIENT` - Recipient name
+- `PAYMENT_INN` - Recipient INN
+- `PAYMENT_ACCOUNT` - Bank account number
+- `PAYMENT_BANK_NAME` - Bank name
+- `PAYMENT_BANK_ADDRESS` - Bank address
+- `PAYMENT_BIK` - Bank BIK
+- `PAYMENT_BANK_INN` - Bank INN
 
 ## AI Models
 - **Primary**: Gemini 3 Pro Preview (thinking mode, 4096 budget)
@@ -132,6 +156,18 @@ Manual payment integration with downloadable contract:
 - Random 50/50 assignment on first visit
 - Event tracking: start_command, voice_sent, voice_failed
 - Stats available via ab_testing.format_stats_message()
+
+## Analytics & Funnel
+- Funnel events tracked: start → menu → calculator → lead → payment
+- Conversion rate calculation between any two events
+- Daily stats with user/event counts
+- Admin command `/stats` shows funnel analytics
+
+## Security
+- @admin_required decorator for all admin commands
+- ADMIN_IDS env var for additional admins
+- Audit logging for admin actions
+- Payment details moved to environment variables
 
 ## Running (Railway only)
 ```bash

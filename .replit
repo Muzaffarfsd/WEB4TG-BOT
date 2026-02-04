@@ -8,24 +8,15 @@ channel = "stable-25_05"
 packages = ["cacert", "cargo", "ffmpeg-full", "glibcLocales", "libffi", "libiconv", "libxcrypt", "openssl", "pkg-config", "rustc"]
 
 [workflows]
-runButton = "Project"
 
-[[workflows.workflow]]
-name = "Project"
-mode = "parallel"
-author = "agent"
+[userenv]
 
-[[workflows.workflow.tasks]]
-task = "workflow.run"
-args = "Telegram Bot"
-
-[[workflows.workflow]]
-name = "Telegram Bot"
-author = "agent"
-
-[[workflows.workflow.tasks]]
-task = "shell.exec"
-args = "python bot.py"
-
-[workflows.workflow.metadata]
-outputType = "console"
+[userenv.shared]
+PAYMENT_CARD_NUMBER = "4177 4901 1819 6304"
+PAYMENT_RECIPIENT = "МУЗАПАРОВ МУЗАФФАР ШЕРЗОДОВИЧ"
+PAYMENT_INN = "22908199900907"
+PAYMENT_ACCOUNT = "1030220226371390"
+PAYMENT_BANK_NAME = "ОАО \"Мбанк\""
+PAYMENT_BANK_ADDRESS = "Кыргызская Республика, г. Бишкек, ул. Горького, 1/2"
+PAYMENT_BIK = "103002"
+PAYMENT_BANK_INN = "02712199110068"
