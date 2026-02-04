@@ -13,7 +13,7 @@ logger = logging.getLogger(__name__)
 
 DATABASE_URL = os.environ.get("RAILWAY_DATABASE_URL") or os.environ.get("DATABASE_URL")
 
-REFERRER_REWARD = 100
+REFERRER_REWARD = 200
 REFERRED_REWARD = 50
 
 
