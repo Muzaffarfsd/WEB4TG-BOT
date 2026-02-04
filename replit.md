@@ -4,19 +4,21 @@
 AI-агент поддержки для WEB4TG Studio — премиальной студии разработки Telegram Mini Apps. Бот консультирует клиентов по услугам, ценам, помогает подобрать решение и рассчитать стоимость приложения.
 
 ## Deployment
-- **Development**: Replit (code only, no running)
+- **Development**: Replit (code only, NO RUNNING - bot uses long polling)
 - **Production**: Railway (deployment only)
 - Database: Railway PostgreSQL
+- **IMPORTANT**: Do NOT run bot on Replit - will conflict with Railway production bot
 
 ## Project Structure (2026 Best Practices)
 ```
 ├── bot.py                 # Entry point
 ├── src/
 │   ├── __init__.py
-│   ├── config.py          # Configuration management
+│   ├── config.py          # Configuration management (URLs, API keys)
+│   ├── database.py        # Shared database connection pool (1-15 connections)
 │   ├── knowledge_base.py  # System prompts & messages
 │   ├── session.py         # User session management with TTL
-│   ├── ai_client.py       # Gemini AI client with retries & thinking mode
+│   ├── ai_client.py       # Gemini AI client with OpenAI fallback
 │   ├── handlers.py        # Telegram command, message & callback handlers
 │   ├── keyboards.py       # Inline keyboard layouts
 │   ├── calculator.py      # Interactive cost calculator
@@ -25,14 +27,19 @@ AI-агент поддержки для WEB4TG Studio — премиальной
 │   ├── referrals.py       # Referral program (invite friends, earn coins)
 │   ├── loyalty.py         # Loyalty system (reviews, packages, returning customers)
 │   ├── payments.py        # Manual payment integration
-│   └── pricing.py         # Pricing information and menus
+│   ├── pricing.py         # Pricing information and menus
+│   └── ab_testing.py      # A/B testing for welcome messages
 └── attached_assets/       # Knowledge base source
 ```
 
 ## Architecture Features (2026)
 - **Modular structure** - Separate modules for config, AI, sessions, handlers
+- **Unified DB pool** - Shared ThreadedConnectionPool (1-15 connections) across all modules
+- **OpenAI fallback** - Automatic fallback to GPT-4o-mini when Gemini fails
+- **A/B testing** - Welcome message variants with tracking (variant A/B)
+- **Photo reviews** - Direct video/photo upload in chat for reviews
 - **Inline keyboards** - Interactive navigation with callback queries
-- **Thinking mode** - Gemini 3 Pro thinking for complex queries (8192 tokens)
+- **Thinking mode** - Gemini 3 Pro thinking for complex queries (4096 tokens)
 - **Cost calculator** - Interactive feature selection & price calculation
 - **Lead management** - Automatic lead capture with manager notifications
 - **Session management** - Per-user conversation history with TTL (24h)
@@ -114,14 +121,23 @@ Manual payment integration with downloadable contract:
 ## Environment Variables
 - `TELEGRAM_BOT_TOKEN` - Bot token from @BotFather
 - `GEMINI_API_KEY` - Google AI API key for Gemini 3 Pro
+- `OPENAI_API_KEY` - (Optional) OpenAI API key for fallback
+- `ELEVENLABS_API_KEY` - (Optional) ElevenLabs for voice greeting
 - `MANAGER_CHAT_ID` - (Optional) Chat ID for lead notifications
 - `RAILWAY_DATABASE_URL` - PostgreSQL database URL
 
 ## AI Models
-- **Fast responses**: Gemini 3 Pro Preview (instant replies)
-- **Complex queries**: Gemini 3 Pro Preview (thinking mode, 4096 budget)
+- **Primary**: Gemini 3 Pro Preview (thinking mode, 4096 budget)
+- **Fallback**: GPT-4o-mini (when Gemini fails/rate limited)
 
-## Running
+## A/B Testing
+- **welcome_voice** test: variant A (short informal) vs B (detailed professional)
+- Random 50/50 assignment on first visit
+- Event tracking: start_command, voice_sent, voice_failed
+- Stats available via ab_testing.format_stats_message()
+
+## Running (Railway only)
 ```bash
 python bot.py
 ```
+**Do NOT run on Replit** - will cause "Conflict: terminated by other getUpdates request"

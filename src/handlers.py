@@ -34,6 +34,7 @@ from src.keyboards import (
     get_loyalty_menu_keyboard, get_review_type_keyboard,
     get_package_deals_keyboard, get_review_moderation_keyboard
 )
+from src.ab_testing import ab_testing
 
 loyalty_system = LoyaltySystem()
 
@@ -128,8 +129,22 @@ async def start_handler(update: Update, context: ContextTypes.DEFAULT_TYPE) -> N
     name = user.first_name or ""
     name_part = f", {name}" if name else ""
     
+    welcome_variant = ab_testing.get_variant(user.id, "welcome_voice")
+    ab_testing.track_event(user.id, "welcome_voice", "start_command", {"variant": welcome_variant})
+    
     if lang_code.startswith("ru"):
-        welcome_text = WELCOME_MESSAGES["ru"].format(name=name_part)
+        if welcome_variant == "b":
+            welcome_text = f"""Привет{name_part}! Я AI-консультант WEB4TG Studio — премиальной студии разработки Telegram Mini Apps.
+
+Я помогу вам:
+• Подобрать готовое решение или создать уникальное приложение
+• Рассчитать стоимость разработки
+• Узнать о бонусах и скидках
+• Посмотреть примеры наших работ
+
+Задавайте любые вопросы!"""
+        else:
+            welcome_text = WELCOME_MESSAGES["ru"].format(name=name_part)
     elif lang_code.startswith("uk"):
         welcome_text = WELCOME_MESSAGES["uk"].format(name=name_part)
     else:
@@ -155,7 +170,16 @@ async def start_handler(update: Update, context: ContextTypes.DEFAULT_TYPE) -> N
         reply_markup=get_quick_reply_keyboard()
     )
     
-    voice_greeting = f"""Оо, привет{name_part}! Слушай, знаешь что самое крутое? То, что ты сейчас слушаешь это сообщение — это и есть лучшее доказательство, что моя система работает!
+    if welcome_variant == "b":
+        voice_greeting = f"""Привет{name_part}! Рад познакомиться!
+        
+Я твой персональный AI-консультант. Знаешь, что самое крутое? То, что ты сейчас слушаешь — это живое доказательство того, как работает моя система!
+
+Telegram Mini App привлёк внимание, а AI-агент удержал. Связка визуала и интеллекта — это мощно!
+
+Я помогу выбрать решение под твой бизнес, рассчитаю стоимость и отвечу на все вопросы. Пиши или жми кнопки!"""
+    else:
+        voice_greeting = f"""Оо, привет{name_part}! Слушай, знаешь что самое крутое? То, что ты сейчас слушаешь это сообщение — это и есть лучшее доказательство, что моя система работает!
 
 Подумай: тебя зацепило моё приложение, а удержал — вот этот ИИ-агент. Визуал плюс интеллект — бомбическая связка!
 
@@ -165,8 +189,10 @@ async def start_handler(update: Update, context: ContextTypes.DEFAULT_TYPE) -> N
         await update.effective_chat.send_action(ChatAction.RECORD_VOICE)
         voice_audio = await generate_voice_response(voice_greeting)
         await update.message.reply_voice(voice=voice_audio)
+        ab_testing.track_event(user.id, "welcome_voice", "voice_sent")
         logger.info(f"Sent voice greeting to user {user.id}")
     except Exception as e:
+        ab_testing.track_event(user.id, "welcome_voice", "voice_failed")
         logger.warning(f"Failed to send voice greeting: {e}")
 
 
