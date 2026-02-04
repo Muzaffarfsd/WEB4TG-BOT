@@ -1232,9 +1232,9 @@ async def message_handler(update: Update, context: ContextTypes.DEFAULT_TYPE) ->
     
     if user_message == "💰 Цены":
         await update.message.reply_text(
-            PRICE_MESSAGE, 
+            get_price_main_text(), 
             parse_mode="Markdown",
-            reply_markup=get_subscription_keyboard()
+            reply_markup=get_price_main_keyboard()
         )
         return
     
