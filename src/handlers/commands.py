@@ -210,7 +210,7 @@ async def bonus_handler(update: Update, context: ContextTypes.DEFAULT_TYPE) -> N
     text = f"""🎁 <b>Получи скидку до 30%!</b>
 
 {current_emoji} Твоя скидка: <b>{progress.get_discount_percent()}%</b>
-💰 Монеты: <b>{progress.coins}</b>
+💰 Монеты: <b>{progress.total_coins}</b>
 
 <b>Как получить скидку:</b>
 
