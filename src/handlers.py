@@ -44,27 +44,27 @@ async def send_typing_action(update: Update, duration: float = 4.0):
 
 
 WELCOME_MESSAGES = {
-    "ru": """Привет{name}! Я Алекс, консультант WEB4TG Studio.
+    "ru": """Привет{name}! Меня зовут Алекс, работаю консультантом в WEB4TG Studio.
 
-Мы разрабатываем Telegram Mini Apps для бизнеса — магазины, рестораны, салоны красоты и многое другое.
+Мы делаем Telegram Mini Apps для бизнеса — интернет-магазины, рестораны, салоны красоты и многое другое.
 
-Пишите текстом или голосовым — как вам удобнее. Я тоже могу отвечать голосом!
+Кстати, можем общаться как удобно — текстом или голосовыми, мне без разницы)
 
-Расскажите о вашем бизнесе — подскажу, как мы можем помочь.""",
-    "en": """Hi{name}! I'm Alex, consultant at WEB4TG Studio.
+Расскажите, чем занимаетесь? Посмотрим, чем можем быть полезны.""",
+    "en": """Hey{name}! I'm Alex, consultant at WEB4TG Studio.
 
-We develop Telegram Mini Apps for businesses — shops, restaurants, beauty salons and more.
+We build Telegram Mini Apps for businesses — online stores, restaurants, beauty salons and more.
 
-Text or voice — whatever suits you. I can reply with voice too!
+By the way, feel free to text or send voice messages — whatever works for you)
 
-Tell me about your business — I'll help you find the best solution.""",
-    "uk": """Привіт{name}! Я Алекс, консультант WEB4TG Studio.
+So what's your business about? Let's see how we can help.""",
+    "uk": """Привіт{name}! Мене звати Алекс, працюю консультантом у WEB4TG Studio.
 
-Ми розробляємо Telegram Mini Apps для бізнесу — магазини, ресторани, салони краси та багато іншого.
+Ми робимо Telegram Mini Apps для бізнесу — інтернет-магазини, ресторани, салони краси та багато іншого.
 
-Пишіть текстом або голосовим — як вам зручніше. Я теж можу відповідати голосом!
+До речі, можемо спілкуватися як зручно — текстом або голосовими, мені без різниці)
 
-Розкажіть про ваш бізнес — підкажу, як ми можемо допомогти.""",
+Розкажіть, чим займаєтесь? Подивимось, чим можемо бути корисні.""",
 }
 
 
