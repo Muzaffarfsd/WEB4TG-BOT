@@ -78,18 +78,7 @@ async def start_handler(update: Update, context: ContextTypes.DEFAULT_TYPE) -> N
     ab_testing.track_event(user.id, "welcome_voice", "start_command", {"variant": welcome_variant})
     
     if lang_code.startswith("ru"):
-        if welcome_variant == "b":
-            welcome_text = f"""Привет{name_part}! Я AI-консультант WEB4TG Studio — премиальной студии разработки Telegram Mini Apps.
-
-Я помогу вам:
-• Подобрать готовое решение или создать уникальное приложение
-• Рассчитать стоимость разработки
-• Узнать о бонусах и скидках
-• Посмотреть примеры наших работ
-
-Задавайте любые вопросы!"""
-        else:
-            welcome_text = WELCOME_MESSAGES["ru"].format(name=name_part)
+        welcome_text = WELCOME_MESSAGES["ru"].format(name=name_part)
     elif lang_code.startswith("uk"):
         welcome_text = WELCOME_MESSAGES["uk"].format(name=name_part)
     else:
@@ -115,20 +104,13 @@ async def start_handler(update: Update, context: ContextTypes.DEFAULT_TYPE) -> N
         reply_markup=get_quick_reply_keyboard()
     )
     
-    if welcome_variant == "b":
-        voice_greeting = f"""Привет{name_part}! Рад познакомиться!
-        
-Я твой персональный AI-консультант. Знаешь, что самое крутое? То, что ты сейчас слушаешь — это живое доказательство того, как работает моя система!
+    voice_greeting = f"""Привет{name_part}! Меня зовут Алекс, я консультант в WEB4TG Studio.
 
-Telegram Mini App привлёк внимание, а AI-агент удержал. Связка визуала и интеллекта — это мощно!
+Мы делаем Telegram Mini Apps для бизнеса — магазины, рестораны, салоны и много чего ещё.
 
-Я помогу выбрать решение под твой бизнес, рассчитаю стоимость и отвечу на все вопросы. Пиши или жми кнопки!"""
-    else:
-        voice_greeting = f"""Оо, привет{name_part}! Слушай, знаешь что самое крутое? То, что ты сейчас слушаешь это сообщение — это и есть лучшее доказательство, что моя система работает!
+Можем общаться как удобно — текстом или голосовыми, мне без разницы)
 
-Подумай: тебя зацепило моё приложение, а удержал — вот этот ИИ-агент. Визуал плюс интеллект — бомбическая связка!
-
-Я себе это внедрил и просто кайфую — забыл что такое рутина. Хочешь так же? Жми кнопку — сделаем такую же систему для твоего бизнеса!"""
+Расскажи, чем занимаешься? Посмотрим, чем можем помочь."""
 
     try:
         await update.effective_chat.send_action(ChatAction.RECORD_VOICE)
