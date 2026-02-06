@@ -312,22 +312,26 @@ class BroadcastManager:
 
         for i, user_id in enumerate(user_ids):
             try:
+                pm = bc.get('parse_mode') or None
                 if content_type == 'text':
                     await bot.send_message(
                         chat_id=user_id,
-                        text=bc.get('text_content', '')
+                        text=bc.get('text_content', ''),
+                        parse_mode=pm
                     )
                 elif content_type == 'photo':
                     await bot.send_photo(
                         chat_id=user_id,
                         photo=bc.get('media_file_id'),
-                        caption=bc.get('caption') or None
+                        caption=bc.get('caption') or None,
+                        parse_mode=pm
                     )
                 elif content_type == 'video':
                     await bot.send_video(
                         chat_id=user_id,
                         video=bc.get('media_file_id'),
-                        caption=bc.get('caption') or None
+                        caption=bc.get('caption') or None,
+                        parse_mode=pm
                     )
                 sent += 1
             except Forbidden:
