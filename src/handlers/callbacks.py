@@ -856,3 +856,99 @@ Courses — онлайн-школа с каталогом курсов, трек
         ])
         
         await query.edit_message_text(text, parse_mode="Markdown", reply_markup=keyboard)
+
+    elif data and data.startswith("bc_"):
+        from src.security import is_admin
+        if not is_admin(user_id):
+            await query.edit_message_text("⛔ Доступ запрещён")
+            return
+
+        if data == "bc_cancel":
+            context.user_data.pop('broadcast_draft', None)
+            context.user_data.pop('broadcast_compose', None)
+            await query.edit_message_text("❌ Рассылка отменена")
+
+        elif data.startswith("bc_audience_"):
+            audience = data.replace("bc_audience_", "")
+            draft = context.user_data.get('broadcast_draft')
+            if not draft:
+                await query.edit_message_text("❌ Черновик не найден. Начните заново: /broadcast")
+                return
+
+            from src.broadcast import broadcast_manager
+            if audience == "all":
+                count = len(broadcast_manager.get_user_ids('all'))
+            else:
+                count = len(broadcast_manager.get_user_ids('priority', priority=audience))
+
+            context.user_data['broadcast_audience'] = audience
+
+            audience_names = {'all': 'всем', 'hot': 'горячим', 'warm': 'тёплым', 'cold': 'холодным'}
+            audience_name = audience_names.get(audience, audience)
+
+            keyboard = InlineKeyboardMarkup([
+                [InlineKeyboardButton(f"✅ Да, отправить {count} чел.", callback_data="bc_confirm")],
+                [InlineKeyboardButton("❌ Отмена", callback_data="bc_cancel")]
+            ])
+            await query.edit_message_text(
+                f"📤 <b>Подтверждение рассылки</b>\n\n"
+                f"Аудитория: <b>{audience_name}</b>\n"
+                f"Получателей: <b>{count}</b>\n\n"
+                f"Отправить?",
+                parse_mode="HTML",
+                reply_markup=keyboard
+            )
+
+        elif data == "bc_confirm":
+            draft = context.user_data.get('broadcast_draft')
+            audience = context.user_data.get('broadcast_audience', 'all')
+            if not draft:
+                await query.edit_message_text("❌ Черновик не найден. Начните заново: /broadcast")
+                return
+
+            from src.broadcast import broadcast_manager
+
+            bc_id = broadcast_manager.create_broadcast(
+                admin_id=user_id,
+                content_type=draft['type'],
+                text_content=draft.get('text'),
+                media_file_id=draft.get('file_id'),
+                caption=draft.get('caption'),
+                parse_mode='HTML' if draft['type'] == 'text' else None,
+                target_audience=audience
+            )
+
+            context.user_data.pop('broadcast_draft', None)
+            context.user_data.pop('broadcast_audience', None)
+
+            await query.edit_message_text("📤 <b>Рассылка запущена...</b>\n\n⏳ Ожидайте отчёт.", parse_mode="HTML")
+
+            admin_chat_id = query.message.chat_id
+
+            async def progress_callback(sent, failed, blocked, total):
+                try:
+                    await context.bot.send_message(
+                        chat_id=admin_chat_id,
+                        text=f"📊 Прогресс: {sent + failed + blocked}/{total}\n✅ {sent} | ❌ {failed} | 🚫 {blocked}"
+                    )
+                except Exception:
+                    pass
+
+            result = await broadcast_manager.send_broadcast(
+                bot=context.bot,
+                broadcast_id=bc_id,
+                progress_callback=progress_callback
+            )
+
+            bc = broadcast_manager.get_broadcast(bc_id)
+            if bc:
+                await context.bot.send_message(
+                    chat_id=admin_chat_id,
+                    text=f"✅ <b>Рассылка завершена!</b>\n\n"
+                         f"📊 <b>Результаты:</b>\n"
+                         f"👥 Всего: {bc.get('total_users', 0)}\n"
+                         f"✅ Доставлено: {bc.get('sent_count', 0)}\n"
+                         f"❌ Ошибки: {bc.get('failed_count', 0)}\n"
+                         f"🚫 Заблокировали: {bc.get('blocked_count', 0)}",
+                    parse_mode="HTML"
+                )

@@ -32,6 +32,7 @@ AI-агент поддержки для WEB4TG Studio — премиальной
 │   ├── pricing.py             # Pricing information and menus
 │   ├── ab_testing.py          # A/B testing for welcome messages
 │   ├── followup.py            # Smart follow-up system
+│   ├── broadcast.py           # Broadcast/mailing system
 │   └── handlers/              # Modular handlers (refactored)
 │       ├── __init__.py        # Exports all handlers
 │       ├── utils.py           # Shared utilities
@@ -61,6 +62,7 @@ AI-агент поддержки для WEB4TG Studio — премиальной
 - **Gamification system** - Tasks, coins, streaks, discount tiers
 - **Loyalty program** - Reviews, packages, returning customer bonuses
 - **Smart follow-ups** - AI-generated personalized follow-up messages based on conversation context
+- **Broadcast system** - Mass messaging with audience targeting, rate limiting, progress tracking
 
 ## Gamification System (Business Optimized)
 Users earn coins by completing tasks, which convert to discounts:
@@ -131,6 +133,8 @@ Manual payment integration with downloadable contract:
 - `/followup` - Статистика follow-up системы (только админ)
 - `/followup pause <user_id>` - Приостановить follow-up (только админ)
 - `/followup resume <user_id>` - Возобновить follow-up (только админ)
+- `/broadcast` - Запуск рассылки (только админ)
+- `/broadcast cancel` - Отмена рассылки (только админ)
 
 ## Environment Variables
 ### Required
@@ -180,6 +184,20 @@ Automatic AI-generated follow-up messages for inactive users:
 - **Admin controls**: `/followup`, pause/resume per user
 - **Statuses**: scheduled, sent, responded, cancelled, paused
 - **Table**: `follow_ups`
+
+## Broadcast System (Mass Messaging)
+Admin-only mass messaging with audience targeting:
+- **Content types**: Text, Photo with caption, Video with caption
+- **Audience targeting**: All users, Hot leads, Warm leads, Cold leads
+- **Rate limiting**: 25 messages/second to avoid Telegram API limits
+- **Progress tracking**: Real-time updates every 50 users sent
+- **Blocked user handling**: Gracefully skips blocked/deactivated users
+- **User registration**: Auto-registers users on /start, backfills from leads/referrals
+- **Compose mode**: Admin sends content via chat, then selects audience via inline keyboard
+- **Confirmation**: Shows recipient count before sending
+- **Stats**: `/broadcast` shows history of all broadcasts with results
+- **Tables**: `bot_users`, `broadcasts`
+- **Commands**: `/broadcast` (start/stats), `/broadcast cancel` (abort compose)
 
 ## Security
 - @admin_required decorator for all admin commands

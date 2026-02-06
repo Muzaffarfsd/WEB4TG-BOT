@@ -14,7 +14,7 @@ from src.handlers import (
     leads_handler, stats_handler, export_handler, reviews_handler,
     history_handler, hot_handler, tag_handler, priority_handler,
     referral_handler, payment_handler, contract_handler, bonus_handler,
-    followup_handler,
+    followup_handler, broadcast_handler,
 )
 
 logging.basicConfig(
@@ -45,12 +45,15 @@ async def post_init(application) -> None:
     await application.bot.set_chat_menu_button(menu_button=MenuButtonCommands())
     logger.info("Bot commands menu configured")
 
-    application.job_queue.run_repeating(
-        process_follow_ups,
-        interval=300,
-        first=60
-    )
-    logger.info("Follow-up background job scheduled")
+    if application.job_queue:
+        application.job_queue.run_repeating(
+            process_follow_ups,
+            interval=300,
+            first=60
+        )
+        logger.info("Follow-up background job scheduled")
+    else:
+        logger.warning("JobQueue not available, follow-up scheduling disabled")
 
 
 async def process_follow_ups(context: ContextTypes.DEFAULT_TYPE) -> None:
@@ -105,6 +108,7 @@ def main() -> None:
     application.add_handler(CommandHandler("payment", payment_handler))
     application.add_handler(CommandHandler("contract", contract_handler))
     application.add_handler(CommandHandler("followup", followup_handler))
+    application.add_handler(CommandHandler("broadcast", broadcast_handler))
     
     application.add_handler(CallbackQueryHandler(callback_handler))
     

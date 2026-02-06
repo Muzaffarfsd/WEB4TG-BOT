@@ -23,6 +23,29 @@ async def message_handler(update: Update, context: ContextTypes.DEFAULT_TYPE) ->
     user = update.effective_user
     user_message = update.message.text
     
+    if context.user_data.get('broadcast_compose'):
+        from src.security import is_admin
+        if is_admin(user.id):
+            context.user_data.pop('broadcast_compose', None)
+            context.user_data['broadcast_draft'] = {
+                'type': 'text',
+                'text': user_message,
+            }
+            from src.broadcast import broadcast_manager
+            counts = broadcast_manager.get_audience_counts()
+            keyboard = InlineKeyboardMarkup([
+                [InlineKeyboardButton(f"📤 Всем ({counts.get('all', 0)})", callback_data="bc_audience_all")],
+                [InlineKeyboardButton(f"🔥 Горячим ({counts.get('hot', 0)})", callback_data="bc_audience_hot"),
+                 InlineKeyboardButton(f"🌡 Тёплым ({counts.get('warm', 0)})", callback_data="bc_audience_warm")],
+                [InlineKeyboardButton("❌ Отмена", callback_data="bc_cancel")]
+            ])
+            await update.message.reply_text(
+                f"📋 <b>Предпросмотр рассылки:</b>\n\n{user_message}\n\n<b>Выберите аудиторию:</b>",
+                parse_mode="HTML",
+                reply_markup=keyboard
+            )
+            return
+    
     pending_review_type = context.user_data.get("pending_review_type")
     if pending_review_type and user_message:
         review_id = loyalty_system.submit_review(

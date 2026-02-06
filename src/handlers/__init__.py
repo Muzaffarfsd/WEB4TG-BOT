@@ -32,6 +32,7 @@ from src.handlers.admin import (
     tag_handler,
     priority_handler,
     followup_handler,
+    broadcast_handler,
 )
 
 from src.handlers.messages import (
@@ -73,6 +74,7 @@ __all__ = [
     'tag_handler',
     'priority_handler',
     'followup_handler',
+    'broadcast_handler',
     'message_handler',
     'error_handler',
     'send_typing_action',

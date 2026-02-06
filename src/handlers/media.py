@@ -1,6 +1,6 @@
 import asyncio
 import logging
-from telegram import Update
+from telegram import Update, InlineKeyboardMarkup, InlineKeyboardButton
 from telegram.ext import ContextTypes
 from telegram.constants import ChatAction
 
@@ -171,6 +171,33 @@ async def voice_handler(update: Update, context: ContextTypes.DEFAULT_TYPE) -> N
 async def video_handler(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
     user = update.effective_user
     user_id = user.id
+    
+    if context.user_data.get('broadcast_compose'):
+        from src.security import is_admin
+        if is_admin(user.id):
+            context.user_data.pop('broadcast_compose', None)
+            video = update.message.video or update.message.video_note
+            context.user_data['broadcast_draft'] = {
+                'type': 'video',
+                'file_id': video.file_id,
+                'caption': update.message.caption or '',
+            }
+            from src.broadcast import broadcast_manager
+            counts = broadcast_manager.get_audience_counts()
+            keyboard = InlineKeyboardMarkup([
+                [InlineKeyboardButton(f"📤 Всем ({counts.get('all', 0)})", callback_data="bc_audience_all")],
+                [InlineKeyboardButton(f"🔥 Горячим ({counts.get('hot', 0)})", callback_data="bc_audience_hot"),
+                 InlineKeyboardButton(f"🌡 Тёплым ({counts.get('warm', 0)})", callback_data="bc_audience_warm")],
+                [InlineKeyboardButton("❌ Отмена", callback_data="bc_cancel")]
+            ])
+            caption_preview = f"\n📝 {update.message.caption}" if update.message.caption else ""
+            await update.message.reply_text(
+                f"📋 <b>Предпросмотр рассылки:</b>\n\n🎬 Видео{caption_preview}\n\n<b>Выберите аудиторию:</b>",
+                parse_mode="HTML",
+                reply_markup=keyboard
+            )
+            return
+    
     pending_review_type = context.user_data.get("pending_review_type")
     
     if pending_review_type != "video":
@@ -246,6 +273,33 @@ async def video_handler(update: Update, context: ContextTypes.DEFAULT_TYPE) -> N
 async def photo_handler(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
     user = update.effective_user
     user_id = user.id
+    
+    if context.user_data.get('broadcast_compose'):
+        from src.security import is_admin
+        if is_admin(user_id):
+            context.user_data.pop('broadcast_compose', None)
+            photo = update.message.photo[-1]
+            context.user_data['broadcast_draft'] = {
+                'type': 'photo',
+                'file_id': photo.file_id,
+                'caption': update.message.caption or '',
+            }
+            from src.broadcast import broadcast_manager
+            counts = broadcast_manager.get_audience_counts()
+            keyboard = InlineKeyboardMarkup([
+                [InlineKeyboardButton(f"📤 Всем ({counts.get('all', 0)})", callback_data="bc_audience_all")],
+                [InlineKeyboardButton(f"🔥 Горячим ({counts.get('hot', 0)})", callback_data="bc_audience_hot"),
+                 InlineKeyboardButton(f"🌡 Тёплым ({counts.get('warm', 0)})", callback_data="bc_audience_warm")],
+                [InlineKeyboardButton("❌ Отмена", callback_data="bc_cancel")]
+            ])
+            caption_preview = f"\n📝 {update.message.caption}" if update.message.caption else ""
+            await update.message.reply_text(
+                f"📋 <b>Предпросмотр рассылки:</b>\n\n📸 Фото{caption_preview}\n\n<b>Выберите аудиторию:</b>",
+                parse_mode="HTML",
+                reply_markup=keyboard
+            )
+            return
+    
     pending_review_type = context.user_data.get("pending_review_type")
     
     if pending_review_type != "text_photo":

@@ -9,6 +9,7 @@ from src.loyalty import format_review_notification
 from src.keyboards import get_review_moderation_keyboard
 from src.security import admin_required, log_admin_action
 from src.analytics import analytics, FunnelEvent
+from src.broadcast import broadcast_manager
 
 from src.handlers.utils import loyalty_system
 
@@ -302,3 +303,30 @@ async def followup_handler(update: Update, context: ContextTypes.DEFAULT_TYPE) -
     text += "\n<b>Команды:</b>\n/followup pause &lt;user_id&gt; — приостановить\n/followup resume &lt;user_id&gt; — возобновить"
 
     await update.message.reply_text(text, parse_mode="HTML")
+
+
+@admin_required
+async def broadcast_handler(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
+    user_id = update.effective_user.id
+    log_admin_action(user_id, "broadcast_command")
+    args = context.args
+
+    if args and args[0].lower() == 'cancel':
+        context.user_data.pop('broadcast_compose', None)
+        context.user_data.pop('broadcast_draft', None)
+        context.user_data.pop('broadcast_audience', None)
+        await update.message.reply_text("❌ Рассылка отменена")
+        return
+
+    stats_text = broadcast_manager.format_broadcast_stats()
+    await update.message.reply_text(stats_text, parse_mode="HTML")
+
+    context.user_data['broadcast_compose'] = True
+    await update.message.reply_text(
+        "📝 Отправьте сообщение для рассылки.\n\n"
+        "Поддерживаются:\n"
+        "• Текст\n"
+        "• Фото с подписью\n"
+        "• Видео с подписью\n\n"
+        "Для отмены: /broadcast cancel"
+    )

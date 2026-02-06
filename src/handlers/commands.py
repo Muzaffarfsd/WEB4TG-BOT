@@ -71,6 +71,9 @@ async def start_handler(update: Update, context: ContextTypes.DEFAULT_TYPE) -> N
     
     referral_manager.get_or_create_user(user.id, user.username, user.first_name)
     
+    from src.broadcast import broadcast_manager
+    broadcast_manager.register_user(user.id, user.username, user.first_name)
+    
     name = user.first_name or ""
     name_part = f", {name}" if name else ""
     
