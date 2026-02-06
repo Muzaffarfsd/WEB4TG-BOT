@@ -175,6 +175,10 @@ async def message_handler(update: Update, context: ContextTypes.DEFAULT_TYPE) ->
     lead_manager.log_event("message", user.id, {"length": len(user_message)})
     lead_manager.update_activity(user.id)
     
+    from src.followup import follow_up_manager
+    follow_up_manager.cancel_follow_ups(user.id)
+    follow_up_manager.schedule_follow_up(user.id)
+    
     typing_task = asyncio.create_task(
         send_typing_action(update, duration=60.0)
     )

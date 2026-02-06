@@ -31,6 +31,7 @@ AI-агент поддержки для WEB4TG Studio — премиальной
 │   ├── payments.py            # Manual payment integration
 │   ├── pricing.py             # Pricing information and menus
 │   ├── ab_testing.py          # A/B testing for welcome messages
+│   ├── followup.py            # Smart follow-up system
 │   └── handlers/              # Modular handlers (refactored)
 │       ├── __init__.py        # Exports all handlers
 │       ├── utils.py           # Shared utilities
@@ -59,6 +60,7 @@ AI-агент поддержки для WEB4TG Studio — премиальной
 - **Rate limiting** - Tenacity retry with exponential backoff
 - **Gamification system** - Tasks, coins, streaks, discount tiers
 - **Loyalty program** - Reviews, packages, returning customer bonuses
+- **Smart follow-ups** - AI-generated personalized follow-up messages based on conversation context
 
 ## Gamification System (Business Optimized)
 Users earn coins by completing tasks, which convert to discounts:
@@ -126,6 +128,9 @@ Manual payment integration with downloadable contract:
 - `/hot` - Горячие лиды (только админ)
 - `/tag <user_id> <тег>` - Добавить тег лиду (только админ)
 - `/priority <user_id> <cold|warm|hot>` - Установить приоритет (только админ)
+- `/followup` - Статистика follow-up системы (только админ)
+- `/followup pause <user_id>` - Приостановить follow-up (только админ)
+- `/followup resume <user_id>` - Возобновить follow-up (только админ)
 
 ## Environment Variables
 ### Required
@@ -162,6 +167,19 @@ Manual payment integration with downloadable contract:
 - Conversion rate calculation between any two events
 - Daily stats with user/event counts
 - Admin command `/stats` shows funnel analytics
+
+## Follow-up System (Smart Reminders)
+Automatic AI-generated follow-up messages for inactive users:
+- **Schedule by lead priority**:
+  - Hot (score >= 50): 4h → 24h → 3 days
+  - Warm (score >= 25): 24h → 3 days → 7 days
+  - Cold (score < 25): 3 days → 7 days (no 3rd)
+- **Rules**: Max 3 follow-ups, min 2 messages before enabling, cancel on new message
+- **AI messages**: Personalized based on conversation context, sounds like Alex (human)
+- **Background job**: Runs every 5 minutes, checks for due follow-ups
+- **Admin controls**: `/followup`, pause/resume per user
+- **Statuses**: scheduled, sent, responded, cancelled, paused
+- **Table**: `follow_ups`
 
 ## Security
 - @admin_required decorator for all admin commands

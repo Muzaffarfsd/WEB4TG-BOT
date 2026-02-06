@@ -239,3 +239,66 @@ async def priority_handler(update: Update, context: ContextTypes.DEFAULT_TYPE) -
         await update.message.reply_text(f"✅ Приоритет изменён на {emoji} {priority_str}")
     else:
         await update.message.reply_text("Лид не найден")
+
+
+@admin_required
+async def followup_handler(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
+    user_id = update.effective_user.id
+    log_admin_action(user_id, "followup_command")
+    args = context.args
+
+    from src.followup import follow_up_manager
+
+    if args and len(args) >= 2:
+        action = args[0].lower()
+        try:
+            target_user_id = int(args[1])
+        except ValueError:
+            await update.message.reply_text("User ID должен быть числом")
+            return
+
+        if action == "pause":
+            count = follow_up_manager.pause_user(target_user_id)
+            await update.message.reply_text(f"⏸ Приостановлено {count} follow-up(ов) для пользователя {target_user_id}")
+            return
+        elif action == "resume":
+            count = follow_up_manager.resume_user(target_user_id)
+            await update.message.reply_text(f"▶️ Возобновлено {count} follow-up(ов) для пользователя {target_user_id}")
+            return
+        else:
+            await update.message.reply_text("Использование:\n/followup — статистика\n/followup pause <user_id>\n/followup resume <user_id>")
+            return
+
+    stats = follow_up_manager.get_stats()
+    user_stats = follow_up_manager.get_user_follow_up_stats()
+
+    text = f"""📬 <b>Follow-up система</b>
+
+<b>Общая статистика:</b>
+📊 Всего: {stats.get('total', 0)}
+⏳ Запланировано: {stats.get('scheduled', 0)}
+✅ Отправлено: {stats.get('sent', 0)}
+💬 Получен ответ: {stats.get('responded', 0)}
+❌ Отменено: {stats.get('cancelled', 0)}
+⏸ Приостановлено: {stats.get('paused', 0)}"""
+
+    if user_stats:
+        text += "\n\n<b>По пользователям:</b>\n"
+        for us in user_stats[:10]:
+            name = us.get('first_name') or 'Без имени'
+            username = f"@{us['username']}" if us.get('username') else ""
+            status_parts = []
+            if us.get('pending', 0) > 0:
+                status_parts.append(f"⏳{us['pending']}")
+            if us.get('sent', 0) > 0:
+                status_parts.append(f"✅{us['sent']}")
+            if us.get('responded', 0) > 0:
+                status_parts.append(f"💬{us['responded']}")
+            if us.get('paused', 0) > 0:
+                status_parts.append(f"⏸{us['paused']}")
+            status_str = " ".join(status_parts)
+            text += f"• {name} {username} (ID: {us['user_id']}) — {status_str}\n"
+
+    text += "\n<b>Команды:</b>\n/followup pause &lt;user_id&gt; — приостановить\n/followup resume &lt;user_id&gt; — возобновить"
+
+    await update.message.reply_text(text, parse_mode="HTML")

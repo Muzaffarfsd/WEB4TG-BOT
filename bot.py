@@ -3,7 +3,7 @@ import logging
 from telegram import Update, BotCommand, MenuButtonCommands
 from telegram.ext import (
     Application, CommandHandler, MessageHandler, 
-    CallbackQueryHandler, filters
+    CallbackQueryHandler, ContextTypes, filters
 )
 
 from src.config import config
@@ -13,7 +13,8 @@ from src.handlers import (
     message_handler, callback_handler, voice_handler, video_handler, photo_handler, error_handler,
     leads_handler, stats_handler, export_handler, reviews_handler,
     history_handler, hot_handler, tag_handler, priority_handler,
-    referral_handler, payment_handler, contract_handler, bonus_handler
+    referral_handler, payment_handler, contract_handler, bonus_handler,
+    followup_handler,
 )
 
 logging.basicConfig(
@@ -44,6 +45,41 @@ async def post_init(application) -> None:
     await application.bot.set_chat_menu_button(menu_button=MenuButtonCommands())
     logger.info("Bot commands menu configured")
 
+    application.job_queue.run_repeating(
+        process_follow_ups,
+        interval=300,
+        first=60
+    )
+    logger.info("Follow-up background job scheduled")
+
+
+async def process_follow_ups(context: ContextTypes.DEFAULT_TYPE) -> None:
+    from src.followup import follow_up_manager
+
+    try:
+        due = follow_up_manager.get_due_follow_ups()
+        for fu in due:
+            try:
+                message = await follow_up_manager.generate_follow_up_message(
+                    fu['user_id'], fu['follow_up_number']
+                )
+                await context.bot.send_message(
+                    chat_id=fu['user_id'],
+                    text=message
+                )
+                follow_up_manager.mark_sent(fu['id'], message)
+
+                from src.leads import lead_manager
+                lead_manager.save_message(fu['user_id'], "assistant", message)
+
+                follow_up_manager.schedule_follow_up(fu['user_id'])
+
+                logger.info(f"Sent follow-up #{fu['follow_up_number']} to user {fu['user_id']}")
+            except Exception as e:
+                logger.error(f"Failed to send follow-up to {fu['user_id']}: {e}")
+    except Exception as e:
+        logger.error(f"Follow-up processing error: {e}")
+
 
 def main() -> None:
     application = Application.builder().token(config.telegram_token).post_init(post_init).build()
@@ -68,6 +104,7 @@ def main() -> None:
     application.add_handler(CommandHandler("bonus", bonus_handler))
     application.add_handler(CommandHandler("payment", payment_handler))
     application.add_handler(CommandHandler("contract", contract_handler))
+    application.add_handler(CommandHandler("followup", followup_handler))
     
     application.add_handler(CallbackQueryHandler(callback_handler))
     
