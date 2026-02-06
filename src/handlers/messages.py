@@ -7,7 +7,7 @@ from src.session import session_manager
 from src.ai_client import ai_client
 from src.config import config
 from src.keyboards import get_main_menu_keyboard, get_lead_keyboard, get_loyalty_menu_keyboard
-from src.leads import lead_manager
+from src.leads import lead_manager, LeadPriority
 from src.knowledge_base import ERROR_MESSAGE
 from src.tasks_tracker import tasks_tracker
 from src.pricing import get_price_main_text, get_price_main_keyboard
@@ -143,8 +143,7 @@ async def message_handler(update: Update, context: ContextTypes.DEFAULT_TYPE) ->
                 username=user.username,
                 first_name=user.first_name
             )
-            lead_manager.update_score(user.id, 30)
-            lead_manager.set_priority(user.id, "hot")
+            lead_manager.update_lead(user.id, score=30, priority=LeadPriority.HOT)
             lead_manager.log_event("hot_button", user.id)
             
             text = """🔥 Отлично! Вы готовы к запуску своего приложения!
