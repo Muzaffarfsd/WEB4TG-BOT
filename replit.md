@@ -46,7 +46,7 @@ AI-агент поддержки для WEB4TG Studio — премиальной
 
 ## Architecture Features (2026)
 - **Modular handlers** - Split into domain-specific modules (commands, callbacks, media, admin)
-- **Unified DB pool** - Shared ThreadedConnectionPool (1-15 connections) across all modules
+- **Unified DB pool** - Shared ThreadedConnectionPool (1-15 connections) with auto-retry and health checks
 - **TTL caching** - Cache module for frequently accessed data (src/cache.py)
 - **Funnel analytics** - Event tracking for conversion optimization (src/analytics.py)
 - **Admin security** - @admin_required decorator, ADMIN_IDS env var, audit logging
@@ -62,7 +62,9 @@ AI-агент поддержки для WEB4TG Studio — премиальной
 - **Gamification system** - Tasks, coins, streaks, discount tiers
 - **Loyalty program** - Reviews, packages, returning customer bonuses
 - **Smart follow-ups** - AI-generated personalized follow-up messages based on conversation context
-- **Broadcast system** - Mass messaging with audience targeting, rate limiting, progress tracking
+- **Broadcast system** - Mass messaging with audience targeting, rate limiting, restart-safe delivery tracking
+- **Graceful degradation** - Fallback responses for Gemini/ElevenLabs failures, no user-facing crashes
+- **Input validation** - Message length limits, sanitized inputs, blocked user detection
 
 ## Gamification System (Business Optimized)
 Users earn coins by completing tasks, which convert to discounts:
@@ -191,12 +193,13 @@ Admin-only mass messaging with audience targeting:
 - **Audience targeting**: All users, Hot leads, Warm leads, Cold leads
 - **Rate limiting**: 25 messages/second to avoid Telegram API limits
 - **Progress tracking**: Real-time updates every 50 users sent
-- **Blocked user handling**: Gracefully skips blocked/deactivated users
+- **Restart-safe**: Per-user delivery tracking via `broadcast_deliveries` table, auto-resume on bot restart
+- **Blocked user handling**: Gracefully skips blocked/deactivated users, marks them in DB
 - **User registration**: Auto-registers users on /start, backfills from leads/referrals
 - **Compose mode**: Admin sends content via chat, then selects audience via inline keyboard
 - **Confirmation**: Shows recipient count before sending
 - **Stats**: `/broadcast` shows history of all broadcasts with results
-- **Tables**: `bot_users`, `broadcasts`
+- **Tables**: `bot_users`, `broadcasts`, `broadcast_deliveries`
 - **Commands**: `/broadcast` (start/stats), `/broadcast cancel` (abort compose)
 
 ## Security

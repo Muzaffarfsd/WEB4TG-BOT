@@ -74,8 +74,18 @@ class AIClient:
                 return "Извините, не удалось сформировать ответ. Попробуйте переформулировать вопрос."
                 
         except Exception as e:
-            logger.error(f"Gemini request failed: {e}")
-            raise
+            error_type = type(e).__name__
+            error_msg = str(e)
+            
+            if is_rate_limit_error(e):
+                logger.warning(f"Gemini rate limit hit: {error_type}: {error_msg}")
+                return "Сейчас высокая нагрузка, попробуйте через минуту 🙏"
+            elif "timeout" in error_msg.lower() or "connect" in error_msg.lower():
+                logger.error(f"Gemini connection error: {error_type}: {error_msg}")
+                return "Не удалось подключиться к серверу. Попробуйте позже."
+            else:
+                logger.error(f"Gemini request failed: {error_type}: {error_msg}")
+                return "Произошла техническая ошибка. Попробуйте ещё раз или напишите позже."
     
     async def analyze_complex_query(
         self,

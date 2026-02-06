@@ -85,16 +85,20 @@ async def generate_voice_response(text: str) -> bytes:
     
     voice_text = apply_stress_marks(voice_text)
     
-    audio_generator = await asyncio.to_thread(
-        client.text_to_speech.convert,
-        voice_id=config.elevenlabs_voice_id,
-        text=voice_text,
-        model_id="eleven_v3",
-        output_format="mp3_44100_192"
-    )
-    
-    audio_bytes = b"".join(audio_generator)
-    return audio_bytes
+    try:
+        audio_generator = await asyncio.to_thread(
+            client.text_to_speech.convert,
+            voice_id=config.elevenlabs_voice_id,
+            text=voice_text,
+            model_id="eleven_v3",
+            output_format="mp3_44100_192"
+        )
+        
+        audio_bytes = b"".join(audio_generator)
+        return audio_bytes
+    except Exception as e:
+        logger.error(f"ElevenLabs voice generation failed ({type(e).__name__}): {e}")
+        raise
 
 
 async def voice_handler(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
@@ -153,7 +157,7 @@ async def voice_handler(update: Update, context: ContextTypes.DEFAULT_TYPE) -> N
                     voice_response = await generate_voice_response(response.text)
                     await update.message.reply_voice(voice=voice_response)
                 except Exception as e:
-                    logger.error(f"ElevenLabs TTS error: {e}")
+                    logger.error(f"ElevenLabs TTS error ({type(e).__name__}): {e}")
                     await update.message.reply_text(response.text)
             else:
                 await update.message.reply_text(response.text)
@@ -184,12 +188,8 @@ async def video_handler(update: Update, context: ContextTypes.DEFAULT_TYPE) -> N
             }
             from src.broadcast import broadcast_manager
             counts = broadcast_manager.get_audience_counts()
-            keyboard = InlineKeyboardMarkup([
-                [InlineKeyboardButton(f"📤 Всем ({counts.get('all', 0)})", callback_data="bc_audience_all")],
-                [InlineKeyboardButton(f"🔥 Горячим ({counts.get('hot', 0)})", callback_data="bc_audience_hot"),
-                 InlineKeyboardButton(f"🌡 Тёплым ({counts.get('warm', 0)})", callback_data="bc_audience_warm")],
-                [InlineKeyboardButton("❌ Отмена", callback_data="bc_cancel")]
-            ])
+            from src.handlers.utils import get_broadcast_audience_keyboard
+            keyboard = get_broadcast_audience_keyboard(counts)
             caption_preview = f"\n📝 {update.message.caption}" if update.message.caption else ""
             await update.message.reply_text(
                 f"📋 <b>Предпросмотр рассылки:</b>\n\n🎬 Видео{caption_preview}\n\n<b>Выберите аудиторию:</b>",
@@ -286,12 +286,8 @@ async def photo_handler(update: Update, context: ContextTypes.DEFAULT_TYPE) -> N
             }
             from src.broadcast import broadcast_manager
             counts = broadcast_manager.get_audience_counts()
-            keyboard = InlineKeyboardMarkup([
-                [InlineKeyboardButton(f"📤 Всем ({counts.get('all', 0)})", callback_data="bc_audience_all")],
-                [InlineKeyboardButton(f"🔥 Горячим ({counts.get('hot', 0)})", callback_data="bc_audience_hot"),
-                 InlineKeyboardButton(f"🌡 Тёплым ({counts.get('warm', 0)})", callback_data="bc_audience_warm")],
-                [InlineKeyboardButton("❌ Отмена", callback_data="bc_cancel")]
-            ])
+            from src.handlers.utils import get_broadcast_audience_keyboard
+            keyboard = get_broadcast_audience_keyboard(counts)
             caption_preview = f"\n📝 {update.message.caption}" if update.message.caption else ""
             await update.message.reply_text(
                 f"📋 <b>Предпросмотр рассылки:</b>\n\n📸 Фото{caption_preview}\n\n<b>Выберите аудиторию:</b>",

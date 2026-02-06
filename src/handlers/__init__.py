@@ -45,6 +45,7 @@ from src.handlers.utils import (
     WELCOME_MESSAGES,
     MANAGER_CHAT_ID,
     loyalty_system,
+    get_broadcast_audience_keyboard,
 )
 
 __all__ = [
@@ -81,4 +82,5 @@ __all__ = [
     'WELCOME_MESSAGES',
     'MANAGER_CHAT_ID',
     'loyalty_system',
+    'get_broadcast_audience_keyboard',
 ]

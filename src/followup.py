@@ -237,6 +237,25 @@ class FollowUpManager:
             logger.error(f"Failed to cancel follow-ups for user {user_id}: {e}")
             return 0
 
+    def cancel_for_blocked_user(self, user_id: int) -> int:
+        if not DATABASE_URL:
+            return 0
+        try:
+            with get_connection() as conn:
+                with conn.cursor() as cur:
+                    cur.execute("""
+                        UPDATE follow_ups 
+                        SET status = 'cancelled'
+                        WHERE user_id = %s AND status IN ('scheduled', 'paused')
+                    """, (user_id,))
+                    cancelled = cur.rowcount
+            if cancelled > 0:
+                logger.info(f"Cancelled {cancelled} follow-ups for blocked user {user_id}")
+            return cancelled
+        except Exception as e:
+            logger.error(f"Failed to cancel follow-ups for blocked user {user_id}: {e}")
+            return 0
+
     def get_due_follow_ups(self) -> List[Dict]:
         if not DATABASE_URL:
             return []
@@ -248,10 +267,13 @@ class FollowUpManager:
                         SELECT f.id, f.user_id, f.follow_up_number, f.scheduled_at
                         FROM follow_ups f
                         JOIN leads l ON f.user_id = l.user_id
+                        LEFT JOIN bot_users bu ON f.user_id = bu.user_id
                         WHERE f.status = 'scheduled'
                           AND f.scheduled_at <= NOW()
                           AND (l.last_activity IS NULL OR l.last_activity < NOW() - INTERVAL '2 hours')
+                          AND (bu.is_blocked IS NULL OR bu.is_blocked = FALSE)
                         ORDER BY f.scheduled_at ASC
+                        LIMIT 20
                     """)
                     return [dict(row) for row in cur.fetchall()]
         except Exception as e:

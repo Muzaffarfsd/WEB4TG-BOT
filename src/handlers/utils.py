@@ -103,3 +103,14 @@ def apply_stress_marks(text: str) -> str:
         pattern = re.compile(re.escape(word), re.IGNORECASE)
         result = pattern.sub(stressed, result)
     return result
+
+
+def get_broadcast_audience_keyboard(counts: dict):
+    """Build broadcast audience selection keyboard."""
+    from telegram import InlineKeyboardMarkup, InlineKeyboardButton
+    return InlineKeyboardMarkup([
+        [InlineKeyboardButton(f"📤 Всем ({counts.get('all', 0)})", callback_data="bc_audience_all")],
+        [InlineKeyboardButton(f"🔥 Горячим ({counts.get('hot', 0)})", callback_data="bc_audience_hot"),
+         InlineKeyboardButton(f"🌡 Тёплым ({counts.get('warm', 0)})", callback_data="bc_audience_warm")],
+        [InlineKeyboardButton("❌ Отмена", callback_data="bc_cancel")]
+    ])

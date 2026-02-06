@@ -952,3 +952,6 @@ Courses — онлайн-школа с каталогом курсов, трек
                          f"🚫 Заблокировали: {bc.get('blocked_count', 0)}",
                     parse_mode="HTML"
                 )
+
+    else:
+        logger.warning(f"Unknown callback_data: {data} from user {user_id}")

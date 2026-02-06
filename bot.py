@@ -6,6 +6,7 @@ from telegram.ext import (
     CallbackQueryHandler, ContextTypes, filters
 )
 
+from telegram.error import Forbidden
 from src.config import config
 from src.handlers import (
     start_handler, help_handler, clear_handler, menu_handler,
@@ -45,6 +46,14 @@ async def post_init(application) -> None:
     await application.bot.set_chat_menu_button(menu_button=MenuButtonCommands())
     logger.info("Bot commands menu configured")
 
+    try:
+        from src.broadcast import broadcast_manager
+        resumed = await broadcast_manager.resume_broadcast(application.bot)
+        if resumed:
+            logger.info(f"Resumed {len(resumed)} interrupted broadcast(s) on startup")
+    except Exception as e:
+        logger.error(f"Failed to resume broadcasts on startup: {e}")
+
     if application.job_queue:
         application.job_queue.run_repeating(
             process_follow_ups,
@@ -78,8 +87,19 @@ async def process_follow_ups(context: ContextTypes.DEFAULT_TYPE) -> None:
                 follow_up_manager.schedule_follow_up(fu['user_id'])
 
                 logger.info(f"Sent follow-up #{fu['follow_up_number']} to user {fu['user_id']}")
+            except Forbidden:
+                follow_up_manager.cancel_for_blocked_user(fu['user_id'])
+                from src.broadcast import broadcast_manager
+                broadcast_manager.mark_blocked(fu['user_id'])
+                logger.info(f"User {fu['user_id']} blocked bot, cancelled follow-ups")
             except Exception as e:
-                logger.error(f"Failed to send follow-up to {fu['user_id']}: {e}")
+                if "Forbidden" in str(type(e).__name__) or "blocked" in str(e).lower():
+                    follow_up_manager.cancel_for_blocked_user(fu['user_id'])
+                    from src.broadcast import broadcast_manager
+                    broadcast_manager.mark_blocked(fu['user_id'])
+                    logger.info(f"User {fu['user_id']} blocked bot, cancelled follow-ups")
+                else:
+                    logger.error(f"Failed to send follow-up to {fu['user_id']}: {e}")
     except Exception as e:
         logger.error(f"Follow-up processing error: {e}")
 

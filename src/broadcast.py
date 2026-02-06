@@ -55,6 +55,21 @@ class BroadcastManager:
                         )
                     """)
 
+                    cur.execute("""
+                        CREATE TABLE IF NOT EXISTS broadcast_deliveries (
+                            broadcast_id INTEGER REFERENCES broadcasts(id),
+                            user_id BIGINT NOT NULL,
+                            status VARCHAR(20) DEFAULT 'pending',
+                            sent_at TIMESTAMP,
+                            PRIMARY KEY (broadcast_id, user_id)
+                        )
+                    """)
+
+                    cur.execute("""
+                        CREATE INDEX IF NOT EXISTS idx_bc_deliveries_status
+                        ON broadcast_deliveries(broadcast_id, status)
+                    """)
+
                     try:
                         cur.execute("""
                             INSERT INTO bot_users (user_id, username, first_name)
@@ -184,7 +199,16 @@ class BroadcastManager:
                     """, (admin_id, content_type, text_content, media_file_id,
                           caption, parse_mode, target_audience, total))
                     row = cur.fetchone()
-                    return row[0] if row else None
+                    broadcast_id = row[0] if row else None
+
+                    if broadcast_id:
+                        for uid in user_ids:
+                            cur.execute("""
+                                INSERT INTO broadcast_deliveries (broadcast_id, user_id, status)
+                                VALUES (%s, %s, 'pending') ON CONFLICT DO NOTHING
+                            """, (broadcast_id, uid))
+
+                    return broadcast_id
         except Exception as e:
             logger.error(f"Failed to create broadcast: {e}")
             return None
@@ -210,12 +234,37 @@ class BroadcastManager:
         except Exception as e:
             logger.error(f"Failed to update broadcast {broadcast_id}: {e}")
 
+    def _update_delivery_status(self, broadcast_id: int, user_id: int, status: str):
+        try:
+            with self._get_connection() as conn:
+                with conn.cursor() as cur:
+                    cur.execute("""
+                        UPDATE broadcast_deliveries
+                        SET status = %s, sent_at = CURRENT_TIMESTAMP
+                        WHERE broadcast_id = %s AND user_id = %s
+                    """, (status, broadcast_id, user_id))
+        except Exception as e:
+            logger.error(f"Failed to update delivery status for broadcast {broadcast_id}, user {user_id}: {e}")
+
     def complete_broadcast(self, broadcast_id: int, sent: int, failed: int, blocked: int):
         if not DATABASE_URL:
             return
         try:
             with self._get_connection() as conn:
                 with conn.cursor() as cur:
+                    cur.execute("""
+                        SELECT
+                            COUNT(*) FILTER (WHERE status = 'sent') as sent,
+                            COUNT(*) FILTER (WHERE status = 'failed') as failed,
+                            COUNT(*) FILTER (WHERE status = 'blocked') as blocked
+                        FROM broadcast_deliveries WHERE broadcast_id = %s
+                    """, (broadcast_id,))
+                    row = cur.fetchone()
+                    if row:
+                        actual_sent, actual_failed, actual_blocked = row
+                    else:
+                        actual_sent, actual_failed, actual_blocked = sent, failed, blocked
+
                     cur.execute("""
                         UPDATE broadcasts SET
                             status = 'completed',
@@ -224,7 +273,7 @@ class BroadcastManager:
                             blocked_count = %s,
                             completed_at = CURRENT_TIMESTAMP
                         WHERE id = %s
-                    """, (sent, failed, blocked, broadcast_id))
+                    """, (actual_sent, actual_failed, actual_blocked, broadcast_id))
         except Exception as e:
             logger.error(f"Failed to complete broadcast {broadcast_id}: {e}")
 
@@ -296,14 +345,21 @@ class BroadcastManager:
             logger.error(f"Broadcast {broadcast_id} not found")
             return
 
-        target_audience = bc.get('target_audience', 'all')
-        if target_audience == 'all':
-            user_ids = self.get_user_ids('all')
-        else:
-            user_ids = self.get_user_ids('priority', priority=target_audience)
+        try:
+            with self._get_connection() as conn:
+                with conn.cursor() as cur:
+                    cur.execute("""
+                        SELECT user_id FROM broadcast_deliveries
+                        WHERE broadcast_id = %s AND status = 'pending'
+                        ORDER BY user_id
+                    """, (broadcast_id,))
+                    user_ids = [row[0] for row in cur.fetchall()]
+        except Exception as e:
+            logger.error(f"Failed to get pending deliveries for broadcast {broadcast_id}: {e}")
+            return
 
         total = len(user_ids)
-        self.update_broadcast(broadcast_id, total_users=total)
+        self.update_broadcast(broadcast_id, total_users=bc.get('total_users', total))
 
         sent = 0
         failed = 0
@@ -334,13 +390,17 @@ class BroadcastManager:
                         parse_mode=pm
                     )
                 sent += 1
+                self._update_delivery_status(broadcast_id, user_id, 'sent')
             except Forbidden:
                 self.mark_blocked(user_id)
+                self._update_delivery_status(broadcast_id, user_id, 'blocked')
                 blocked += 1
             except BadRequest:
+                self._update_delivery_status(broadcast_id, user_id, 'failed')
                 failed += 1
             except Exception as e:
                 logger.error(f"Broadcast send error to {user_id}: {e}")
+                self._update_delivery_status(broadcast_id, user_id, 'failed')
                 failed += 1
 
             if (i + 1) % 25 == 0:
@@ -355,6 +415,29 @@ class BroadcastManager:
             await progress_callback(sent, failed, blocked, total)
 
         return {'sent': sent, 'failed': failed, 'blocked': blocked, 'total': total}
+
+    async def resume_broadcast(self, bot, progress_callback=None) -> List[Dict]:
+        results = []
+        try:
+            with self._get_connection() as conn:
+                with conn.cursor(cursor_factory=RealDictCursor) as cur:
+                    cur.execute("""
+                        SELECT id FROM broadcasts
+                        WHERE status = 'sending'
+                        ORDER BY created_at ASC
+                    """)
+                    pending_broadcasts = [row['id'] for row in cur.fetchall()]
+        except Exception as e:
+            logger.error(f"Failed to find broadcasts to resume: {e}")
+            return results
+
+        for broadcast_id in pending_broadcasts:
+            logger.info(f"Resuming broadcast {broadcast_id}")
+            result = await self.send_broadcast(bot, broadcast_id, progress_callback)
+            if result:
+                results.append({'broadcast_id': broadcast_id, **result})
+
+        return results
 
 
 broadcast_manager = BroadcastManager()

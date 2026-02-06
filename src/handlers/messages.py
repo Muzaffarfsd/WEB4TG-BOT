@@ -23,6 +23,12 @@ async def message_handler(update: Update, context: ContextTypes.DEFAULT_TYPE) ->
     user = update.effective_user
     user_message = update.message.text
     
+    if user_message and len(user_message) > 4000:
+        await update.message.reply_text(
+            "Сообщение слишком длинное. Пожалуйста, сократите до 4000 символов."
+        )
+        return
+    
     if context.user_data.get('broadcast_compose'):
         from src.security import is_admin
         if is_admin(user.id):
@@ -33,12 +39,8 @@ async def message_handler(update: Update, context: ContextTypes.DEFAULT_TYPE) ->
             }
             from src.broadcast import broadcast_manager
             counts = broadcast_manager.get_audience_counts()
-            keyboard = InlineKeyboardMarkup([
-                [InlineKeyboardButton(f"📤 Всем ({counts.get('all', 0)})", callback_data="bc_audience_all")],
-                [InlineKeyboardButton(f"🔥 Горячим ({counts.get('hot', 0)})", callback_data="bc_audience_hot"),
-                 InlineKeyboardButton(f"🌡 Тёплым ({counts.get('warm', 0)})", callback_data="bc_audience_warm")],
-                [InlineKeyboardButton("❌ Отмена", callback_data="bc_cancel")]
-            ])
+            from src.handlers.utils import get_broadcast_audience_keyboard
+            keyboard = get_broadcast_audience_keyboard(counts)
             await update.message.reply_text(
                 f"📋 <b>Предпросмотр рассылки:</b>\n\n{user_message}\n\n<b>Выберите аудиторию:</b>",
                 parse_mode="HTML",
@@ -236,7 +238,8 @@ async def message_handler(update: Update, context: ContextTypes.DEFAULT_TYPE) ->
         
     except Exception as e:
         typing_task.cancel()
-        logger.error(f"Error handling message from user {user.id}: {e}")
+        error_type = type(e).__name__
+        logger.error(f"Error handling message from user {user.id}: {error_type}: {e}")
         await update.message.reply_text(
             ERROR_MESSAGE,
             reply_markup=get_main_menu_keyboard()
