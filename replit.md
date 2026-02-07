@@ -208,6 +208,10 @@ Admin-only mass messaging with audience targeting:
 - Audit logging for admin actions
 - Payment details moved to environment variables
 
+## User Preferences
+- **Язык общения**: Всегда писать на русском языке
+- **Развёртывание**: Бот работает ТОЛЬКО на Railway, НЕ запускать на Replit
+
 ## Running (Railway only)
 ```bash
 python bot.py
