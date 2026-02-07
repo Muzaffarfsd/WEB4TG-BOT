@@ -8,27 +8,6 @@ channel = "stable-25_05"
 packages = ["cacert", "cargo", "ffmpeg-full", "glibcLocales", "libffi", "libiconv", "libxcrypt", "openssl", "pkg-config", "rustc"]
 
 [workflows]
-runButton = "Project"
-
-[[workflows.workflow]]
-name = "Project"
-mode = "parallel"
-author = "agent"
-
-[[workflows.workflow.tasks]]
-task = "workflow.run"
-args = "Telegram Bot"
-
-[[workflows.workflow]]
-name = "Telegram Bot"
-author = "agent"
-
-[workflows.workflow.metadata]
-outputType = "console"
-
-[[workflows.workflow.tasks]]
-task = "shell.exec"
-args = "echo \"Bot runs on Railway only. Use Replit for code editing.\""
 
 [userenv]
 
