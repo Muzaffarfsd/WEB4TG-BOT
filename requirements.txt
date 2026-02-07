@@ -65,3 +65,10 @@ typing-inspection
 typing_extensions
 urllib3
 websockets
+elevenlabs
+google-genai
+openai
+psycopg2-binary
+pydub
+python-telegram-bot
+tenacity
