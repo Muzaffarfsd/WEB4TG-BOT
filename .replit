@@ -8,6 +8,27 @@ channel = "stable-25_05"
 packages = ["cacert", "cargo", "ffmpeg-full", "glibcLocales", "libffi", "libiconv", "libxcrypt", "openssl", "pkg-config", "rustc"]
 
 [workflows]
+runButton = "Project"
+
+[[workflows.workflow]]
+name = "Project"
+mode = "parallel"
+author = "agent"
+
+[[workflows.workflow.tasks]]
+task = "workflow.run"
+args = "Status Check"
+
+[[workflows.workflow]]
+name = "Status Check"
+author = "agent"
+
+[[workflows.workflow.tasks]]
+task = "shell.exec"
+args = "python status.py"
+
+[workflows.workflow.metadata]
+outputType = "console"
 
 [userenv]
 
