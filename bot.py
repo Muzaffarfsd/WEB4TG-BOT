@@ -3,7 +3,7 @@ import logging
 from telegram import Update, BotCommand, MenuButtonCommands
 from telegram.ext import (
     Application, CommandHandler, MessageHandler, 
-    CallbackQueryHandler, ContextTypes, filters
+    CallbackQueryHandler, InlineQueryHandler, ContextTypes, filters
 )
 
 from telegram.error import Forbidden
@@ -15,7 +15,10 @@ from src.handlers import (
     leads_handler, stats_handler, export_handler, reviews_handler,
     history_handler, hot_handler, tag_handler, priority_handler,
     referral_handler, payment_handler, contract_handler, bonus_handler,
-    followup_handler, broadcast_handler, privacy_handler,
+    followup_handler, broadcast_handler, privacy_handler, inline_query_handler,
+    faq_handler, promo_handler, testimonials_handler,
+    promo_create_handler, promo_list_handler, promo_off_handler,
+    generate_daily_digest,
 )
 
 logging.basicConfig(
@@ -37,13 +40,17 @@ async def post_init(application) -> None:
         BotCommand("start", "🚀 Открыть приложение"),
         BotCommand("menu", "📋 Главное меню"),
         BotCommand("price", "💰 Цены на услуги"),
+        BotCommand("calc", "🧮 Калькулятор стоимости"),
+        BotCommand("faq", "❓ Частые вопросы"),
+        BotCommand("portfolio", "🎨 Примеры работ"),
+        BotCommand("testimonials", "⭐ Отзывы клиентов"),
         BotCommand("payment", "💳 Оплата услуг"),
         BotCommand("contract", "📄 Скачать договор"),
+        BotCommand("promo", "🎟 Промокод"),
         BotCommand("referral", "👥 Реферальная программа"),
         BotCommand("bonus", "🎁 Бонусы и скидки"),
-        BotCommand("portfolio", "🎨 Примеры работ"),
         BotCommand("contact", "📞 Связаться с нами"),
-        BotCommand("privacy", "🔒 Политика конфиденциальности"),
+        BotCommand("privacy", "🔒 Конфиденциальность"),
         BotCommand("help", "❓ Помощь"),
     ]
     await application.bot.set_my_commands(commands)
@@ -65,8 +72,62 @@ async def post_init(application) -> None:
             first=60
         )
         logger.info("Follow-up background job scheduled")
+
+        application.job_queue.run_repeating(
+            process_payment_reminders,
+            interval=3600,
+            first=300
+        )
+        logger.info("Payment reminder job scheduled (every hour)")
+
+        from datetime import time as dt_time
+        import pytz
+        try:
+            tz = pytz.timezone("Asia/Bishkek")
+            application.job_queue.run_daily(
+                send_daily_digest,
+                time=dt_time(hour=9, minute=0, tzinfo=tz),
+            )
+            logger.info("Daily digest scheduled at 09:00 Asia/Bishkek")
+        except Exception as e:
+            logger.warning(f"Failed to schedule daily digest: {e}")
     else:
-        logger.warning("JobQueue not available, follow-up scheduling disabled")
+        logger.warning("JobQueue not available, background jobs disabled")
+
+
+async def send_daily_digest(context: ContextTypes.DEFAULT_TYPE) -> None:
+    import os
+    manager_id = os.environ.get("MANAGER_CHAT_ID")
+    if not manager_id:
+        return
+    try:
+        await generate_daily_digest(context.bot, int(manager_id))
+    except Exception as e:
+        logger.error(f"Daily digest error: {e}")
+
+
+async def process_payment_reminders(context: ContextTypes.DEFAULT_TYPE) -> None:
+    try:
+        from src.payments import get_pending_payment_reminders, mark_payment_reminded
+        pending = get_pending_payment_reminders(hours=24)
+        for user_id in pending:
+            try:
+                await context.bot.send_message(
+                    chat_id=user_id,
+                    text="💳 Напоминание: вы запросили реквизиты для оплаты.\n\n"
+                         "Если вы уже оплатили — нажмите «Я оплатил» в меню оплаты (/payment).\n"
+                         "Если есть вопросы — просто напишите, помогу!"
+                )
+                mark_payment_reminded(user_id)
+                logger.info(f"Payment reminder sent to {user_id}")
+            except Forbidden:
+                mark_payment_reminded(user_id)
+                from src.broadcast import broadcast_manager
+                broadcast_manager.mark_blocked(user_id)
+            except Exception as e:
+                logger.error(f"Failed to send payment reminder to {user_id}: {e}")
+    except Exception as e:
+        logger.error(f"Payment reminder processing error: {e}")
 
 
 async def process_follow_ups(context: ContextTypes.DEFAULT_TYPE) -> None:
@@ -131,10 +192,17 @@ def main() -> None:
     application.add_handler(CommandHandler("bonus", bonus_handler))
     application.add_handler(CommandHandler("payment", payment_handler))
     application.add_handler(CommandHandler("contract", contract_handler))
+    application.add_handler(CommandHandler("faq", faq_handler))
+    application.add_handler(CommandHandler("promo", promo_handler))
+    application.add_handler(CommandHandler("testimonials", testimonials_handler))
+    application.add_handler(CommandHandler("promo_create", promo_create_handler))
+    application.add_handler(CommandHandler("promo_list", promo_list_handler))
+    application.add_handler(CommandHandler("promo_off", promo_off_handler))
     application.add_handler(CommandHandler("followup", followup_handler))
     application.add_handler(CommandHandler("broadcast", broadcast_handler))
     application.add_handler(CommandHandler("privacy", privacy_handler))
     
+    application.add_handler(InlineQueryHandler(inline_query_handler))
     application.add_handler(CallbackQueryHandler(callback_handler))
     
     application.add_handler(MessageHandler(filters.VOICE, voice_handler))
@@ -151,7 +219,7 @@ def main() -> None:
     logger.info("WEB4TG Studio AI Agent starting...")
     logger.info(f"Model: {config.model_name}")
     logger.info(f"Bot API: {get_api_version()}")
-    logger.info(f"Features: Inline keyboards, Calculator, Leads, Thinking mode, Streaming, Button styles, CopyText, Privacy")
+    logger.info(f"Features: Inline, Calculator, Leads, Streaming, FAQ, Promo, Testimonials, DailyDigest, PaymentReminders")
     
     application.run_polling(allowed_updates=Update.ALL_TYPES)
 

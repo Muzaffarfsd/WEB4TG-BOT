@@ -29,8 +29,9 @@ AI-агент поддержки для WEB4TG Studio — премиальной
 │   ├── tasks_tracker.py       # Task gamification system
 │   ├── referrals.py           # Referral program
 │   ├── loyalty.py             # Loyalty system (reviews, packages)
-│   ├── payments.py            # Manual payment integration
+│   ├── payments.py            # Manual payment + payment reminders
 │   ├── pricing.py             # Pricing information and menus
+│   ├── promocodes.py          # Promo code system
 │   ├── ab_testing.py          # A/B testing for welcome messages
 │   ├── followup.py            # Smart follow-up system
 │   ├── broadcast.py           # Broadcast/mailing system
@@ -72,6 +73,14 @@ AI-агент поддержки для WEB4TG Studio — премиальной
 - **Loyalty program** - Reviews, packages, returning customer bonuses
 - **Smart follow-ups** - AI-generated personalized follow-up messages based on conversation context
 - **Broadcast system** - Mass messaging with audience targeting, rate limiting, restart-safe delivery tracking
+- **FAQ system** - 10 frequent questions with instant answers (no AI tokens used)
+- **Promo codes** - Create, activate, track usage with DB tables (src/promocodes.py)
+- **Public testimonials** - Show approved reviews, submit new ones
+- **Auto-tagging leads** - Keyword-based interest detection (shop, restaurant, beauty, fitness, medical, ai)
+- **Payment reminders** - Auto-remind 24h after payment details request (hourly job)
+- **Daily admin digest** - Automatic report at 09:00 Asia/Bishkek with metrics
+- **Inline mode** - Share bot templates via @w4tg_bot in any chat (6 templates)
+- **Mini case studies** - Before/after stories with results in portfolio
 - **Graceful degradation** - Fallback responses for Gemini/ElevenLabs failures, no user-facing crashes
 - **Input validation** - Message length limits, sanitized inputs, blocked user detection
 
@@ -142,11 +151,17 @@ Manual payment integration with downloadable contract:
 - `/hot` - Горячие лиды (только админ)
 - `/tag <user_id> <тег>` - Добавить тег лиду (только админ)
 - `/priority <user_id> <cold|warm|hot>` - Установить приоритет (только админ)
+- `/faq` - Частые вопросы (быстрые ответы без AI)
+- `/promo <КОД>` - Активировать промокод
+- `/testimonials` - Отзывы клиентов
 - `/followup` - Статистика follow-up системы (только админ)
 - `/followup pause <user_id>` - Приостановить follow-up (только админ)
 - `/followup resume <user_id>` - Возобновить follow-up (только админ)
 - `/broadcast` - Запуск рассылки (только админ)
 - `/broadcast cancel` - Отмена рассылки (только админ)
+- `/promo_create <КОД> <СКИДКА%> [макс_исп]` - Создать промокод (только админ)
+- `/promo_list` - Список промокодов (только админ)
+- `/promo_off <КОД>` - Деактивировать промокод (только админ)
 
 ## Environment Variables
 ### Required

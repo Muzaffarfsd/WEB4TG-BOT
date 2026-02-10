@@ -15,6 +15,7 @@ from src.handlers.commands import (
     faq_handler,
     promo_handler,
     testimonials_handler,
+    inline_query_handler,
 )
 
 from src.handlers.callbacks import callback_handler
@@ -40,6 +41,7 @@ from src.handlers.admin import (
     promo_create_handler,
     promo_list_handler,
     promo_off_handler,
+    generate_daily_digest,
 )
 
 from src.handlers.messages import (
@@ -70,6 +72,7 @@ __all__ = [
     'contract_handler',
     'privacy_handler',
     'faq_handler',
+    'inline_query_handler',
     'callback_handler',
     'voice_handler',
     'video_handler',
@@ -88,6 +91,7 @@ __all__ = [
     'promo_create_handler',
     'promo_list_handler',
     'promo_off_handler',
+    'generate_daily_digest',
     'promo_handler',
     'testimonials_handler',
     'message_handler',

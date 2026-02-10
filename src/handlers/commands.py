@@ -1,5 +1,5 @@
 import logging
-from telegram import Update, InlineKeyboardMarkup, InlineKeyboardButton, WebAppInfo
+from telegram import Update, InlineKeyboardMarkup, InlineKeyboardButton, WebAppInfo, InlineQueryResultArticle, InputTextMessageContent
 from telegram.ext import ContextTypes
 from telegram.constants import ChatAction
 
@@ -359,3 +359,63 @@ async def contract_handler(update: Update, context: ContextTypes.DEFAULT_TYPE) -
         await update.message.reply_text(
             "Договор временно недоступен. Свяжитесь с менеджером для получения."
         )
+
+
+async def inline_query_handler(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
+    query_text = update.inline_query.query.lower()
+    
+    templates = [
+        {
+            "id": "shop",
+            "title": "🛒 Интернет-магазин",
+            "description": "от 150 000 ₽ • 7-10 дней",
+            "text": "🛒 **Интернет-магазин в Telegram**\n\nГотовое решение от WEB4TG Studio за 7-10 дней.\n\n• Каталог, корзина, оплата\n• Дизайн уровня Apple\n• Без комиссий маркетплейсов\n\nОт 150 000 ₽\n\n👉 @w4tg_bot — рассчитать стоимость"
+        },
+        {
+            "id": "restaurant",
+            "title": "🍽 Ресторан и доставка",
+            "description": "от 180 000 ₽ • 10-12 дней",
+            "text": "🍽 **Ресторан в Telegram**\n\nПриложение для ресторана от WEB4TG Studio за 10-12 дней.\n\n• Меню, бронирование, доставка\n• Онлайн-оплата\n• Push-уведомления\n\nОт 180 000 ₽\n\n👉 @w4tg_bot — узнать подробнее"
+        },
+        {
+            "id": "beauty",
+            "title": "💅 Салон красоты",
+            "description": "от 170 000 ₽ • 8-12 дней",
+            "text": "💅 **Салон красоты в Telegram**\n\nОнлайн-запись от WEB4TG Studio за 8-12 дней.\n\n• Каталог услуг, выбор мастера\n• Онлайн-запись и напоминания\n• Программа лояльности\n\nОт 170 000 ₽\n\n👉 @w4tg_bot — обсудить проект"
+        },
+        {
+            "id": "fitness",
+            "title": "💪 Фитнес-клуб",
+            "description": "от 200 000 ₽ • 12-15 дней",
+            "text": "💪 **Фитнес-клуб в Telegram**\n\nПриложение для фитнеса от WEB4TG Studio за 12-15 дней.\n\n• Расписание, абонементы, тренеры\n• Трекер прогресса\n• Push-уведомления\n\nОт 200 000 ₽\n\n👉 @w4tg_bot — рассчитать стоимость"
+        },
+        {
+            "id": "ai_agent",
+            "title": "🤖 AI-агент для бизнеса",
+            "description": "49 000 ₽ • 7 дней бесплатный тест",
+            "text": "🤖 **AI-агент для бизнеса**\n\nУмный помощник от WEB4TG Studio.\n\n• Отвечает клиентам 24/7\n• Понимает контекст и историю\n• Обучается на ваших данных\n\n49 000 ₽ • 7 дней бесплатного теста\n\n👉 @w4tg_bot — попробовать"
+        },
+        {
+            "id": "about",
+            "title": "ℹ️ О WEB4TG Studio",
+            "description": "Премиальная студия Telegram Mini Apps",
+            "text": "🚀 **WEB4TG Studio**\n\nПремиальная студия разработки Telegram Mini Apps.\n\n• Приложения за 7-15 дней\n• Дизайн уровня Apple\n• 900+ млн аудитория Telegram\n• Без комиссий маркетплейсов\n\n👉 @w4tg_bot — бесплатная консультация"
+        }
+    ]
+    
+    results = []
+    for t in templates:
+        if not query_text or query_text in t["title"].lower() or query_text in t["description"].lower():
+            results.append(
+                InlineQueryResultArticle(
+                    id=t["id"],
+                    title=t["title"],
+                    description=t["description"],
+                    input_message_content=InputTextMessageContent(
+                        message_text=t["text"],
+                        parse_mode="Markdown"
+                    )
+                )
+            )
+    
+    await update.inline_query.answer(results, cache_time=300)
