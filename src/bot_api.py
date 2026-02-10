@@ -167,5 +167,13 @@ async def get_user_profile_audios(
         return {}
 
 
+def copy_text_button(text: str, copy_text: str) -> dict:
+    return {
+        "api_kwargs": {
+            "copy_text": {"text": copy_text}
+        }
+    }
+
+
 def get_api_version() -> str:
     return BOT_API_VERSION

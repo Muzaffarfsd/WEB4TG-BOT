@@ -49,6 +49,8 @@ AI-агент поддержки для WEB4TG Studio — премиальной
 - **Bot API 9.4** - Telegram Bot API 9.4 (Feb 9, 2026) via raw API calls on python-telegram-bot 22.6
 - **Message streaming** - sendMessageDraft for real-time AI response streaming with cursor indicator
 - **Button styles** - constructive/destructive styles on CTA buttons (Bot API 9.4)
+- **CopyTextButton** - One-tap copy for payment details, referral codes, bank requisites (Bot API 7.11+)
+- **Privacy Policy** - /privacy command with full GDPR-style policy (Telegram requirement)
 - **Bot profile management** - setMyProfilePhoto/removeMyProfilePhoto helpers
 - **createInvoiceLink** - HTTP invoice link generation helper
 - **Modular handlers** - Split into domain-specific modules (commands, callbacks, media, admin)
@@ -131,6 +133,7 @@ Manual payment integration with downloadable contract:
 - `/contact` - Контакты
 - `/calc` - Калькулятор стоимости
 - `/referral` - Реферальная программа
+- `/privacy` - Политика конфиденциальности
 - `/leads` - Просмотр лидов (только админ)
 - `/stats` - Статистика бота (только админ)
 - `/export` - Экспорт лидов в CSV (только админ)

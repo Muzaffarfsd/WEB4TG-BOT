@@ -1,6 +1,6 @@
 from telegram import InlineKeyboardButton, InlineKeyboardMarkup, ReplyKeyboardMarkup, KeyboardButton, WebAppInfo
 
-from src.bot_api import styled_button_api_kwargs
+from src.bot_api import styled_button_api_kwargs, copy_text_button
 
 
 def get_main_menu_keyboard() -> InlineKeyboardMarkup:

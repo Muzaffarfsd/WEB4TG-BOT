@@ -9,6 +9,7 @@ from src.keyboards import (
     get_loyalty_menu_keyboard, get_review_type_keyboard,
     get_package_deals_keyboard
 )
+from src.bot_api import copy_text_button, styled_button_api_kwargs
 from src.calculator import calculator_manager
 from src.leads import lead_manager
 from src.knowledge_base import PORTFOLIO_MESSAGE
@@ -109,8 +110,10 @@ async def callback_handler(update: Update, context: ContextTypes.DEFAULT_TYPE) -
             reply_markup=get_lead_keyboard()
         )
     
-    elif data in ("payment", "pay_card", "pay_bank", "copy_card", "copy_bank", "pay_confirm", "pay_contract"):
-        await handle_payment_callback(update, context, data)
+    elif data in ("payment", "pay_card", "pay_bank", "copy_card", "copy_bank",
+                   "copy_card_fallback", "copy_bank_fallback", "pay_confirm", "pay_contract"):
+        action = data.replace("_fallback", "")
+        await handle_payment_callback(update, context, action)
     
     elif data.startswith("price_"):
         await handle_price_callback(update, context, data)
@@ -440,15 +443,30 @@ async def callback_handler(update: Update, context: ContextTypes.DEFAULT_TYPE) -
         if data == "ref_copy_code":
             await query.answer(f"Код: {stats.referral_code}", show_alert=True)
         
+        elif data == "ref_copy_code_btn":
+            await query.answer("Код скопирован!")
+        
         elif data == "ref_share":
             ref_link = referral_manager.get_bot_referral_link(stats.referral_code)
             share_text = f"Присоединяйся к WEB4TG Studio! Получи 50 монет по моей ссылке: {ref_link}"
+            share_keyboard = InlineKeyboardMarkup([
+                [InlineKeyboardButton(
+                    "📋 Скопировать ссылку",
+                    callback_data="ref_copy_link_btn",
+                    **copy_text_button("copy", ref_link)
+                )],
+                [InlineKeyboardButton("◀️ Назад", callback_data="ref_back")]
+            ])
             await query.answer()
             await query.message.reply_text(
                 f"📤 **Поделитесь этой ссылкой:**\n\n{ref_link}\n\n"
                 f"Или отправьте друзьям это сообщение:\n\n_{share_text}_",
-                parse_mode="Markdown"
+                parse_mode="Markdown",
+                reply_markup=share_keyboard
             )
+        
+        elif data == "ref_copy_link_btn":
+            await query.answer("Ссылка скопирована!")
         
         elif data == "ref_list":
             referrals = referral_manager.get_referrals_list(user_id)
@@ -485,7 +503,11 @@ async def callback_handler(update: Update, context: ContextTypes.DEFAULT_TYPE) -
 📤 **Ссылка:** {ref_link}"""
             
             keyboard = InlineKeyboardMarkup([
-                [InlineKeyboardButton("📋 Скопировать код", callback_data="ref_copy_code")],
+                [InlineKeyboardButton(
+                    "📋 Скопировать код",
+                    callback_data="ref_copy_code_btn",
+                    **copy_text_button("copy", stats.referral_code)
+                )],
                 [InlineKeyboardButton("📤 Поделиться ссылкой", callback_data="ref_share")],
                 [InlineKeyboardButton("👥 Мои рефералы", callback_data="ref_list")],
                 [InlineKeyboardButton("Назад в меню", callback_data="menu_back")]

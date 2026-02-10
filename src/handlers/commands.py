@@ -10,13 +10,14 @@ from src.keyboards import (
     get_lead_keyboard, get_quick_reply_keyboard
 )
 from src.calculator import calculator_manager
-from src.knowledge_base import HELP_MESSAGE, PORTFOLIO_MESSAGE, CONTACT_MESSAGE, CLEAR_MESSAGE
+from src.knowledge_base import HELP_MESSAGE, PORTFOLIO_MESSAGE, CONTACT_MESSAGE, CLEAR_MESSAGE, PRIVACY_POLICY
 from src.tasks_tracker import tasks_tracker
 from src.referrals import referral_manager, REFERRER_REWARD, REFERRED_REWARD
 from src.pricing import get_price_main_text, get_price_main_keyboard
 from src.ab_testing import ab_testing
 from src.keyboards import get_portfolio_keyboard
 from src.analytics import analytics, FunnelEvent
+from src.bot_api import copy_text_button, styled_button_api_kwargs
 
 from src.handlers.utils import WELCOME_MESSAGES
 from src.handlers.media import generate_voice_response
@@ -254,13 +255,24 @@ async def referral_handler(update: Update, context: ContextTypes.DEFAULT_TYPE) -
         text += f"\n\n🎯 До уровня {next_level.value}: ещё {remaining} рефералов"
     
     keyboard = InlineKeyboardMarkup([
-        [InlineKeyboardButton("📋 Скопировать код", callback_data="ref_copy_code")],
+        [InlineKeyboardButton(
+            "📋 Скопировать код",
+            callback_data="ref_copy_code_btn",
+            **copy_text_button("copy", stats.referral_code)
+        )],
         [InlineKeyboardButton("📤 Поделиться ссылкой", callback_data="ref_share")],
         [InlineKeyboardButton("👥 Мои рефералы", callback_data="ref_list")],
         [InlineKeyboardButton("Назад в меню", callback_data="menu_back")]
     ])
     
     await update.message.reply_text(text, parse_mode="Markdown", reply_markup=keyboard)
+
+
+async def privacy_handler(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
+    await update.message.reply_text(
+        PRIVACY_POLICY,
+        parse_mode="Markdown"
+    )
 
 
 async def payment_handler(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:

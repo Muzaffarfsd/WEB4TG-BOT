@@ -5,6 +5,7 @@ from telegram import Update, InlineKeyboardButton, InlineKeyboardMarkup
 from telegram.ext import ContextTypes
 import logging
 from src.analytics import analytics, FunnelEvent
+from src.bot_api import copy_text_button, styled_button_api_kwargs
 
 logger = logging.getLogger(__name__)
 
@@ -36,19 +37,49 @@ def get_payment_keyboard() -> InlineKeyboardMarkup:
 
 
 def get_card_keyboard() -> InlineKeyboardMarkup:
-    """Keyboard for card payment."""
+    """Keyboard for card payment with one-tap copy button."""
     return InlineKeyboardMarkup([
-        [InlineKeyboardButton("📋 Скопировать номер карты", callback_data="copy_card")],
-        [InlineKeyboardButton("✅ Я оплатил", callback_data="pay_confirm")],
+        [InlineKeyboardButton(
+            "📋 Скопировать номер карты",
+            callback_data="copy_card_fallback",
+            **copy_text_button("copy", CARD_NUMBER_PLAIN)
+        )],
+        [InlineKeyboardButton(
+            "✅ Я оплатил", callback_data="pay_confirm",
+            **styled_button_api_kwargs(style="constructive")
+        )],
         [InlineKeyboardButton("◀️ Назад в способы оплаты", callback_data="payment")],
     ])
 
 
+def _get_bank_copy_text() -> str:
+    """Format bank details as plain text for one-tap copy."""
+    parts = []
+    if BANK_DETAILS['recipient']:
+        parts.append(f"Получатель: {BANK_DETAILS['recipient']}")
+    if BANK_DETAILS['inn']:
+        parts.append(f"ИНН: {BANK_DETAILS['inn']}")
+    if BANK_DETAILS['account']:
+        parts.append(f"Счёт: {BANK_DETAILS['account']}")
+    if BANK_DETAILS['bank_name']:
+        parts.append(f"Банк: {BANK_DETAILS['bank_name']}")
+    if BANK_DETAILS['bik']:
+        parts.append(f"БИК: {BANK_DETAILS['bik']}")
+    return "\n".join(parts)
+
+
 def get_bank_keyboard() -> InlineKeyboardMarkup:
-    """Keyboard for bank transfer."""
+    """Keyboard for bank transfer with one-tap copy button."""
     return InlineKeyboardMarkup([
-        [InlineKeyboardButton("📋 Скопировать реквизиты", callback_data="copy_bank")],
-        [InlineKeyboardButton("✅ Я оплатил", callback_data="pay_confirm")],
+        [InlineKeyboardButton(
+            "📋 Скопировать реквизиты",
+            callback_data="copy_bank_fallback",
+            **copy_text_button("copy", _get_bank_copy_text())
+        )],
+        [InlineKeyboardButton(
+            "✅ Я оплатил", callback_data="pay_confirm",
+            **styled_button_api_kwargs(style="constructive")
+        )],
         [InlineKeyboardButton("◀️ Назад в способы оплаты", callback_data="payment")],
     ])
 

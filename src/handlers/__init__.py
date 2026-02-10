@@ -11,6 +11,7 @@ from src.handlers.commands import (
     referral_handler,
     payment_handler,
     contract_handler,
+    privacy_handler,
 )
 
 from src.handlers.callbacks import callback_handler
@@ -61,6 +62,7 @@ __all__ = [
     'referral_handler',
     'payment_handler',
     'contract_handler',
+    'privacy_handler',
     'callback_handler',
     'voice_handler',
     'video_handler',

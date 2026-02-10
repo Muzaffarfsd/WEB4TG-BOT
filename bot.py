@@ -15,7 +15,7 @@ from src.handlers import (
     leads_handler, stats_handler, export_handler, reviews_handler,
     history_handler, hot_handler, tag_handler, priority_handler,
     referral_handler, payment_handler, contract_handler, bonus_handler,
-    followup_handler, broadcast_handler,
+    followup_handler, broadcast_handler, privacy_handler,
 )
 
 logging.basicConfig(
@@ -43,6 +43,7 @@ async def post_init(application) -> None:
         BotCommand("bonus", "🎁 Бонусы и скидки"),
         BotCommand("portfolio", "🎨 Примеры работ"),
         BotCommand("contact", "📞 Связаться с нами"),
+        BotCommand("privacy", "🔒 Политика конфиденциальности"),
         BotCommand("help", "❓ Помощь"),
     ]
     await application.bot.set_my_commands(commands)
@@ -132,6 +133,7 @@ def main() -> None:
     application.add_handler(CommandHandler("contract", contract_handler))
     application.add_handler(CommandHandler("followup", followup_handler))
     application.add_handler(CommandHandler("broadcast", broadcast_handler))
+    application.add_handler(CommandHandler("privacy", privacy_handler))
     
     application.add_handler(CallbackQueryHandler(callback_handler))
     
@@ -149,7 +151,7 @@ def main() -> None:
     logger.info("WEB4TG Studio AI Agent starting...")
     logger.info(f"Model: {config.model_name}")
     logger.info(f"Bot API: {get_api_version()}")
-    logger.info(f"Features: Inline keyboards, Calculator, Leads, Thinking mode, Streaming, Button styles")
+    logger.info(f"Features: Inline keyboards, Calculator, Leads, Thinking mode, Streaming, Button styles, CopyText, Privacy")
     
     application.run_polling(allowed_updates=Update.ALL_TYPES)
 
