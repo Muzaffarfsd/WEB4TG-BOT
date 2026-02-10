@@ -227,6 +227,23 @@ class LoyaltySystem:
             logger.error(f"Failed to get pending reviews: {e}")
             return []
     
+    def get_approved_reviews(self, limit: int = 5) -> List[Review]:
+        try:
+            with self._get_connection() as conn:
+                with conn.cursor(cursor_factory=RealDictCursor) as cur:
+                    cur.execute("""
+                        SELECT * FROM customer_reviews 
+                        WHERE status = 'approved'
+                        ORDER BY created_at DESC
+                        LIMIT %s
+                    """, (limit,))
+                    
+                    rows = cur.fetchall()
+                    return [Review(**row) for row in rows]
+        except Exception as e:
+            logger.error(f"Failed to get approved reviews: {e}")
+            return []
+    
     def get_user_reviews(self, user_id: int) -> List[Review]:
         try:
             with self._get_connection() as conn:

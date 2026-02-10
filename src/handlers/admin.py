@@ -330,3 +330,96 @@ async def broadcast_handler(update: Update, context: ContextTypes.DEFAULT_TYPE) 
         "• Видео с подписью\n\n"
         "Для отмены: /broadcast cancel"
     )
+
+
+@admin_required
+async def promo_create_handler(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
+    user_id = update.effective_user.id
+    log_admin_action(user_id, "promo_create")
+    args = context.args
+
+    if not args or len(args) < 2:
+        await update.message.reply_text(
+            "Использование:\n"
+            "/promo_create CODE 15 — скидка 15%\n"
+            "/promo_create CODE 15 100 — скидка 15%, макс 100 использований"
+        )
+        return
+
+    code = args[0].upper().strip()
+    try:
+        discount = int(args[1])
+    except ValueError:
+        await update.message.reply_text("❌ Скидка должна быть числом (1-50)")
+        return
+
+    max_uses = None
+    if len(args) >= 3:
+        try:
+            max_uses = int(args[2])
+        except ValueError:
+            await update.message.reply_text("❌ Макс. использований должно быть числом")
+            return
+
+    from src.promocodes import promo_manager
+    if not promo_manager:
+        await update.message.reply_text("⚠️ Система промокодов недоступна")
+        return
+
+    result = promo_manager.create_promo(
+        code=code,
+        discount_percent=discount,
+        max_uses=max_uses,
+        created_by=user_id
+    )
+
+    if result:
+        uses_text = f", макс: {max_uses}" if max_uses else ", без ограничений"
+        await update.message.reply_text(
+            f"✅ Промокод создан!\n\n"
+            f"Код: <code>{result['code']}</code>\n"
+            f"Скидка: {result['discount_percent']}%{uses_text}",
+            parse_mode="HTML"
+        )
+    else:
+        await update.message.reply_text(
+            "❌ Не удалось создать промокод.\n"
+            "Проверьте: код 4-20 символов (A-Z, 0-9), скидка 1-50%, код уникален."
+        )
+
+
+@admin_required
+async def promo_list_handler(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
+    user_id = update.effective_user.id
+    log_admin_action(user_id, "promo_list")
+
+    from src.promocodes import promo_manager
+    if not promo_manager:
+        await update.message.reply_text("⚠️ Система промокодов недоступна")
+        return
+
+    stats_text = promo_manager.format_promo_stats()
+    await update.message.reply_text(stats_text, parse_mode="HTML")
+
+
+@admin_required
+async def promo_off_handler(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
+    user_id = update.effective_user.id
+    log_admin_action(user_id, "promo_off")
+    args = context.args
+
+    if not args:
+        await update.message.reply_text("Использование: /promo_off CODE")
+        return
+
+    code = args[0].upper().strip()
+
+    from src.promocodes import promo_manager
+    if not promo_manager:
+        await update.message.reply_text("⚠️ Система промокодов недоступна")
+        return
+
+    if promo_manager.deactivate_promo(code):
+        await update.message.reply_text(f"✅ Промокод <code>{code}</code> деактивирован", parse_mode="HTML")
+    else:
+        await update.message.reply_text(f"❌ Промокод {code} не найден")

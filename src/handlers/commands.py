@@ -7,10 +7,11 @@ from src.session import session_manager
 from src.config import config
 from src.keyboards import (
     get_main_menu_keyboard, get_calculator_keyboard,
-    get_lead_keyboard, get_quick_reply_keyboard
+    get_lead_keyboard, get_quick_reply_keyboard,
+    get_faq_keyboard
 )
 from src.calculator import calculator_manager
-from src.knowledge_base import HELP_MESSAGE, PORTFOLIO_MESSAGE, CONTACT_MESSAGE, CLEAR_MESSAGE, PRIVACY_POLICY
+from src.knowledge_base import HELP_MESSAGE, PORTFOLIO_MESSAGE, CONTACT_MESSAGE, CLEAR_MESSAGE, PRIVACY_POLICY, FAQ_DATA
 from src.tasks_tracker import tasks_tracker
 from src.referrals import referral_manager, REFERRER_REWARD, REFERRED_REWARD
 from src.pricing import get_price_main_text, get_price_main_keyboard
@@ -268,6 +269,14 @@ async def referral_handler(update: Update, context: ContextTypes.DEFAULT_TYPE) -
     await update.message.reply_text(text, parse_mode="Markdown", reply_markup=keyboard)
 
 
+async def faq_handler(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
+    await update.message.reply_text(
+        "❓ **Частые вопросы**\n\nВыберите интересующий вопрос:",
+        parse_mode="Markdown",
+        reply_markup=get_faq_keyboard()
+    )
+
+
 async def privacy_handler(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
     await update.message.reply_text(
         PRIVACY_POLICY,
@@ -282,6 +291,58 @@ async def payment_handler(update: Update, context: ContextTypes.DEFAULT_TYPE) ->
         parse_mode="Markdown",
         reply_markup=get_payment_keyboard()
     )
+
+
+async def promo_handler(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
+    from src.promocodes import promo_manager
+    user_id = update.effective_user.id
+
+    if not promo_manager:
+        await update.message.reply_text("⚠️ Система промокодов временно недоступна")
+        return
+
+    if context.args and len(context.args) > 0:
+        code = context.args[0].upper().strip()
+        result = promo_manager.activate_promo(user_id, code)
+        await update.message.reply_text(result["message"])
+        return
+
+    active = promo_manager.get_user_active_promo(user_id)
+    if active:
+        text = (f"🎟 Ваш активный промокод: <code>{active['code']}</code>\n"
+                f"💰 Скидка: {active['discount_percent']}%\n\n"
+                f"Чтобы активировать другой промокод, отправьте:\n"
+                f"/promo КОД")
+    else:
+        text = ("🎟 У вас нет активных промокодов\n\n"
+                "Чтобы активировать промокод, отправьте:\n"
+                "/promo КОД")
+
+    await update.message.reply_text(text, parse_mode="HTML")
+
+
+async def testimonials_handler(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
+    from src.handlers.utils import loyalty_system
+    reviews = loyalty_system.get_approved_reviews(limit=5)
+    
+    if not reviews:
+        text = "⭐ <b>Отзывы клиентов</b>\n\nПока нет опубликованных отзывов. Будьте первым!"
+    else:
+        text = "⭐ <b>Отзывы наших клиентов</b>\n\n"
+        for review in reviews:
+            stars = "⭐" * 5
+            review_type_name = "🎬 Видео" if review.review_type == "video" else "📝 Текст"
+            text += f"{stars}\n"
+            if review.comment:
+                text += f"<i>«{review.comment}»</i>\n"
+            text += f"{review_type_name} • {review.created_at.strftime('%d.%m.%Y')}\n\n"
+    
+    keyboard = InlineKeyboardMarkup([
+        [InlineKeyboardButton("⭐ Оставить отзыв", callback_data="loyalty_review")],
+        [InlineKeyboardButton("◀️ Назад в меню", callback_data="menu_back")]
+    ])
+    
+    await update.message.reply_text(text, parse_mode="HTML", reply_markup=keyboard)
 
 
 async def contract_handler(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:

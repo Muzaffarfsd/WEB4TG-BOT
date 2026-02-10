@@ -18,6 +18,10 @@ def get_main_menu_keyboard() -> InlineKeyboardMarkup:
             InlineKeyboardButton("🎁 Бонусы", callback_data="loyalty_menu")
         ],
         [
+            InlineKeyboardButton("⭐ Отзывы клиентов", callback_data="menu_testimonials"),
+        ],
+        [
+            InlineKeyboardButton("❓ FAQ", callback_data="menu_faq"),
             InlineKeyboardButton(
                 "📝 Оставить заявку", callback_data="menu_lead",
                 **styled_button_api_kwargs(style="constructive")
@@ -206,6 +210,15 @@ def get_package_deals_keyboard() -> InlineKeyboardMarkup:
             InlineKeyboardButton("◀️ Назад", callback_data="loyalty_menu"),
         ],
     ]
+    return InlineKeyboardMarkup(keyboard)
+
+
+def get_faq_keyboard() -> InlineKeyboardMarkup:
+    from src.knowledge_base import FAQ_DATA
+    keyboard = []
+    for key, faq in FAQ_DATA.items():
+        keyboard.append([InlineKeyboardButton(faq["question"], callback_data=key)])
+    keyboard.append([InlineKeyboardButton("Назад в меню", callback_data="menu_back")])
     return InlineKeyboardMarkup(keyboard)
 
 

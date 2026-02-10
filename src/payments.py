@@ -6,8 +6,95 @@ from telegram.ext import ContextTypes
 import logging
 from src.analytics import analytics, FunnelEvent
 from src.bot_api import copy_text_button, styled_button_api_kwargs
+from src.database import get_connection, DATABASE_URL
 
 logger = logging.getLogger(__name__)
+
+
+def _init_payment_requests_table():
+    if not DATABASE_URL:
+        return
+    try:
+        with get_connection() as conn:
+            with conn.cursor() as cur:
+                cur.execute("""
+                    CREATE TABLE IF NOT EXISTS payment_requests (
+                        id SERIAL PRIMARY KEY,
+                        user_id BIGINT NOT NULL,
+                        payment_type VARCHAR(20),
+                        created_at TIMESTAMP DEFAULT NOW(),
+                        reminded BOOLEAN DEFAULT FALSE,
+                        confirmed BOOLEAN DEFAULT FALSE
+                    )
+                """)
+        logger.info("payment_requests table initialized")
+    except Exception as e:
+        logger.error(f"Failed to init payment_requests table: {e}")
+
+
+_init_payment_requests_table()
+
+
+def record_payment_request(user_id: int, payment_type: str) -> None:
+    if not DATABASE_URL:
+        return
+    try:
+        with get_connection() as conn:
+            with conn.cursor() as cur:
+                cur.execute("""
+                    INSERT INTO payment_requests (user_id, payment_type)
+                    VALUES (%s, %s)
+                """, (user_id, payment_type))
+    except Exception as e:
+        logger.error(f"Failed to record payment request: {e}")
+
+
+def get_pending_payment_reminders(hours: int = 24) -> list:
+    if not DATABASE_URL:
+        return []
+    try:
+        with get_connection() as conn:
+            with conn.cursor() as cur:
+                cur.execute("""
+                    SELECT DISTINCT user_id FROM payment_requests
+                    WHERE confirmed = FALSE
+                      AND reminded = FALSE
+                      AND created_at < NOW() - make_interval(hours => %s)
+                """, (hours,))
+                return [row[0] for row in cur.fetchall()]
+    except Exception as e:
+        logger.error(f"Failed to get pending payment reminders: {e}")
+        return []
+
+
+def mark_payment_reminded(user_id: int) -> None:
+    if not DATABASE_URL:
+        return
+    try:
+        with get_connection() as conn:
+            with conn.cursor() as cur:
+                cur.execute("""
+                    UPDATE payment_requests
+                    SET reminded = TRUE
+                    WHERE user_id = %s AND confirmed = FALSE
+                """, (user_id,))
+    except Exception as e:
+        logger.error(f"Failed to mark payment reminded: {e}")
+
+
+def confirm_payment(user_id: int) -> None:
+    if not DATABASE_URL:
+        return
+    try:
+        with get_connection() as conn:
+            with conn.cursor() as cur:
+                cur.execute("""
+                    UPDATE payment_requests
+                    SET confirmed = TRUE
+                    WHERE user_id = %s AND confirmed = FALSE
+                """, (user_id,))
+    except Exception as e:
+        logger.error(f"Failed to confirm payment: {e}")
 
 CONTRACT_PATH = os.path.join(os.path.dirname(os.path.dirname(__file__)), "assets", "contract.pdf")
 
@@ -188,12 +275,20 @@ async def handle_payment_callback(update: Update, context: ContextTypes.DEFAULT_
             parse_mode="Markdown"
         )
     elif action == "pay_card":
+        try:
+            record_payment_request(user_id, "card")
+        except Exception as e:
+            logger.error(f"Failed to record card payment request: {e}")
         await query.edit_message_text(
             get_card_payment_text(),
             reply_markup=get_card_keyboard(),
             parse_mode="Markdown"
         )
     elif action == "pay_bank":
+        try:
+            record_payment_request(user_id, "bank")
+        except Exception as e:
+            logger.error(f"Failed to record bank payment request: {e}")
         await query.edit_message_text(
             get_bank_transfer_text(),
             reply_markup=get_bank_keyboard(),
@@ -228,6 +323,10 @@ async def handle_payment_callback(update: Update, context: ContextTypes.DEFAULT_
             )
     
     elif action == "pay_confirm":
+        try:
+            confirm_payment(user_id)
+        except Exception as e:
+            logger.error(f"Failed to confirm payment: {e}")
         await query.edit_message_text(
             get_payment_confirm_text(),
             parse_mode="Markdown"

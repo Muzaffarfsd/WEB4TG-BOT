@@ -18,6 +18,31 @@ from src.keyboards import get_review_moderation_keyboard
 
 logger = logging.getLogger(__name__)
 
+INTEREST_TAGS = {
+    "shop": ["магазин", "товар", "продаж"],
+    "restaurant": ["ресторан", "доставк", "еда", "кафе"],
+    "beauty": ["салон", "красот", "маникюр"],
+    "fitness": ["фитнес", "спорт", "тренировк"],
+    "medical": ["врач", "клиник", "медиц"],
+    "ai": ["бот", "ai", "автоматиз"],
+}
+
+
+def auto_tag_lead(user_id: int, message_text: str) -> None:
+    try:
+        lead = lead_manager.get_lead(user_id)
+        if not lead:
+            return
+        
+        text_lower = message_text.lower()
+        for tag, keywords in INTEREST_TAGS.items():
+            for keyword in keywords:
+                if keyword in text_lower:
+                    lead_manager.add_tag(user_id, tag)
+                    break
+    except Exception as e:
+        logger.debug(f"Auto-tagging failed for user {user_id}: {e}")
+
 
 async def message_handler(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
     user = update.effective_user
@@ -258,6 +283,8 @@ async def message_handler(update: Update, context: ContextTypes.DEFAULT_TYPE) ->
             await update.message.reply_text(response)
         
         logger.info(f"User {user.id}: processed message #{session.message_count}")
+        
+        auto_tag_lead(user.id, user_message)
         
     except Exception as e:
         typing_task.cancel()

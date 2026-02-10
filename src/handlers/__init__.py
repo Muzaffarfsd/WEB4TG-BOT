@@ -12,6 +12,9 @@ from src.handlers.commands import (
     payment_handler,
     contract_handler,
     privacy_handler,
+    faq_handler,
+    promo_handler,
+    testimonials_handler,
 )
 
 from src.handlers.callbacks import callback_handler
@@ -34,6 +37,9 @@ from src.handlers.admin import (
     priority_handler,
     followup_handler,
     broadcast_handler,
+    promo_create_handler,
+    promo_list_handler,
+    promo_off_handler,
 )
 
 from src.handlers.messages import (
@@ -63,6 +69,7 @@ __all__ = [
     'payment_handler',
     'contract_handler',
     'privacy_handler',
+    'faq_handler',
     'callback_handler',
     'voice_handler',
     'video_handler',
@@ -78,6 +85,11 @@ __all__ = [
     'priority_handler',
     'followup_handler',
     'broadcast_handler',
+    'promo_create_handler',
+    'promo_list_handler',
+    'promo_off_handler',
+    'promo_handler',
+    'testimonials_handler',
     'message_handler',
     'error_handler',
     'send_typing_action',

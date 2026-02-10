@@ -7,12 +7,12 @@ from src.keyboards import (
     get_portfolio_keyboard, get_calculator_keyboard,
     get_lead_keyboard, get_back_keyboard,
     get_loyalty_menu_keyboard, get_review_type_keyboard,
-    get_package_deals_keyboard
+    get_package_deals_keyboard, get_faq_keyboard
 )
 from src.bot_api import copy_text_button, styled_button_api_kwargs
 from src.calculator import calculator_manager
 from src.leads import lead_manager
-from src.knowledge_base import PORTFOLIO_MESSAGE
+from src.knowledge_base import PORTFOLIO_MESSAGE, FAQ_DATA
 from src.tasks_tracker import tasks_tracker, TASKS_CONFIG
 from src.referrals import referral_manager, REFERRER_REWARD
 from src.payments import handle_payment_callback
@@ -115,8 +115,49 @@ async def callback_handler(update: Update, context: ContextTypes.DEFAULT_TYPE) -
         action = data.replace("_fallback", "")
         await handle_payment_callback(update, context, action)
     
+    elif data == "menu_faq" or data == "faq_back":
+        await query.edit_message_text(
+            "❓ **Частые вопросы**\n\nВыберите интересующий вопрос:",
+            parse_mode="Markdown",
+            reply_markup=get_faq_keyboard()
+        )
+    
+    elif data.startswith("faq_") and data in FAQ_DATA:
+        faq = FAQ_DATA[data]
+        keyboard = InlineKeyboardMarkup([
+            [InlineKeyboardButton("◀️ Назад к FAQ", callback_data="faq_back")],
+            [InlineKeyboardButton("Назад в меню", callback_data="menu_back")]
+        ])
+        await query.edit_message_text(
+            f"**{faq['question']}**\n\n{faq['answer']}",
+            parse_mode="Markdown",
+            reply_markup=keyboard
+        )
+    
     elif data.startswith("price_"):
         await handle_price_callback(update, context, data)
+    
+    elif data == "menu_testimonials":
+        reviews = loyalty_system.get_approved_reviews(limit=5)
+        
+        if not reviews:
+            text = "⭐ <b>Отзывы клиентов</b>\n\nПока нет опубликованных отзывов. Будьте первым!"
+        else:
+            text = "⭐ <b>Отзывы наших клиентов</b>\n\n"
+            for review in reviews:
+                stars = "⭐" * 5
+                review_type_name = "🎬 Видео" if review.review_type == "video" else "📝 Текст"
+                text += f"{stars}\n"
+                if review.comment:
+                    text += f"<i>«{review.comment}»</i>\n"
+                text += f"{review_type_name} • {review.created_at.strftime('%d.%m.%Y')}\n\n"
+        
+        keyboard = InlineKeyboardMarkup([
+            [InlineKeyboardButton("⭐ Оставить отзыв", callback_data="loyalty_review")],
+            [InlineKeyboardButton("◀️ Назад в меню", callback_data="menu_back")]
+        ])
+        
+        await query.edit_message_text(text, parse_mode="HTML", reply_markup=keyboard)
     
     elif data == "loyalty_menu":
         text = """🎁 <b>Программа лояльности</b>
