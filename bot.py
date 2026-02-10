@@ -30,6 +30,9 @@ logger = logging.getLogger(__name__)
 
 async def post_init(application) -> None:
     """Set up bot commands menu after initialization."""
+    from src.bot_api import get_api_version
+    logger.info(f"Bot API target version: {get_api_version()}")
+
     commands = [
         BotCommand("start", "🚀 Открыть приложение"),
         BotCommand("menu", "📋 Главное меню"),
@@ -142,9 +145,11 @@ def main() -> None:
     
     application.add_error_handler(error_handler)
     
+    from src.bot_api import get_api_version
     logger.info("WEB4TG Studio AI Agent starting...")
     logger.info(f"Model: {config.model_name}")
-    logger.info(f"Features: Inline keyboards, Calculator, Leads, Thinking mode")
+    logger.info(f"Bot API: {get_api_version()}")
+    logger.info(f"Features: Inline keyboards, Calculator, Leads, Thinking mode, Streaming, Button styles")
     
     application.run_polling(allowed_updates=Update.ALL_TYPES)
 

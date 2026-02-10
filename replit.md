@@ -21,8 +21,9 @@ AI-агент поддержки для WEB4TG Studio — премиальной
 │   ├── security.py            # Admin access control
 │   ├── knowledge_base.py      # System prompts & messages
 │   ├── session.py             # User session management with TTL
-│   ├── ai_client.py           # Gemini AI client
-│   ├── keyboards.py           # Inline keyboard layouts
+│   ├── ai_client.py           # Gemini AI client (+ streaming)
+│   ├── bot_api.py             # Bot API 9.4 helpers (streaming, button styles, profile)
+│   ├── keyboards.py           # Inline keyboard layouts (styled buttons)
 │   ├── calculator.py          # Interactive cost calculator
 │   ├── leads.py               # Lead collection & manager notifications
 │   ├── tasks_tracker.py       # Task gamification system
@@ -45,6 +46,11 @@ AI-агент поддержки для WEB4TG Studio — премиальной
 ```
 
 ## Architecture Features (2026)
+- **Bot API 9.4** - Telegram Bot API 9.4 (Feb 9, 2026) via raw API calls on python-telegram-bot 22.6
+- **Message streaming** - sendMessageDraft for real-time AI response streaming with cursor indicator
+- **Button styles** - constructive/destructive styles on CTA buttons (Bot API 9.4)
+- **Bot profile management** - setMyProfilePhoto/removeMyProfilePhoto helpers
+- **createInvoiceLink** - HTTP invoice link generation helper
 - **Modular handlers** - Split into domain-specific modules (commands, callbacks, media, admin)
 - **Unified DB pool** - Shared ThreadedConnectionPool (1-15 connections) with auto-retry and health checks
 - **TTL caching** - Cache module for frequently accessed data (src/cache.py)
@@ -54,6 +60,7 @@ AI-агент поддержки для WEB4TG Studio — премиальной
 - **Photo reviews** - Direct video/photo upload in chat for reviews
 - **Inline keyboards** - Interactive navigation with callback queries
 - **Thinking mode** - Gemini 3 Pro thinking for complex queries (4096 tokens)
+- **AI streaming** - Gemini generate_content_stream with sendMessageDraft for typing effect
 - **Cost calculator** - Interactive feature selection & price calculation
 - **Lead management** - Automatic lead capture with manager notifications
 - **Session management** - Per-user conversation history with TTL (24h)

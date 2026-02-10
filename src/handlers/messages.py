@@ -209,13 +209,36 @@ async def message_handler(update: Update, context: ContextTypes.DEFAULT_TYPE) ->
     
     try:
         thinking_level = "high" if len(user_message) > 200 else "medium"
-        
-        response = await ai_client.generate_response(
+
+        from src.bot_api import send_message_draft
+        last_draft_len = 0
+        draft_count = 0
+
+        async def on_stream_chunk(partial_text: str):
+            nonlocal last_draft_len, draft_count
+            if len(partial_text) - last_draft_len >= 40:
+                try:
+                    await send_message_draft(
+                        context.bot,
+                        update.effective_chat.id,
+                        partial_text + " ▌"
+                    )
+                    last_draft_len = len(partial_text)
+                    draft_count += 1
+                except Exception:
+                    pass
+
+        response = await ai_client.generate_response_stream(
             messages=session.get_history(),
             thinking_level=thinking_level,
-            max_retries=config.max_retries,
-            retry_delay=config.retry_delay
+            on_chunk=on_stream_chunk
         )
+
+        if draft_count > 0:
+            try:
+                await send_message_draft(context.bot, update.effective_chat.id, "")
+            except Exception:
+                pass
         
         session.add_message("assistant", response, config.max_history_length)
         

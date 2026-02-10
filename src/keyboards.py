@@ -1,5 +1,7 @@
 from telegram import InlineKeyboardButton, InlineKeyboardMarkup, ReplyKeyboardMarkup, KeyboardButton, WebAppInfo
 
+from src.bot_api import styled_button_api_kwargs
+
 
 def get_main_menu_keyboard() -> InlineKeyboardMarkup:
     keyboard = [
@@ -16,7 +18,10 @@ def get_main_menu_keyboard() -> InlineKeyboardMarkup:
             InlineKeyboardButton("🎁 Бонусы", callback_data="loyalty_menu")
         ],
         [
-            InlineKeyboardButton("📝 Оставить заявку", callback_data="menu_lead")
+            InlineKeyboardButton(
+                "📝 Оставить заявку", callback_data="menu_lead",
+                **styled_button_api_kwargs(style="constructive")
+            )
         ]
     ]
     return InlineKeyboardMarkup(keyboard)
@@ -75,10 +80,16 @@ def get_calculator_keyboard() -> InlineKeyboardMarkup:
             InlineKeyboardButton("Аналитика +45к", callback_data="calc_analytics")
         ],
         [
-            InlineKeyboardButton("Рассчитать стоимость", callback_data="calc_total")
+            InlineKeyboardButton(
+                "Рассчитать стоимость", callback_data="calc_total",
+                **styled_button_api_kwargs(style="constructive")
+            )
         ],
         [
-            InlineKeyboardButton("Сбросить", callback_data="calc_reset"),
+            InlineKeyboardButton(
+                "Сбросить", callback_data="calc_reset",
+                **styled_button_api_kwargs(style="destructive")
+            ),
             InlineKeyboardButton("Назад в меню", callback_data="menu_back")
         ]
     ]
@@ -88,7 +99,10 @@ def get_calculator_keyboard() -> InlineKeyboardMarkup:
 def get_lead_keyboard() -> InlineKeyboardMarkup:
     keyboard = [
         [
-            InlineKeyboardButton("Да, хочу заказать!", callback_data="lead_submit")
+            InlineKeyboardButton(
+                "Да, хочу заказать!", callback_data="lead_submit",
+                **styled_button_api_kwargs(style="constructive")
+            )
         ],
         [
             InlineKeyboardButton("Задать вопрос", callback_data="lead_question"),
