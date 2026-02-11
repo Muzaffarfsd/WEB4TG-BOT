@@ -8,6 +8,14 @@ The WEB4TG Studio AI Agent Bot serves as an AI-powered support agent for WEB4TG 
 - **Развёртывание**: Бот работает ТОЛЬКО на Railway, НЕ запускать на Replit
 
 ## Recent Changes (February 2026)
+- **Deep Security & Performance Audit (Feb 11, session 2)**:
+  - CRITICAL: `media.py` — fixed wrong import of `execute_tool_call` (was from messages.py, now tool_handlers.py)
+  - SECURITY: `broadcast.py` — added `ALLOWED_BROADCAST_COLUMNS` whitelist for SQL injection protection
+  - SECURITY: `payments.py` — added `_validate_payment_amount()` with payload-to-product price verification
+  - BUG: `followup.py` — added `sent_today` field to `get_stats()` (was using nonexistent key in admin digest)
+  - PERFORMANCE: `leads.py` — `update_activity()` consolidated to single DB connection with RETURNING
+  - PERFORMANCE: `followup.py` — `generate_follow_up_message()` now uses shared `ai_client` instead of creating new Gemini instances
+  - ERROR HANDLING: `session.py` — `_save_message_to_db()` truncates content at 10,000 chars
 - **Code Audit & Bug Fixes (Feb 11)**:
   - FIXED: `context_builder.py` — `fetch_one` replaced with `execute_one` (undefined import bug)
   - FIXED: `tool_handlers.py` — `compare_plans` now tracks propensity scoring

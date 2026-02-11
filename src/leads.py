@@ -416,25 +416,58 @@ class LeadManager:
         
         try:
             with self._get_connection() as conn:
-                with conn.cursor() as cur:
+                with conn.cursor(cursor_factory=RealDictCursor) as cur:
                     cur.execute("""
                         UPDATE leads SET 
                             last_activity = CURRENT_TIMESTAMP,
                             message_count = COALESCE(message_count, 0) + 1,
                             updated_at = CURRENT_TIMESTAMP
                         WHERE user_id = %s
+                        RETURNING *
                     """, (user_id,))
-            
-            score = self.calculate_score(user_id)
-            self.update_lead(user_id, score=score)
-            
-            lead = self.get_lead(user_id)
-            if lead and lead.score >= 50:
-                self.update_lead(user_id, priority=LeadPriority.HOT)
-            elif lead and lead.score >= 25:
-                self.update_lead(user_id, priority=LeadPriority.WARM)
+                    row = cur.fetchone()
+                    if not row:
+                        return
+                    
+                    lead = self._row_to_lead(row)
+                    score = self._calculate_score_from_lead(lead)
+                    
+                    priority_val = lead.priority.value if lead.priority else "cold"
+                    if score >= 50:
+                        priority_val = LeadPriority.HOT.value
+                    elif score >= 25:
+                        priority_val = LeadPriority.WARM.value
+                    
+                    cur.execute("""
+                        UPDATE leads SET score = %s, priority = %s, updated_at = CURRENT_TIMESTAMP
+                        WHERE user_id = %s
+                    """, (score, priority_val, user_id))
         except Exception as e:
             logger.error(f"Failed to update activity: {e}")
+    
+    def _calculate_score_from_lead(self, lead) -> int:
+        score = 0
+        if lead.phone:
+            score += 20
+        if lead.business_type:
+            score += 15
+        if lead.budget:
+            score += 15
+        if lead.estimated_cost > 0:
+            score += 10
+        if lead.selected_features:
+            score += min(len(lead.selected_features) * 5, 20)
+        if lead.message_count >= 5:
+            score += 10
+        elif lead.message_count >= 2:
+            score += 5
+        if lead.last_activity:
+            hours_since = (time.time() - lead.last_activity) / 3600
+            if hours_since < 24:
+                score += 10
+            elif hours_since < 72:
+                score += 5
+        return min(score, 100)
     
     def add_tag(self, user_id: int, tag: str) -> Optional[Lead]:
         lead = self.get_lead(user_id)

@@ -94,7 +94,7 @@ def _save_message_to_db(user_id: int, role: str, content: str):
         from src.database import execute_query
         execute_query(
             "INSERT INTO conversation_history (telegram_id, role, content) VALUES (%s, %s, %s)",
-            (user_id, role, content)
+            (user_id, role, content[:10000])
         )
     except Exception as e:
         logger.debug(f"Failed to save message to DB: {e}")

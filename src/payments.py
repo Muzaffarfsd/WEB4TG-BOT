@@ -328,7 +328,26 @@ async def create_stars_invoice(bot, chat_id: int, product_id: str) -> bool:
         return False
 
 
+def _validate_payment_amount(payload: str, total_amount: int) -> bool:
+    if total_amount <= 0:
+        return False
+    parts = payload.split("_")
+    if len(parts) >= 2:
+        product_id = parts[1]
+        product = STARS_PRODUCTS.get(product_id)
+        if product and product["price_stars"] != total_amount:
+            return False
+    return True
+
 async def handle_successful_payment(user_id: int, payload: str, total_amount: int) -> str:
+    if total_amount <= 0:
+        logger.warning(f"Invalid payment amount: user={user_id}, amount={total_amount}")
+        return "❌ Ошибка: некорректная сумма платежа."
+
+    if not _validate_payment_amount(payload, total_amount):
+        logger.warning(f"Payment amount mismatch: user={user_id}, payload={payload}, amount={total_amount}")
+        return "❌ Ошибка: сумма платежа не соответствует выбранному продукту."
+
     try:
         if DATABASE_URL:
             with get_connection() as conn:

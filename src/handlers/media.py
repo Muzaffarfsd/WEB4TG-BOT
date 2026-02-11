@@ -334,7 +334,7 @@ async def voice_handler(update: Update, context: ContextTypes.DEFAULT_TYPE) -> N
         else:
             messages_for_ai = [voice_instruction, voice_ack] + messages_for_ai
 
-        from src.handlers.messages import execute_tool_call
+        from src.tool_handlers import execute_tool_call
 
         async def _tool_executor(tool_name, tool_args):
             return await execute_tool_call(

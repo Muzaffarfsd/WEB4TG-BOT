@@ -213,19 +213,26 @@ class BroadcastManager:
             logger.error(f"Failed to create broadcast: {e}")
             return None
 
+    ALLOWED_BROADCAST_COLUMNS = {
+        "status", "total_users", "sent_count", "failed_count",
+        "blocked_count", "completed_at", "text_content", "media_file_id",
+        "caption", "parse_mode", "target_audience"
+    }
+
     def update_broadcast(self, broadcast_id: int, **kwargs):
         if not DATABASE_URL:
+            return
+        safe_kwargs = {k: v for k, v in kwargs.items() if k in self.ALLOWED_BROADCAST_COLUMNS}
+        if not safe_kwargs:
             return
         try:
             with self._get_connection() as conn:
                 with conn.cursor() as cur:
                     set_parts = []
                     values = []
-                    for key, value in kwargs.items():
+                    for key, value in safe_kwargs.items():
                         set_parts.append(f"{key} = %s")
                         values.append(value)
-                    if not set_parts:
-                        return
                     values.append(broadcast_id)
                     cur.execute(
                         f"UPDATE broadcasts SET {', '.join(set_parts)} WHERE id = %s",

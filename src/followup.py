@@ -367,23 +367,14 @@ class FollowUpManager:
             prompt_template = FOLLOW_UP_PROMPTS.get(follow_up_number, FOLLOW_UP_PROMPTS[1])
             prompt = prompt_template.format(context=context)
 
-            from google import genai
-            from google.genai import types
-
-            client = genai.Client(api_key=config.gemini_api_key)
-
-            response = await asyncio.to_thread(
-                client.models.generate_content,
-                model=config.fast_model_name,
-                contents=[prompt],
-                config=types.GenerateContentConfig(
-                    max_output_tokens=300,
-                    temperature=0.8
-                )
+            from src.ai_client import ai_client
+            result = await ai_client.generate_response(
+                messages=[{"role": "user", "parts": [{"text": prompt}]}],
+                thinking_level="low"
             )
 
-            if response.text:
-                text = response.text.strip().strip('"').strip("'")
+            if result:
+                text = result.strip().strip('"').strip("'")
                 return text
 
         except Exception as e:
@@ -463,7 +454,8 @@ class FollowUpManager:
         if not DATABASE_URL:
             return {
                 "total": 0, "scheduled": 0, "sent": 0,
-                "responded": 0, "cancelled": 0, "paused": 0
+                "responded": 0, "cancelled": 0, "paused": 0,
+                "sent_today": 0
             }
 
         try:
@@ -476,7 +468,8 @@ class FollowUpManager:
                             COUNT(*) FILTER (WHERE status = 'sent') as sent,
                             COUNT(*) FILTER (WHERE status = 'responded') as responded,
                             COUNT(*) FILTER (WHERE status = 'cancelled') as cancelled,
-                            COUNT(*) FILTER (WHERE status = 'paused') as paused
+                            COUNT(*) FILTER (WHERE status = 'paused') as paused,
+                            COUNT(*) FILTER (WHERE status = 'sent' AND sent_at >= CURRENT_DATE) as sent_today
                         FROM follow_ups
                     """)
                     row = cur.fetchone()
@@ -487,7 +480,8 @@ class FollowUpManager:
 
         return {
             "total": 0, "scheduled": 0, "sent": 0,
-            "responded": 0, "cancelled": 0, "paused": 0
+            "responded": 0, "cancelled": 0, "paused": 0,
+            "sent_today": 0
         }
 
 
