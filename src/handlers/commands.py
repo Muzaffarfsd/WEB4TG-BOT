@@ -124,17 +124,17 @@ async def start_handler(update: Update, context: ContextTypes.DEFAULT_TYPE) -> N
         reply_markup=get_quick_reply_keyboard()
     )
     
-    voice_greeting = f"""Привет{name_part}! Меня зовут Алекс, я консультант в WEB4TG Studio.
-
-Мы делаем Telegram Mini Apps для бизнеса — магазины, рестораны, салоны и много чего ещё.
-
-Можем общаться как удобно — текстом или голосовыми, мне без разницы)
-
-Расскажи, чем занимаешься? Посмотрим, чем можем помочь."""
+    voice_greeting = (
+        f"[warm] Привет{name_part}! Меня зовут Алекс, я консультант в вэб-фор-тэ-гэ Студио. "
+        f"[excited] Мы делаем мини-аппс для Телегра́м — магазины, рестораны, салоны и много чего ещё. "
+        f"[friendly] Можем общаться как удобно — текстом или голосовыми, мне без разницы. "
+        f"[curious] Расскажи, чем занимаешься? Посмотрим, чем можем помочь."
+    )
 
     try:
         await update.effective_chat.send_action(ChatAction.RECORD_VOICE)
-        voice_audio = await generate_voice_response(voice_greeting)
+        use_cache = not name_part
+        voice_audio = await generate_voice_response(voice_greeting, use_cache=use_cache)
         await update.message.reply_voice(voice=voice_audio)
         ab_testing.track_event(user.id, "welcome_voice", "voice_sent")
         logger.info(f"Sent voice greeting to user {user.id}")

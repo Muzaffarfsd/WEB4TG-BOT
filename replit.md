@@ -76,11 +76,19 @@ Button styles (Bot API 9.4): `constructive` (green), `destructive` (red) applied
 - **Agentic Loop**: Voice messages use same `ai_client.agentic_loop()` as text — AI can call all 11 tools (calculator, portfolio, ROI, etc.)
 - **Context Injection**: build_full_context() provides funnel stage, client profile, history to voice AI responses
 - **ElevenLabs v3 TTS**: Native audio tags ([whispers], [sighs], [laughs], [giggles], [shouts], [happy], [sad], [angry], [excited], [nervous]) + style tags ([friendly], [calm], [confident], [warm], [curious])
-- **Voice Settings**: stability=0.4, similarity_boost=0.8, style=0.6, use_speaker_boost=True — optimized for expressiveness
+- **Voice Settings**: stability=0.4, similarity_boost=0.8, style=0.6 — optimized for v3 expressiveness (use_speaker_boost not supported on v3)
 - **Emotion Preprocessing**: Gemini Flash analyzes response text and inserts native v3 audio tags before TTS
+- **Voice-Aware Prompt**: VOICE_CONTEXT_INSTRUCTION injected into AI context — forces conversational style, 500-700 chars, no markdown/emoji, expanded abbreviations
+- **Abbreviation Expansion**: 30-entry ABBREVIATION_MAP (ROI→ар-о-ай, CRM→си-ар-эм, etc.) applied before TTS for natural pronunciation
+- **Stress Dictionary**: 55+ word pronunciation guide for correct Russian stress marks
+- **Singleton ElevenLabs Client**: _get_elevenlabs_client() — reuses connection, avoids per-request overhead
+- **Voice Caching**: generate_voice_response(use_cache=True) — caches welcome audio and repeated responses (LRU 10 entries)
+- **Voice Preference Tracking**: context.user_data['prefers_voice'] and voice_message_count for analytics
 - **Post-Processing Parity**: auto_tag_lead, auto_score_lead, extract_insights, summarize — identical to text handler
 - **Dynamic Buttons**: Stage-aware buttons shown after voice response ("Ответил голосовым. Если нужны детали:")
 - **Follow-Up Integration**: cancel + reschedule follow-ups on voice message (same as text)
-- **Fallback**: If agentic loop fails, falls back to direct Gemini with context + history
-- **Text Cleanup**: Markdown/emoji removal, stress dictionary, 4500 char limit with sentence boundary
+- **Fallback**: If agentic loop fails, falls back to direct Gemini with context + history + voice instruction
+- **Text Cleanup**: Unicode emoji removal, markdown stripping, stress dictionary, abbreviation expansion, 4500 char limit with sentence boundary
+- **Welcome Greeting**: Pre-tagged with [warm], [excited], [friendly], [curious] emotion tags, cached for generic greetings
+- **Photo Handler**: Upgraded with build_full_context, dynamic buttons, lead scoring (partial agentic parity)
 - **Format**: mp3_44100_192 for maximum quality with v3 model

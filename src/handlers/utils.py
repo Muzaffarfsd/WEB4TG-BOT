@@ -1,6 +1,7 @@
 import asyncio
 import logging
 import os
+import re
 from telegram import Update
 from telegram.constants import ChatAction
 
@@ -53,6 +54,38 @@ So what's your business about? Let's see how we can help.""",
 }
 
 
+ABBREVIATION_MAP = {
+    "ROI": "ар-о-ай",
+    "CRM": "си-ар-эм",
+    "UX": "ю-экс",
+    "UI": "ю-ай",
+    "UX/UI": "ю-экс ю-ай",
+    "API": "эй-пи-ай",
+    "SaaS": "сас",
+    "MVP": "эм-ви-пи",
+    "KPI": "кей-пи-ай",
+    "SEO": "сео",
+    "SMM": "эс-эм-эм",
+    "B2B": "би-ту-би",
+    "B2C": "би-ту-си",
+    "IT": "ай-ти",
+    "FAQ": "эф-эй-кью",
+    "PDF": "пи-ди-эф",
+    "AI": "эй-ай",
+    "TG": "тэ-гэ",
+    "Mini App": "мини-апп",
+    "Mini Apps": "мини-аппс",
+    "Web App": "веб-апп",
+    "WEB4TG": "вэб-фор-тэ-гэ",
+    "HTML": "эйч-ти-эм-эл",
+    "CSS": "си-эс-эс",
+    "JS": "джей-эс",
+    "QR": "кью-ар",
+    "NDA": "эн-ди-эй",
+    "ТЗ": "тэ-зэ",
+}
+
+
 STRESS_DICTIONARY = {
     "разработка": "разрабо́тка",
     "приложение": "приложе́ние",
@@ -93,11 +126,37 @@ STRESS_DICTIONARY = {
     "бизнес": "би́знес",
     "менеджер": "ме́неджер",
     "маркетплейс": "маркетпле́йс",
+    "подписка": "подпи́ска",
+    "интеграция": "интегра́ция",
+    "аналитика": "анали́тика",
+    "монетизация": "монетиза́ция",
+    "конверсия": "конве́рсия",
+    "шаблон": "шабло́н",
+    "платёж": "платёж",
+    "оплата": "опла́та",
+    "скидка": "ски́дка",
+    "тариф": "тари́ф",
+    "портфолио": "портфо́лио",
+    "калькулятор": "калькуля́тор",
+    "консультант": "консульта́нт",
+    "автоматизация": "автоматиза́ция",
+    "уведомление": "уведомле́ние",
+    "бронирование": "брони́рование",
+    "доставка": "доста́вка",
+    "ресторан": "рестора́н",
+    "фитнес": "фи́тнес",
 }
 
 
+def expand_abbreviations(text: str) -> str:
+    result = text
+    for abbr, pronunciation in sorted(ABBREVIATION_MAP.items(), key=lambda x: len(x[0]), reverse=True):
+        pattern = re.compile(r'\b' + re.escape(abbr) + r'\b')
+        result = pattern.sub(pronunciation, result)
+    return result
+
+
 def apply_stress_marks(text: str) -> str:
-    import re
     result = text
     for word, stressed in STRESS_DICTIONARY.items():
         pattern = re.compile(re.escape(word), re.IGNORECASE)
@@ -106,7 +165,6 @@ def apply_stress_marks(text: str) -> str:
 
 
 def get_broadcast_audience_keyboard(counts: dict):
-    """Build broadcast audience selection keyboard."""
     from telegram import InlineKeyboardMarkup, InlineKeyboardButton
     return InlineKeyboardMarkup([
         [InlineKeyboardButton(f"📤 Всем ({counts.get('all', 0)})", callback_data="bc_audience_all")],
