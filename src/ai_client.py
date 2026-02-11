@@ -304,6 +304,92 @@ TOOL_DECLARATIONS = [
             "type": "object",
             "properties": {}
         }
+    },
+    {
+        "name": "calculate_roi",
+        "description": "Рассчитать окупаемость (ROI) Telegram Mini App для бизнеса клиента. Вызывай когда клиент сомневается в выгоде, спрашивает 'зачем мне это' или 'окупится ли'.",
+        "parameters": {
+            "type": "object",
+            "properties": {
+                "business_type": {
+                    "type": "string",
+                    "description": "Тип бизнеса: restaurant, shop, beauty, education, services, fitness, delivery, other"
+                },
+                "monthly_clients": {
+                    "type": "integer",
+                    "description": "Примерное количество клиентов в месяц"
+                },
+                "avg_check": {
+                    "type": "integer",
+                    "description": "Средний чек в рублях"
+                }
+            },
+            "required": ["business_type"]
+        }
+    },
+    {
+        "name": "compare_plans",
+        "description": "Сравнить тарифные планы и пакеты услуг. Вызывай когда клиент не может выбрать между вариантами или просит сравнение.",
+        "parameters": {
+            "type": "object",
+            "properties": {
+                "plan_type": {
+                    "type": "string",
+                    "enum": ["packages", "subscriptions", "custom_vs_template"],
+                    "description": "Что сравнить: packages (MVP/Standard/Premium), subscriptions (подписки), custom_vs_template (заказная vs шаблон)"
+                }
+            },
+            "required": ["plan_type"]
+        }
+    },
+    {
+        "name": "schedule_consultation",
+        "description": "Записать клиента на бесплатную консультацию с менеджером. Вызывай когда клиент хочет обсудить проект подробнее, задаёт сложные вопросы или готов к созвону.",
+        "parameters": {
+            "type": "object",
+            "properties": {
+                "preferred_time": {
+                    "type": "string",
+                    "description": "Предпочитаемое время (если указано)"
+                },
+                "topic": {
+                    "type": "string",
+                    "description": "Тема консультации"
+                }
+            },
+            "required": ["topic"]
+        }
+    },
+    {
+        "name": "generate_brief",
+        "description": "Сгенерировать краткое ТЗ (бриф) на основе обсуждения с клиентом. Вызывай когда клиент описал свой проект и нужно резюмировать требования.",
+        "parameters": {
+            "type": "object",
+            "properties": {
+                "project_description": {
+                    "type": "string",
+                    "description": "Описание проекта клиента"
+                },
+                "features": {
+                    "type": "array",
+                    "items": {"type": "string"},
+                    "description": "Список нужных функций"
+                },
+                "deadline": {
+                    "type": "string",
+                    "description": "Желаемые сроки"
+                }
+            },
+            "required": ["project_description"]
+        }
+    },
+    {
+        "name": "check_discount",
+        "description": "Проверить доступные скидки для клиента. Вызывай когда клиент спрашивает про скидки, акции, промокоды.",
+        "parameters": {
+            "type": "object",
+            "properties": {}
+        }
     }
 ]
 

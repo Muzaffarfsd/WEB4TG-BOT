@@ -299,6 +299,68 @@ async def photo_handler(update: Update, context: ContextTypes.DEFAULT_TYPE) -> N
     pending_review_type = context.user_data.get("pending_review_type")
     
     if pending_review_type != "text_photo":
+        typing_task = asyncio.create_task(
+            send_typing_action(update, duration=30.0)
+        )
+        try:
+            photo = update.message.photo[-1] if update.message.photo else None
+            if not photo:
+                return
+            
+            file = await context.bot.get_file(photo.file_id)
+            photo_bytes = await file.download_as_bytearray()
+            
+            from google import genai
+            from google.genai import types
+            from src.knowledge_base import SYSTEM_PROMPT
+            
+            client = genai.Client(api_key=config.gemini_api_key)
+            
+            caption = update.message.caption or ""
+            
+            image_part = types.Part.from_bytes(data=bytes(photo_bytes), mime_type="image/jpeg")
+            
+            user_instruction = caption if caption else "Клиент отправил изображение. Проанализируй что на нём и ответь как консультант Алекс из WEB4TG Studio. Если это скриншот приложения или дизайн — оцени и предложи улучшения. Если это ТЗ или схема — проанализируй и дай рекомендации. Если это что-то другое — вежливо спроси как это связано с разработкой Mini App."
+            
+            text_part = types.Part(text=user_instruction)
+            
+            session = session_manager.get_session(
+                user_id=user.id,
+                username=user.username,
+                first_name=user.first_name
+            )
+            
+            response = await asyncio.to_thread(
+                client.models.generate_content,
+                model=config.model_name,
+                contents=[image_part, text_part],
+                config=types.GenerateContentConfig(
+                    system_instruction=SYSTEM_PROMPT,
+                    max_output_tokens=1000,
+                    temperature=0.7
+                )
+            )
+            
+            typing_task.cancel()
+            
+            if response.text:
+                session.add_message("user", f"[Фото]{f': {caption}' if caption else ''}", config.max_history_length)
+                session.add_message("assistant", response.text, config.max_history_length)
+                
+                lead_manager.save_message(user.id, "user", f"[Фото]{f': {caption}' if caption else ''}")
+                lead_manager.save_message(user.id, "assistant", response.text)
+                lead_manager.log_event("photo_analysis", user.id)
+                lead_manager.update_activity(user.id)
+                
+                await update.message.reply_text(response.text, parse_mode="Markdown")
+            else:
+                await update.message.reply_text("Не удалось проанализировать изображение. Попробуйте описать словами что вам нужно.")
+        except Exception as e:
+            typing_task.cancel()
+            logger.error(f"Photo analysis error: {e}")
+            await update.message.reply_text(
+                "Не удалось обработать фото. Опишите словами что вам нужно, я помогу!"
+            )
         return
     
     photo = update.message.photo[-1] if update.message.photo else None

@@ -57,6 +57,157 @@ async def execute_tool_call(tool_name: str, args: dict, user_id: int, username: 
     elif tool_name == "show_payment_info":
         return "[PAYMENT]"
 
+    elif tool_name == "calculate_roi":
+        business_type = args.get("business_type", "other")
+        monthly_clients = args.get("monthly_clients", 200)
+        avg_check = args.get("avg_check", 3000)
+        
+        roi_data = {
+            "restaurant": {"conversion_boost": 0.25, "retention_boost": 0.30, "name": "Ресторан/Кафе"},
+            "shop": {"conversion_boost": 0.20, "retention_boost": 0.25, "name": "Магазин"},
+            "beauty": {"conversion_boost": 0.30, "retention_boost": 0.35, "name": "Салон красоты"},
+            "education": {"conversion_boost": 0.15, "retention_boost": 0.20, "name": "Образование"},
+            "services": {"conversion_boost": 0.20, "retention_boost": 0.25, "name": "Услуги"},
+            "fitness": {"conversion_boost": 0.25, "retention_boost": 0.30, "name": "Фитнес"},
+            "delivery": {"conversion_boost": 0.30, "retention_boost": 0.20, "name": "Доставка"},
+            "other": {"conversion_boost": 0.20, "retention_boost": 0.25, "name": "Бизнес"},
+        }
+        
+        data = roi_data.get(business_type, roi_data["other"])
+        extra_clients = int(monthly_clients * data["conversion_boost"])
+        extra_revenue = extra_clients * avg_check
+        yearly_extra = extra_revenue * 12
+        app_cost = 150000
+        roi_percent = int((yearly_extra - app_cost) / app_cost * 100)
+        payback_months = max(1, int(app_cost / extra_revenue)) if extra_revenue > 0 else 12
+        
+        return (
+            f"📊 Расчёт ROI для: {data['name']}\n\n"
+            f"Текущие клиенты/мес: {monthly_clients}\n"
+            f"Средний чек: {avg_check:,}₽\n\n".replace(",", " ") +
+            f"С Mini App (+{int(data['conversion_boost']*100)}% конверсия):\n"
+            f"• Доп. клиенты: +{extra_clients}/мес\n"
+            f"• Доп. выручка: +{extra_revenue:,}₽/мес\n".replace(",", " ") +
+            f"• За год: +{yearly_extra:,}₽\n\n".replace(",", " ") +
+            f"ROI: {roi_percent}%\n"
+            f"Окупаемость: ~{payback_months} мес."
+        )
+
+    elif tool_name == "compare_plans":
+        plan_type = args.get("plan_type", "packages")
+        
+        if plan_type == "packages":
+            return (
+                "📦 Сравнение пакетов:\n\n"
+                "MVP (от 80 000₽, 7-10 дней):\n"
+                "• Каталог + корзина + оплата\n"
+                "• Идеально для запуска и проверки идеи\n\n"
+                "Standard (от 180 000₽, 10-15 дней):\n"
+                "• MVP + личный кабинет + push + аналитика\n"
+                "• Для растущего бизнеса\n\n"
+                "Premium (от 350 000₽, 15-25 дней):\n"
+                "• Полный функционал + AI + CRM + интеграции\n"
+                "• Для масштабирования"
+            )
+        elif plan_type == "subscriptions":
+            return (
+                "🔄 Подписки на поддержку:\n\n"
+                "Минимум (15 000₽/мес):\n"
+                "• Техподдержка + мониторинг + мелкие правки\n\n"
+                "Стандарт (35 000₽/мес):\n"
+                "• + новые фичи + A/B тесты + аналитика\n\n"
+                "Премиум (70 000₽/мес):\n"
+                "• + выделенный разработчик + приоритет + стратегия"
+            )
+        else:
+            return (
+                "⚖️ Заказная разработка vs Шаблон:\n\n"
+                "Шаблон (от 30 000₽):\n"
+                "✅ Быстро (3-5 дней)\n"
+                "❌ Ограничен по функционалу\n\n"
+                "Заказная (от 80 000₽):\n"
+                "✅ Уникальный дизайн и функционал\n"
+                "✅ Масштабируется под бизнес\n"
+                "✅ Premium Apple-стиль дизайн"
+            )
+
+    elif tool_name == "schedule_consultation":
+        topic = args.get("topic", "обсуждение проекта")
+        preferred_time = args.get("preferred_time", "")
+        
+        lead_manager.create_lead(user_id=user_id, username=username, first_name=first_name)
+        lead_manager.update_lead(user_id, score=40, priority=LeadPriority.HOT)
+        lead_manager.add_tag(user_id, "consultation")
+        lead_manager.log_event("schedule_consultation", user_id, {"topic": topic, "time": preferred_time})
+        
+        time_str = f" на {preferred_time}" if preferred_time else ""
+        return (
+            f"📅 Заявка на консультацию создана!\n\n"
+            f"Тема: {topic}\n"
+            f"{f'Время: {preferred_time}' if preferred_time else ''}\n\n"
+            f"Менеджер свяжется в ближайшее время{time_str}. "
+            f"Консультация бесплатная и ни к чему не обязывает."
+        )
+
+    elif tool_name == "generate_brief":
+        desc = args.get("project_description", "")
+        features = args.get("features", [])
+        deadline = args.get("deadline", "")
+        
+        brief_lines = ["📋 Бриф проекта:\n"]
+        brief_lines.append(f"Описание: {desc}")
+        if features:
+            brief_lines.append(f"Функции: {', '.join(features)}")
+        if deadline:
+            brief_lines.append(f"Сроки: {deadline}")
+        
+        from src.calculator import FEATURES as CALC_FEATURES
+        if features:
+            valid_features = [f for f in features if f in CALC_FEATURES]
+            if valid_features:
+                total = sum(CALC_FEATURES[f]["price"] for f in valid_features)
+                brief_lines.append(f"\nОриентировочная стоимость: {total:,}₽".replace(",", " "))
+        
+        brief_lines.append("\nСледующий шаг: отправить бриф менеджеру для точной оценки")
+        
+        lead_manager.create_lead(user_id=user_id, username=username, first_name=first_name)
+        lead_manager.add_tag(user_id, "brief")
+        lead_manager.log_event("generate_brief", user_id, {"description": desc[:200]})
+        
+        return "\n".join(brief_lines)
+
+    elif tool_name == "check_discount":
+        discounts = []
+        try:
+            from src.tasks_tracker import tasks_tracker
+            progress = tasks_tracker.get_user_progress(user_id)
+            if progress and progress.total_coins > 0:
+                discount = progress.get_discount_percent()
+                discounts.append(f"🪙 Накоплено {progress.total_coins} монет → скидка {discount}%")
+        except Exception:
+            pass
+        try:
+            from src.loyalty import loyalty_system as ls
+            if ls.is_returning_customer(user_id):
+                discounts.append("🔄 Постоянный клиент → +5% скидка")
+            reviews = ls.get_user_reviews(user_id)
+            if reviews:
+                discounts.append(f"⭐ Оставлено {len(reviews)} отзывов → бонусы начислены")
+        except Exception:
+            pass
+        try:
+            from src.referrals import referral_system
+            referrals = referral_system.get_referrals_list(user_id)
+            if referrals:
+                discounts.append(f"👥 {len(referrals)} рефералов → реферальные бонусы")
+        except Exception:
+            pass
+        
+        if discounts:
+            return "🎁 Ваши доступные скидки:\n\n" + "\n".join(discounts)
+        else:
+            return "Пока нет скидок, но вы можете заработать монеты через задания (/bonus) и получить скидку до 10%!"
+
     return "Инструмент не найден"
 
 
@@ -270,6 +421,9 @@ async def message_handler(update: Update, context: ContextTypes.DEFAULT_TYPE) ->
     follow_up_manager.cancel_follow_ups(user.id)
     follow_up_manager.schedule_follow_up(user.id)
     
+    from src.context_builder import build_full_context
+    client_context = build_full_context(user.id, user_message, user.username, user.first_name)
+    
     typing_task = asyncio.create_task(
         send_typing_action(update, duration=60.0)
     )
@@ -279,9 +433,15 @@ async def message_handler(update: Update, context: ContextTypes.DEFAULT_TYPE) ->
 
         response = None
 
+        messages_for_ai = session.get_history()
+        if client_context:
+            context_msg = {"role": "user", "parts": [{"text": f"[СИСТЕМНЫЙ КОНТЕКСТ — не показывай клиенту, используй для персонализации]\n{client_context}"}]}
+            response_ack = {"role": "model", "parts": [{"text": "Понял контекст, учту в ответе."}]}
+            messages_for_ai = [context_msg, response_ack] + messages_for_ai
+
         try:
             result = await ai_client.generate_response_with_tools(
-                messages=session.get_history(),
+                messages=messages_for_ai,
                 thinking_level=thinking_level
             )
 
@@ -369,7 +529,7 @@ async def message_handler(update: Update, context: ContextTypes.DEFAULT_TYPE) ->
                         pass
 
             response = await ai_client.generate_response_stream(
-                messages=session.get_history(),
+                messages=messages_for_ai,
                 thinking_level=thinking_level,
                 on_chunk=on_stream_chunk
             )

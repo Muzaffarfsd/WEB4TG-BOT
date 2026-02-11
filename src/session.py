@@ -1,7 +1,17 @@
 import time
+import logging
 from dataclasses import dataclass, field
 from typing import Dict, List, Optional
 from collections import OrderedDict
+
+logger = logging.getLogger(__name__)
+
+DATABASE_URL = None
+try:
+    import os
+    DATABASE_URL = os.environ.get("RAILWAY_DATABASE_URL") or os.environ.get("DATABASE_URL")
+except Exception:
+    pass
 
 
 @dataclass
@@ -20,6 +30,7 @@ class UserSession:
     created_at: float = field(default_factory=time.time)
     last_activity: float = field(default_factory=time.time)
     message_count: int = 0
+    _loaded_from_db: bool = False
     
     def add_message(self, role: str, content: str, max_history: int = 30) -> None:
         if role == "user":
@@ -38,6 +49,8 @@ class UserSession:
         
         self.last_activity = time.time()
         self.message_count += 1
+
+        _save_message_to_db(self.user_id, role, content)
     
     def get_history(self) -> List[Dict]:
         return self.messages.copy()
@@ -45,6 +58,84 @@ class UserSession:
     def clear_history(self) -> None:
         self.messages = []
         self.last_activity = time.time()
+        _clear_history_db(self.user_id)
+
+
+def _save_message_to_db(user_id: int, role: str, content: str):
+    if not DATABASE_URL:
+        return
+    try:
+        from src.database import execute_query
+        execute_query(
+            "INSERT INTO conversation_history (telegram_id, role, content) VALUES (%s, %s, %s)",
+            (user_id, role, content)
+        )
+    except Exception as e:
+        logger.debug(f"Failed to save message to DB: {e}")
+
+
+def _clear_history_db(user_id: int):
+    if not DATABASE_URL:
+        return
+    try:
+        from src.database import execute_query
+        execute_query("DELETE FROM conversation_history WHERE telegram_id = %s", (user_id,))
+    except Exception as e:
+        logger.debug(f"Failed to clear history from DB: {e}")
+
+
+def _load_history_from_db(user_id: int, limit: int = 20) -> List[Dict]:
+    if not DATABASE_URL:
+        return []
+    try:
+        from src.database import execute_query
+        rows = execute_query(
+            """SELECT role, content FROM conversation_history 
+               WHERE telegram_id = %s 
+               ORDER BY created_at DESC LIMIT %s""",
+            (user_id, limit),
+            fetch=True, dict_cursor=True
+        )
+        if not rows:
+            return []
+        
+        messages = []
+        for row in reversed(rows):
+            gemini_role = "user" if row["role"] == "user" else "model"
+            messages.append({
+                "role": gemini_role,
+                "parts": [{"text": row["content"]}]
+            })
+        return messages
+    except Exception as e:
+        logger.debug(f"Failed to load history from DB: {e}")
+        return []
+
+
+def _init_conversation_table():
+    if not DATABASE_URL:
+        return
+    try:
+        from src.database import execute_query
+        execute_query("""
+            CREATE TABLE IF NOT EXISTS conversation_history (
+                id SERIAL PRIMARY KEY,
+                telegram_id BIGINT NOT NULL,
+                role VARCHAR(20) NOT NULL,
+                content TEXT NOT NULL,
+                created_at TIMESTAMP DEFAULT NOW()
+            )
+        """)
+        execute_query(
+            "CREATE INDEX IF NOT EXISTS idx_conv_history_tid ON conversation_history(telegram_id)"
+        )
+        execute_query("""
+            DELETE FROM conversation_history 
+            WHERE created_at < NOW() - INTERVAL '7 days'
+        """)
+        logger.info("Conversation history table initialized")
+    except Exception as e:
+        logger.warning(f"Failed to init conversation_history table: {e}")
 
 
 class SessionManager:
@@ -52,6 +143,7 @@ class SessionManager:
         self._sessions: OrderedDict[int, UserSession] = OrderedDict()
         self._max_sessions = max_sessions
         self._session_ttl = session_ttl
+        _init_conversation_table()
     
     def get_session(self, user_id: int, username: Optional[str] = None, 
                     first_name: Optional[str] = None) -> UserSession:
@@ -63,10 +155,14 @@ class SessionManager:
             self._sessions.move_to_end(user_id)
             return session
         
+        db_messages = _load_history_from_db(user_id)
+        
         session = UserSession(
             user_id=user_id,
             username=username,
-            first_name=first_name
+            first_name=first_name,
+            messages=db_messages,
+            _loaded_from_db=bool(db_messages)
         )
         self._sessions[user_id] = session
         

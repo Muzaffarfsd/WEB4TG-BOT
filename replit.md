@@ -37,17 +37,24 @@ To get custom emoji IDs: send a custom emoji from a sticker pack to the bot, use
 Button styles (Bot API 9.4): `constructive` (green), `destructive` (red) applied via `styled_button_api_kwargs()`.
 
 ## Recent Changes (Feb 11, 2026)
-- Fixed callback routing bug: `callback_data="menu"` in payments.py changed to `"menu_back"` (button "Назад" was not working)
-- Added handlers for subscription buttons (`sub_min`, `sub_std`, `sub_premium`) — now show detailed plan info with CTA
-- Updated `price_subs` callback to show subscription selection buttons instead of just back button
-- Removed dead code: duplicate `package_app_subscription_` handler (was unreachable because general `package_` handler catches it first via `startswith`)
-- Improved `package_` handler: added proper "Назад → loyalty_packages" navigation and fallback for unknown package IDs
-- Full callback_data audit: all 81 callback_data values handled, 31 commands registered, 0 syntax errors, 0 dead routes
-- Prefix conflict `bc_` → `bc_audience_` verified as correct nested elif (not a routing bug)
-- **Critical fix**: Added missing `add_coins` method to `TasksTracker` class — was causing `AttributeError` when manager approves a review (callback `mod_approve_*`)
+- **Persistent Memory**: Rewrote `src/session.py` — conversation history now stored in PostgreSQL `conversation_history` table, survives bot restarts, auto-cleanup after 7 days
+- **Context Builder** (`src/context_builder.py`): Builds client profile for AI including lead score, coins/discount, loyalty status, referrals, and action history
+- **Objection Detection**: 5 objection types (price/delay/competitor/doubt/trust) with counter-strategies injected into AI context
+- **Multimodal AI**: Photo handler in `src/handlers/media.py` now analyzes images via Gemini Vision (screenshots, designs, documents)
+- **6 New AI Tools**: `calculate_roi`, `compare_plans`, `schedule_consultation`, `generate_brief`, `check_discount` + existing 5 tools
+- **Enhanced System Prompt**: Added sales funnel stages, objection handling scripts, client profile usage guide, multimodality instructions
+- **Context Injection**: AI receives `[ПРОФИЛЬ КЛИЕНТА]` + `[ОБНАРУЖЕНО ВОЗРАЖЕНИЕ]` as prepended context messages before conversation history
+- Previous fixes: callback routing, subscription buttons, `add_coins` method, dead code removal, full audit (81 callbacks, 31 commands)
+
+## AI Agent Architecture
+- **Session**: `src/session.py` — persistent conversation memory (PostgreSQL + in-memory cache)
+- **Context Builder**: `src/context_builder.py` — client profiling + objection detection
+- **AI Client**: `src/ai_client.py` — Gemini API with 11 function-calling tools, streaming, thinking modes
+- **Knowledge Base**: `src/knowledge_base.py` — system prompt with sales funnel, pricing, FAQ
+- **Tool Execution**: `src/handlers/messages.py` — handles all 11 AI tool calls with special actions
 
 ## External Dependencies
 - **Telegram Bot API**: Version 9.4 (via `python-telegram-bot` 22.6) for core bot functionalities.
-- **Google AI (Gemini 3 Pro Preview)**: For natural language processing, AI responses, and function calling.
+- **Google AI (Gemini 3 Pro Preview)**: For natural language processing, AI responses, function calling, and vision (multimodal).
 - **PostgreSQL**: As the primary database, hosted on Railway.
 - **ElevenLabs**: (Optional) For voice greetings.
