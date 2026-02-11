@@ -48,6 +48,7 @@ Button styles (Bot API 9.4): `constructive` (green), `destructive` (red) applied
 - **Timezone-Aware Follow-Ups**: Uses `timezone_offset` from client profile to schedule follow-ups during business hours (9:00-20:00 client time).
 - **Conversation History Extended**: TTL increased from 7 to 30 days for B2B sales cycle support.
 - **Data Consistency Fixes**: compare_plans tool aligned with pricing.py (150k/170k/180k/200k templates, 9.9k/14.9k/24.9k subscriptions). Discount display corrected from max 15% to max 25% (5 tiers). Privacy policy TTL fixed from 24h to 30 days. Calculator.py synced with pricing.py (added progress feature). Industry mapping expanded (education, delivery, services). Semantic/backslide patterns expanded for better coverage.
+- **Discount System Overhaul (Feb 11)**: DISCOUNT_TIERS expanded from 4 to 6 tiers (0/5/10/15/20/25% at 0/500/1000/1500/2000/2500 coins). Max discount standardized to 25% everywhere (was inconsistent 10%/15%/30%). All tier_emoji dicts, tier names, next_tiers thresholds synchronized. loyalty.py cap changed from 30 to 25. FAQ "7 дней бесплатного теста" removed (unimplemented). ROI calc now accepts dynamic app_cost. AI tool calculate_price now includes "progress" feature.
 - Previous: persistent memory, multimodal AI, 11 AI tools, agentic loop, auto lead scoring, insight extraction, dynamic buttons, smart callbacks
 
 ## Super Agent Architecture
