@@ -43,6 +43,8 @@ from src.handlers.admin import (
     promo_list_handler,
     promo_off_handler,
     generate_daily_digest,
+    get_emoji_id_handler,
+    sticker_emoji_handler,
 )
 
 from src.handlers.messages import (
@@ -93,6 +95,8 @@ __all__ = [
     'promo_list_handler',
     'promo_off_handler',
     'generate_daily_digest',
+    'get_emoji_id_handler',
+    'sticker_emoji_handler',
     'promo_handler',
     'testimonials_handler',
     'handoff_handler',

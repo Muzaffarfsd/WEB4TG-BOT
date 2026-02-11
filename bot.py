@@ -20,6 +20,7 @@ from src.handlers import (
     faq_handler, promo_handler, testimonials_handler,
     promo_create_handler, promo_list_handler, promo_off_handler,
     generate_daily_digest, handoff_handler,
+    get_emoji_id_handler, sticker_emoji_handler,
 )
 
 logging.basicConfig(
@@ -235,12 +236,14 @@ def main() -> None:
     application.add_handler(CommandHandler("broadcast", broadcast_handler))
     application.add_handler(CommandHandler("privacy", privacy_handler))
     application.add_handler(CommandHandler("manager", handoff_handler))
+    application.add_handler(CommandHandler("get_emoji_id", get_emoji_id_handler))
     
     application.add_handler(PreCheckoutQueryHandler(pre_checkout_handler))
     application.add_handler(InlineQueryHandler(inline_query_handler))
     application.add_handler(CallbackQueryHandler(callback_handler))
     
     application.add_handler(MessageHandler(filters.SUCCESSFUL_PAYMENT, successful_payment_handler))
+    application.add_handler(MessageHandler(filters.Sticker.ALL, sticker_emoji_handler), group=1)
     application.add_handler(MessageHandler(filters.VOICE, voice_handler))
     application.add_handler(MessageHandler(filters.VIDEO | filters.VIDEO_NOTE, video_handler))
     application.add_handler(MessageHandler(filters.PHOTO, photo_handler))

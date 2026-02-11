@@ -21,20 +21,20 @@ def get_main_menu_keyboard() -> InlineKeyboardMarkup:
     keyboard = [
         [
             InlineKeyboardButton(
-                "Услуги и цены", callback_data="menu_services",
+                "🏷 Услуги и цены", callback_data="menu_services",
                 **styled_button_api_kwargs(icon_custom_emoji_id=BUTTON_EMOJI_IDS.get("services"))
             ),
             InlineKeyboardButton(
-                "Портфолио", callback_data="menu_portfolio",
+                "🖼 Портфолио", callback_data="menu_portfolio",
                 **styled_button_api_kwargs(icon_custom_emoji_id=BUTTON_EMOJI_IDS.get("portfolio"))
             )
         ],
         [
             InlineKeyboardButton(
-                "Калькулятор", callback_data="menu_calculator",
+                "🧮 Калькулятор", callback_data="menu_calculator",
                 **styled_button_api_kwargs(icon_custom_emoji_id=BUTTON_EMOJI_IDS.get("calculator"))
             ),
-            InlineKeyboardButton("AI-агент", callback_data="menu_ai_agent")
+            InlineKeyboardButton("🤖 AI-консультант", callback_data="menu_ai_agent")
         ],
         [
             InlineKeyboardButton(
@@ -78,19 +78,19 @@ def get_main_menu_keyboard() -> InlineKeyboardMarkup:
 def get_services_keyboard() -> InlineKeyboardMarkup:
     keyboard = [
         [
-            InlineKeyboardButton("Интернет-магазин", callback_data="service_shop"),
-            InlineKeyboardButton("Ресторан", callback_data="service_restaurant")
+            InlineKeyboardButton("🛒 Интернет-магазин", callback_data="service_shop"),
+            InlineKeyboardButton("🍽 Ресторан", callback_data="service_restaurant")
         ],
         [
-            InlineKeyboardButton("Салон красоты", callback_data="service_beauty"),
-            InlineKeyboardButton("Фитнес-клуб", callback_data="service_fitness")
+            InlineKeyboardButton("💇‍♀️ Салон красоты", callback_data="service_beauty"),
+            InlineKeyboardButton("🏋️ Фитнес-клуб", callback_data="service_fitness")
         ],
         [
-            InlineKeyboardButton("Медицина", callback_data="service_medical"),
-            InlineKeyboardButton("Услуги", callback_data="service_services")
+            InlineKeyboardButton("🏥 Медицина", callback_data="service_medical"),
+            InlineKeyboardButton("🔧 Услуги", callback_data="service_services")
         ],
         [
-            InlineKeyboardButton("Назад в меню", callback_data="menu_back")
+            InlineKeyboardButton("◀️ Назад в меню", callback_data="menu_back")
         ]
     ]
     return InlineKeyboardMarkup(keyboard)
@@ -99,15 +99,15 @@ def get_services_keyboard() -> InlineKeyboardMarkup:
 def get_portfolio_keyboard() -> InlineKeyboardMarkup:
     keyboard = [
         [
-            InlineKeyboardButton("E-Commerce", callback_data="portfolio_ecommerce"),
-            InlineKeyboardButton("Услуги", callback_data="portfolio_services")
+            InlineKeyboardButton("🛍 E-Commerce", callback_data="portfolio_ecommerce"),
+            InlineKeyboardButton("🔧 Услуги", callback_data="portfolio_services")
         ],
         [
-            InlineKeyboardButton("Финтех", callback_data="portfolio_fintech"),
-            InlineKeyboardButton("Образование", callback_data="portfolio_education")
+            InlineKeyboardButton("💰 Финтех", callback_data="portfolio_fintech"),
+            InlineKeyboardButton("📚 Образование", callback_data="portfolio_education")
         ],
         [
-            InlineKeyboardButton("Назад в меню", callback_data="menu_back")
+            InlineKeyboardButton("◀️ Назад в меню", callback_data="menu_back")
         ]
     ]
     return InlineKeyboardMarkup(keyboard)
@@ -116,29 +116,29 @@ def get_portfolio_keyboard() -> InlineKeyboardMarkup:
 def get_calculator_keyboard() -> InlineKeyboardMarkup:
     keyboard = [
         [
-            InlineKeyboardButton("Каталог +25к", callback_data="calc_catalog"),
-            InlineKeyboardButton("Корзина +20к", callback_data="calc_cart")
+            InlineKeyboardButton("📋 Каталог +25к", callback_data="calc_catalog"),
+            InlineKeyboardButton("🛒 Корзина +20к", callback_data="calc_cart")
         ],
         [
-            InlineKeyboardButton("Платежи +45к", callback_data="calc_payments"),
-            InlineKeyboardButton("AI-бот +49к", callback_data="calc_ai")
+            InlineKeyboardButton("💳 Платежи +45к", callback_data="calc_payments"),
+            InlineKeyboardButton("🤖 AI-бот +49к", callback_data="calc_ai")
         ],
         [
-            InlineKeyboardButton("Доставка +30к", callback_data="calc_delivery"),
-            InlineKeyboardButton("Аналитика +45к", callback_data="calc_analytics")
+            InlineKeyboardButton("🚚 Доставка +30к", callback_data="calc_delivery"),
+            InlineKeyboardButton("📊 Аналитика +45к", callback_data="calc_analytics")
         ],
         [
             InlineKeyboardButton(
-                "Рассчитать стоимость", callback_data="calc_total",
+                "✅ Рассчитать стоимость", callback_data="calc_total",
                 **styled_button_api_kwargs(style="constructive")
             )
         ],
         [
             InlineKeyboardButton(
-                "Сбросить", callback_data="calc_reset",
+                "🗑 Сбросить", callback_data="calc_reset",
                 **styled_button_api_kwargs(style="destructive")
             ),
-            InlineKeyboardButton("Назад в меню", callback_data="menu_back")
+            InlineKeyboardButton("◀️ Назад в меню", callback_data="menu_back")
         ]
     ]
     return InlineKeyboardMarkup(keyboard)
@@ -148,13 +148,13 @@ def get_lead_keyboard() -> InlineKeyboardMarkup:
     keyboard = [
         [
             InlineKeyboardButton(
-                "Да, хочу заказать!", callback_data="lead_submit",
+                "🚀 Да, хочу заказать!", callback_data="lead_submit",
                 **styled_button_api_kwargs(style="constructive")
             )
         ],
         [
-            InlineKeyboardButton("Задать вопрос", callback_data="lead_question"),
-            InlineKeyboardButton("Назад в меню", callback_data="menu_back")
+            InlineKeyboardButton("💬 Задать вопрос", callback_data="lead_question"),
+            InlineKeyboardButton("◀️ Назад в меню", callback_data="menu_back")
         ]
     ]
     return InlineKeyboardMarkup(keyboard)
@@ -162,7 +162,7 @@ def get_lead_keyboard() -> InlineKeyboardMarkup:
 
 def get_back_keyboard() -> InlineKeyboardMarkup:
     keyboard = [
-        [InlineKeyboardButton("Назад в меню", callback_data="menu_back")]
+        [InlineKeyboardButton("◀️ Назад в меню", callback_data="menu_back")]
     ]
     return InlineKeyboardMarkup(keyboard)
 
@@ -170,23 +170,22 @@ def get_back_keyboard() -> InlineKeyboardMarkup:
 def get_subscription_keyboard() -> InlineKeyboardMarkup:
     keyboard = [
         [
-            InlineKeyboardButton("Минимальный 9 900₽", callback_data="sub_min"),
+            InlineKeyboardButton("📦 Минимальный 9 900₽", callback_data="sub_min"),
         ],
         [
-            InlineKeyboardButton("Стандартный 14 900₽", callback_data="sub_std"),
+            InlineKeyboardButton("⭐ Стандартный 14 900₽", callback_data="sub_std"),
         ],
         [
-            InlineKeyboardButton("Премиум 24 900₽", callback_data="sub_premium"),
+            InlineKeyboardButton("👑 Премиум 24 900₽", callback_data="sub_premium"),
         ],
         [
-            InlineKeyboardButton("Назад в меню", callback_data="menu_back")
+            InlineKeyboardButton("◀️ Назад в меню", callback_data="menu_back")
         ]
     ]
     return InlineKeyboardMarkup(keyboard)
 
 
 def get_quick_reply_keyboard() -> ReplyKeyboardMarkup:
-    """Quick action buttons at the bottom of chat."""
     keyboard = [
         [
             KeyboardButton("🚀 Открыть приложение", web_app=WebAppInfo(url="https://w4tg.up.railway.app/"))
@@ -206,7 +205,7 @@ def get_quick_reply_keyboard() -> ReplyKeyboardMarkup:
 def get_loyalty_menu_keyboard() -> InlineKeyboardMarkup:
     keyboard = [
         [
-            InlineKeyboardButton("⭐ Оставить отзыв", callback_data="loyalty_review"),
+            InlineKeyboardButton("✍️ Оставить отзыв", callback_data="loyalty_review"),
         ],
         [
             InlineKeyboardButton("📦 Пакетные предложения", callback_data="loyalty_packages"),
@@ -227,10 +226,10 @@ def get_loyalty_menu_keyboard() -> InlineKeyboardMarkup:
 def get_review_type_keyboard() -> InlineKeyboardMarkup:
     keyboard = [
         [
-            InlineKeyboardButton("🎬 Видео-отзыв (+500)", callback_data="review_video"),
+            InlineKeyboardButton("🎬 Видео-отзыв (+500 монет)", callback_data="review_video"),
         ],
         [
-            InlineKeyboardButton("📝 Текст + фото (+200)", callback_data="review_text"),
+            InlineKeyboardButton("📝 Текст + фото (+200 монет)", callback_data="review_text"),
         ],
         [
             InlineKeyboardButton("◀️ Назад", callback_data="loyalty_menu"),
@@ -242,13 +241,13 @@ def get_review_type_keyboard() -> InlineKeyboardMarkup:
 def get_package_deals_keyboard() -> InlineKeyboardMarkup:
     keyboard = [
         [
-            InlineKeyboardButton("📱 + 3 мес подписки (-5%)", callback_data="package_app_subscription_3"),
+            InlineKeyboardButton("📱 + 3 мес подписки (−5%)", callback_data="package_app_subscription_3"),
         ],
         [
-            InlineKeyboardButton("📱 + 6 мес подписки (-10%)", callback_data="package_app_subscription_6"),
+            InlineKeyboardButton("📱 + 6 мес подписки (−10%)", callback_data="package_app_subscription_6"),
         ],
         [
-            InlineKeyboardButton("📱 + 12 мес подписки (-15%)", callback_data="package_app_subscription_12"),
+            InlineKeyboardButton("📱 + 12 мес подписки (−15%)", callback_data="package_app_subscription_12"),
         ],
         [
             InlineKeyboardButton("◀️ Назад", callback_data="loyalty_menu"),
@@ -261,8 +260,8 @@ def get_faq_keyboard() -> InlineKeyboardMarkup:
     from src.knowledge_base import FAQ_DATA
     keyboard = []
     for key, faq in FAQ_DATA.items():
-        keyboard.append([InlineKeyboardButton(faq["question"], callback_data=key)])
-    keyboard.append([InlineKeyboardButton("Назад в меню", callback_data="menu_back")])
+        keyboard.append([InlineKeyboardButton(f"❔ {faq['question']}", callback_data=key)])
+    keyboard.append([InlineKeyboardButton("◀️ Назад в меню", callback_data="menu_back")])
     return InlineKeyboardMarkup(keyboard)
 
 

@@ -488,3 +488,53 @@ async def generate_daily_digest(bot, admin_chat_id: int) -> None:
         logger.info(f"Daily digest sent to admin {admin_chat_id}")
     except Exception as e:
         logger.error(f"Failed to send daily digest: {e}")
+
+
+@admin_required
+async def get_emoji_id_handler(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
+    context.user_data["awaiting_emoji_sticker"] = True
+    await update.message.reply_text(
+        "🎨 <b>Получение Custom Emoji ID</b>\n\n"
+        "Отправьте мне кастомный emoji-стикер из любого стикерпака, "
+        "и я покажу его <code>custom_emoji_id</code>.\n\n"
+        "Этот ID можно использовать в переменных окружения:\n"
+        "<code>EMOJI_LEAD</code>, <code>EMOJI_PAYMENT</code>, <code>EMOJI_CALCULATOR</code> и др.",
+        parse_mode="HTML"
+    )
+
+
+async def sticker_emoji_handler(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
+    if not context.user_data.get("awaiting_emoji_sticker"):
+        return
+
+    context.user_data.pop("awaiting_emoji_sticker", None)
+
+    sticker = update.message.sticker
+    if not sticker:
+        await update.message.reply_text("Это не стикер. Отправьте custom emoji стикер.")
+        return
+
+    if sticker.custom_emoji_id:
+        env_keys = [
+            "EMOJI_LEAD", "EMOJI_PAYMENT", "EMOJI_CALCULATOR",
+            "EMOJI_PORTFOLIO", "EMOJI_SERVICES", "EMOJI_MANAGER",
+            "EMOJI_FAQ", "EMOJI_BONUS", "EMOJI_STARS"
+        ]
+        env_list = "\n".join([f"<code>{k}={sticker.custom_emoji_id}</code>" for k in env_keys])
+
+        await update.message.reply_text(
+            f"✅ <b>Custom Emoji ID:</b>\n"
+            f"<code>{sticker.custom_emoji_id}</code>\n\n"
+            f"<b>Тип:</b> {sticker.type}\n"
+            f"<b>Набор:</b> {sticker.set_name or 'нет'}\n"
+            f"<b>Emoji:</b> {sticker.emoji or '—'}\n\n"
+            f"<b>Для Railway переменных (копируйте нужную):</b>\n{env_list}",
+            parse_mode="HTML"
+        )
+    else:
+        await update.message.reply_text(
+            "⚠️ Это обычный стикер, а не custom emoji.\n\n"
+            "Для получения ID нужен именно <b>кастомный emoji-стикер</b> "
+            "(из пакетов custom emoji, не обычных стикерпаков).",
+            parse_mode="HTML"
+        )
