@@ -248,30 +248,153 @@ class ABTestingSystem:
             logger.error(f"Failed to get test stats: {e}")
             return {}
     
+    def get_conversion_stats(self, test_name: str) -> dict:
+        if not DATABASE_URL:
+            return {}
+        try:
+            with get_connection() as conn:
+                with conn.cursor() as cur:
+                    cur.execute("""
+                        SELECT
+                            a.variant,
+                            COUNT(DISTINCT a.user_id) AS users,
+                            COUNT(DISTINCT CASE WHEN ro.outcome_type IS NOT NULL THEN a.user_id END) AS converted
+                        FROM ab_test_assignments a
+                        LEFT JOIN response_outcomes ro ON a.user_id = ro.user_id
+                            AND ro.response_variant = a.variant
+                            AND ro.outcome_type IS NOT NULL
+                        WHERE a.test_name = %s
+                        GROUP BY a.variant
+                    """, (test_name,))
+                    result = {}
+                    for row in cur.fetchall():
+                        result[row[0]] = {"users": row[1], "converted": row[2]}
+                    return result
+        except Exception as e:
+            logger.error(f"Failed to get conversion stats for {test_name}: {e}")
+            return {}
+
+    def chi_square_significance(self, test_name: str) -> dict:
+        stats = self.get_conversion_stats(test_name)
+        if "a" not in stats or "b" not in stats:
+            return {"significant": False, "reason": "insufficient_data", "p_value": None, "winner": None}
+
+        a_users = stats["a"]["users"]
+        b_users = stats["b"]["users"]
+        a_conv = stats["a"]["converted"]
+        b_conv = stats["b"]["converted"]
+
+        min_sample = 30
+        if a_users < min_sample or b_users < min_sample:
+            return {
+                "significant": False,
+                "reason": f"need_{min_sample}_users_per_variant",
+                "a_rate": round(a_conv / a_users * 100, 1) if a_users else 0,
+                "b_rate": round(b_conv / b_users * 100, 1) if b_users else 0,
+                "a_users": a_users, "b_users": b_users,
+                "p_value": None, "winner": None
+            }
+
+        a_no = a_users - a_conv
+        b_no = b_users - b_conv
+        total = a_users + b_users
+        total_conv = a_conv + b_conv
+        total_no = a_no + b_no
+
+        if total_conv == 0 or total_no == 0:
+            return {
+                "significant": False, "reason": "no_variance",
+                "a_rate": 0, "b_rate": 0, "p_value": None, "winner": None
+            }
+
+        e_a_conv = a_users * total_conv / total
+        e_a_no = a_users * total_no / total
+        e_b_conv = b_users * total_conv / total
+        e_b_no = b_users * total_no / total
+
+        chi2 = 0
+        for obs, exp in [(a_conv, e_a_conv), (a_no, e_a_no), (b_conv, e_b_conv), (b_no, e_b_no)]:
+            if exp > 0:
+                chi2 += (obs - exp) ** 2 / exp
+
+        critical_values = {0.05: 3.841, 0.01: 6.635, 0.001: 10.828}
+        p_value_approx = None
+        significant = False
+        if chi2 >= critical_values[0.001]:
+            p_value_approx = 0.001
+            significant = True
+        elif chi2 >= critical_values[0.01]:
+            p_value_approx = 0.01
+            significant = True
+        elif chi2 >= critical_values[0.05]:
+            p_value_approx = 0.05
+            significant = True
+
+        a_rate = round(a_conv / a_users * 100, 1) if a_users else 0
+        b_rate = round(b_conv / b_users * 100, 1) if b_users else 0
+        winner = "a" if a_rate > b_rate else "b" if b_rate > a_rate else None
+
+        return {
+            "significant": significant,
+            "chi2": round(chi2, 3),
+            "p_value": p_value_approx,
+            "a_rate": a_rate, "b_rate": b_rate,
+            "a_users": a_users, "b_users": b_users,
+            "a_converted": a_conv, "b_converted": b_conv,
+            "winner": winner if significant else None,
+            "confidence": f"{100 - int(p_value_approx * 100)}%" if p_value_approx else None
+        }
+
     def format_stats_message(self, test_name: str) -> str:
-        """Format test statistics as a readable message."""
         stats = self.get_test_stats(test_name)
-        
+
         if not stats:
             return f"Нет данных для теста '{test_name}'"
-        
+
         test = WELCOME_TESTS.get(test_name)
         test_desc = test.description if test else test_name
-        
+
         lines = [f"📊 <b>A/B Тест: {test_name}</b>", f"<i>{test_desc}</i>", ""]
-        
+
         for variant, data in stats.items():
             variant_name = "A" if variant == "a" else "B"
             lines.append(f"<b>Вариант {variant_name}:</b>")
             lines.append(f"  👥 Пользователей: {data.get('users', 0)}")
             lines.append(f"  📈 Всего событий: {data.get('events', 0)}")
-            
+
             if "events_breakdown" in data:
                 lines.append("  События:")
                 for event, count in data["events_breakdown"].items():
                     lines.append(f"    • {event}: {count}")
             lines.append("")
-        
+
+        sig = self.chi_square_significance(test_name)
+        if sig.get("a_rate") is not None:
+            lines.append("<b>Конверсия:</b>")
+            lines.append(f"  A: {sig['a_rate']}% ({sig.get('a_converted', 0)}/{sig.get('a_users', 0)})")
+            lines.append(f"  B: {sig['b_rate']}% ({sig.get('b_converted', 0)}/{sig.get('b_users', 0)})")
+            if sig["significant"]:
+                lines.append(f"\n✅ <b>Статистически значимо!</b> (p < {sig['p_value']}, {sig['confidence']})")
+                lines.append(f"🏆 Победитель: Вариант {'A' if sig['winner'] == 'a' else 'B'}")
+            elif sig.get("reason") and "need" in sig["reason"]:
+                lines.append(f"\n⏳ Недостаточно данных (нужно 30+ пользователей на вариант)")
+            else:
+                lines.append(f"\n🔄 Разница не значима. Продолжаем тест.")
+
+        return "\n".join(lines)
+
+    def format_all_tests_summary(self) -> str:
+        lines = ["📊 <b>Сводка по всем A/B тестам</b>\n"]
+        for test_name, test in WELCOME_TESTS.items():
+            sig = self.chi_square_significance(test_name)
+            status = "⏳"
+            if sig.get("significant"):
+                status = f"✅ Winner: {'A' if sig['winner'] == 'a' else 'B'}"
+            elif sig.get("a_users", 0) >= 30:
+                status = "🔄 Нет разницы"
+            lines.append(f"<b>{test_name}</b>: {status}")
+            if sig.get("a_rate") is not None:
+                lines.append(f"  A: {sig['a_rate']}% | B: {sig['b_rate']}%")
         return "\n".join(lines)
 
 

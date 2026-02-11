@@ -45,6 +45,10 @@ from src.handlers.admin import (
     generate_daily_digest,
     get_emoji_id_handler,
     sticker_emoji_handler,
+    propensity_dashboard_handler,
+    ab_results_handler,
+    ab_detail_handler,
+    feedback_insights_handler,
 )
 
 from src.handlers.messages import (
@@ -100,6 +104,10 @@ __all__ = [
     'promo_handler',
     'testimonials_handler',
     'handoff_handler',
+    'propensity_dashboard_handler',
+    'ab_results_handler',
+    'ab_detail_handler',
+    'feedback_insights_handler',
     'message_handler',
     'error_handler',
     'send_typing_action',

@@ -21,6 +21,8 @@ from src.handlers import (
     promo_create_handler, promo_list_handler, promo_off_handler,
     generate_daily_digest, handoff_handler,
     get_emoji_id_handler, sticker_emoji_handler,
+    propensity_dashboard_handler, ab_results_handler,
+    ab_detail_handler, feedback_insights_handler,
 )
 
 logging.basicConfig(
@@ -237,6 +239,10 @@ def main() -> None:
     application.add_handler(CommandHandler("privacy", privacy_handler))
     application.add_handler(CommandHandler("manager", handoff_handler))
     application.add_handler(CommandHandler("get_emoji_id", get_emoji_id_handler))
+    application.add_handler(CommandHandler("propensity", propensity_dashboard_handler))
+    application.add_handler(CommandHandler("ab_results", ab_results_handler))
+    application.add_handler(CommandHandler("ab_detail", ab_detail_handler))
+    application.add_handler(CommandHandler("feedback", feedback_insights_handler))
     
     application.add_handler(PreCheckoutQueryHandler(pre_checkout_handler))
     application.add_handler(InlineQueryHandler(inline_query_handler))

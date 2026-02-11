@@ -302,14 +302,23 @@ class KnowledgeBase:
             query_lower = query.lower()
 
             intent_map = {
-                'pricing': ['цена', 'стоимость', 'сколько', 'прайс', 'тариф'],
-                'features': ['функци', 'модул', 'доп', 'возможност'],
-                'case_study': ['кейс', 'пример', 'портфолио', 'проект', 'работ'],
-                'faq': ['faq', 'вопрос', 'частый'],
-                'process': ['срок', 'время', 'когда', 'этап', 'процесс'],
-                'discount': ['скидк', 'бонус', 'монет', 'акци'],
-                'guarantee': ['гарант', 'возврат', 'договор'],
-                'subscription': ['подписк', 'обслуж', 'поддержк'],
+                'pricing': ['цена', 'стоимость', 'сколько', 'прайс', 'тариф', 'стоит', 'цены'],
+                'features': ['функци', 'модул', 'доп', 'возможност', 'фич'],
+                'case_study': ['кейс', 'пример', 'портфолио', 'проект', 'работ', 'клиент'],
+                'faq': ['faq', 'вопрос', 'частый', 'как', 'что такое', 'зачем'],
+                'process': ['срок', 'время', 'когда', 'этап', 'процесс', 'дн', 'недел'],
+                'discount': ['скидк', 'бонус', 'монет', 'акци', 'дешевле', 'выгод'],
+                'guarantee': ['гарант', 'возврат', 'договор', 'надёж', 'безопас'],
+                'subscription': ['подписк', 'обслуж', 'поддержк', 'хостинг'],
+                'shop': ['магазин', 'товар', 'продаж', 'ecommerce', 'интернет-магазин'],
+                'restaurant': ['ресторан', 'доставк', 'еда', 'кафе', 'меню'],
+                'beauty': ['салон', 'красот', 'маникюр', 'стриж', 'spa'],
+                'fitness': ['фитнес', 'спорт', 'тренировк', 'зал', 'йога'],
+                'medical': ['врач', 'клиник', 'медиц', 'запись к'],
+                'ai': ['бот', 'ai', 'автоматиз', 'искусственн', 'нейро'],
+                'technology': ['технолог', 'telegram mini', 'приложени', 'webapp'],
+                'payment': ['оплат', 'платёж', 'перевод', 'карт', 'счёт'],
+                'limitations': ['нельзя', 'ограничен', 'правил', 'запрещ'],
             }
 
             detected_tags = []
@@ -319,24 +328,28 @@ class KnowledgeBase:
                         detected_tags.append(tag)
                         break
 
-            results = []
+            scored_results = {}
 
             with get_connection() as conn:
                 with conn.cursor() as cur:
                     if detected_tags:
                         placeholders = ','.join(['%s'] * len(detected_tags))
                         cur.execute(f"""
-                            SELECT id, category, title, content, priority
+                            SELECT id, category, title, content, priority, tags
                             FROM knowledge_chunks
                             WHERE tags && ARRAY[{placeholders}]::text[]
                             ORDER BY priority DESC
                         """, detected_tags)
                         for row in cur.fetchall():
-                            results.append({
-                                'id': row[0], 'category': row[1],
+                            chunk_id = row[0]
+                            chunk_tags = row[5] if row[5] else []
+                            tag_overlap = len(set(chunk_tags) & set(detected_tags))
+                            relevance = row[4] + (tag_overlap * 5)
+                            scored_results[chunk_id] = {
+                                'id': chunk_id, 'category': row[1],
                                 'title': row[2], 'content': row[3],
-                                'priority': row[4]
-                            })
+                                'relevance': relevance
+                            }
 
                     words = [w for w in query_lower.split() if len(w) > 2]
                     if words:
@@ -353,24 +366,26 @@ class KnowledgeBase:
                             ORDER BY priority DESC
                         """, params)
                         for row in cur.fetchall():
-                            results.append({
-                                'id': row[0], 'category': row[1],
-                                'title': row[2], 'content': row[3],
-                                'priority': row[4]
-                            })
+                            chunk_id = row[0]
+                            content_lower = row[3].lower()
+                            title_lower = row[2].lower()
+                            word_hits = sum(1 for w in words if w in content_lower or w in title_lower)
+                            title_bonus = 3 if any(w in title_lower for w in words) else 0
 
-            seen_ids = set()
-            unique_results = []
-            for r in results:
-                if r['id'] not in seen_ids:
-                    seen_ids.add(r['id'])
-                    unique_results.append(r)
+                            if chunk_id in scored_results:
+                                scored_results[chunk_id]['relevance'] += word_hits * 2 + title_bonus
+                            else:
+                                scored_results[chunk_id] = {
+                                    'id': chunk_id, 'category': row[1],
+                                    'title': row[2], 'content': row[3],
+                                    'relevance': row[4] + word_hits * 2 + title_bonus
+                                }
 
-            unique_results.sort(key=lambda x: x['priority'], reverse=True)
+            sorted_results = sorted(scored_results.values(), key=lambda x: x['relevance'], reverse=True)
 
             return [
                 {'title': r['title'], 'content': r['content'], 'category': r['category']}
-                for r in unique_results[:limit]
+                for r in sorted_results[:limit]
             ]
 
         except Exception as e:

@@ -538,3 +538,104 @@ async def sticker_emoji_handler(update: Update, context: ContextTypes.DEFAULT_TY
             "(из пакетов custom emoji, не обычных стикерпаков).",
             parse_mode="HTML"
         )
+
+
+@admin_required
+async def propensity_dashboard_handler(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
+    log_admin_action(update.effective_user.id, "propensity_dashboard")
+    try:
+        from src.propensity import propensity_scorer
+        distribution = propensity_scorer.get_score_distribution()
+        top = propensity_scorer.get_top_prospects(limit=10)
+
+        lines = [
+            "🎯 <b>Propensity Scoring Dashboard</b>\n",
+            "<b>Распределение:</b>",
+            f"  🔥 Горячие (70-100): {distribution.get('hot_70_100', 0)}",
+            f"  🌡 Тёплые (40-69): {distribution.get('warm_40_69', 0)}",
+            f"  ❄️ Прогреваются (20-39): {distribution.get('cool_20_39', 0)}",
+            f"  🧊 Холодные (0-19): {distribution.get('cold_0_19', 0)}",
+            "",
+            "<b>Топ-10 перспективных:</b>"
+        ]
+
+        if top:
+            for i, prospect in enumerate(top, 1):
+                lead_icon = "✅" if prospect.get("lead_submitted") else "—"
+                lines.append(
+                    f"  {i}. ID {prospect['user_id']}: "
+                    f"<b>{prospect['score']}</b>/100 | "
+                    f"{prospect['total_messages']} msg | "
+                    f"Lead: {lead_icon}"
+                )
+        else:
+            lines.append("  Нет данных")
+
+        await update.message.reply_text("\n".join(lines), parse_mode="HTML")
+    except Exception as e:
+        await update.message.reply_text(f"Ошибка: {e}")
+
+
+@admin_required
+async def ab_results_handler(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
+    log_admin_action(update.effective_user.id, "ab_results")
+    try:
+        from src.ab_testing import ab_testing
+        summary = ab_testing.format_all_tests_summary()
+        await update.message.reply_text(summary, parse_mode="HTML")
+    except Exception as e:
+        await update.message.reply_text(f"Ошибка: {e}")
+
+
+@admin_required
+async def ab_detail_handler(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
+    log_admin_action(update.effective_user.id, "ab_detail")
+    try:
+        from src.ab_testing import ab_testing
+        args = context.args
+        if not args:
+            from src.ab_testing import WELCOME_TESTS
+            test_list = "\n".join([f"  • <code>{name}</code>" for name in WELCOME_TESTS.keys()])
+            await update.message.reply_text(
+                f"Укажите тест: /ab_detail <имя>\n\nДоступные тесты:\n{test_list}",
+                parse_mode="HTML"
+            )
+            return
+        test_name = args[0]
+        message = ab_testing.format_stats_message(test_name)
+        await update.message.reply_text(message, parse_mode="HTML")
+    except Exception as e:
+        await update.message.reply_text(f"Ошибка: {e}")
+
+
+@admin_required
+async def feedback_insights_handler(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
+    log_admin_action(update.effective_user.id, "feedback_insights")
+    try:
+        from src.feedback_loop import feedback_loop
+        insights = feedback_loop.get_learning_insights(limit=10)
+        conversion = feedback_loop.get_conversion_rate(days=30)
+
+        lines = [insights, ""]
+        if conversion:
+            lines.append("<b>Общая конверсия (30 дней):</b>")
+            lines.append(f"  Всего ответов: {conversion.get('total_responses', 0)}")
+            lines.append(f"  С конверсией: {conversion.get('with_outcome', 0)}")
+            lines.append(f"  Rate: {conversion.get('conversion_rate', 0)}%")
+
+            by_outcome = conversion.get("by_outcome", {})
+            if by_outcome:
+                lines.append("\n<b>По типам конверсий:</b>")
+                for outcome, count in by_outcome.items():
+                    lines.append(f"  • {outcome}: {count}")
+
+            by_stage = conversion.get("by_stage", {})
+            if by_stage:
+                lines.append("\n<b>По стадиям воронки:</b>")
+                for stage, data in by_stage.items():
+                    rate = round(data['converted'] / data['total'] * 100, 1) if data['total'] > 0 else 0
+                    lines.append(f"  • {stage}: {data['converted']}/{data['total']} ({rate}%)")
+
+        await update.message.reply_text("\n".join(lines), parse_mode="HTML")
+    except Exception as e:
+        await update.message.reply_text(f"Ошибка: {e}")

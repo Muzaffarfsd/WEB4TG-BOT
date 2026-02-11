@@ -730,11 +730,13 @@ def build_full_context(user_id: int, user_message: str, username: str = None, fi
     except Exception as e:
         logger.debug(f"A/B dialog testing skipped: {e}")
 
-    try:
-        from src.social_links import get_social_context_for_ai
-        parts.append(f"\n{get_social_context_for_ai()}")
-    except Exception:
-        pass
+    social_keywords = ['соцсет', 'инстаграм', 'тикток', 'ютуб', 'youtube', 'instagram', 'tiktok', 'подпис', 'монет', 'задан', 'бонус', 'скидк']
+    if any(kw in user_message.lower() for kw in social_keywords) or funnel_stage in ('awareness', 'interest'):
+        try:
+            from src.social_links import get_social_context_for_ai
+            parts.append(f"\n{get_social_context_for_ai()}")
+        except Exception:
+            pass
 
     if parts:
         return "\n".join(parts)

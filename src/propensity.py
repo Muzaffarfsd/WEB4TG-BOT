@@ -119,6 +119,11 @@ class PropensityScorer:
                     elif event_type == 'tool_discount':
                         updates.append("tools_used = tools_used + 1")
                         updates.append("features_explored = features_explored + 1")
+                    elif event_type == 'tool_calendar':
+                        updates.append("tools_used = tools_used + 1")
+                        updates.append("features_explored = features_explored + 1")
+                    elif event_type == 'tool_social':
+                        updates.append("tools_used = tools_used + 1")
 
                     if new_session:
                         updates.append("session_count = session_count + 1")
