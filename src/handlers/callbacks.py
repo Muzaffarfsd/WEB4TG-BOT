@@ -1128,5 +1128,116 @@ async def callback_handler(update: Update, context: ContextTypes.DEFAULT_TYPE) -
         else:
             await query.edit_message_text("Информация не найдена", reply_markup=get_back_keyboard())
 
+    elif data == "smart_prices":
+        from src.pricing import get_price_main_text, get_price_main_keyboard
+        await query.message.reply_text(
+            get_price_main_text(), parse_mode="Markdown",
+            reply_markup=get_price_main_keyboard()
+        )
+
+    elif data == "smart_portfolio":
+        await query.message.reply_text(
+            PORTFOLIO_MESSAGE, parse_mode="Markdown",
+            reply_markup=get_portfolio_keyboard()
+        )
+
+    elif data == "smart_faq":
+        await query.message.reply_text(
+            "❓ Выберите вопрос:",
+            reply_markup=get_faq_keyboard()
+        )
+
+    elif data == "smart_calc":
+        await query.message.reply_text(
+            "🧮 Выберите функции для расчёта:",
+            reply_markup=get_calculator_keyboard()
+        )
+
+    elif data == "smart_compare":
+        from src.pricing import get_price_main_text, get_price_main_keyboard
+        await query.message.reply_text(
+            get_price_main_text(), parse_mode="Markdown",
+            reply_markup=get_price_main_keyboard()
+        )
+
+    elif data == "smart_roi":
+        await query.message.reply_text(
+            "📊 Для расчёта окупаемости напишите мне о вашем бизнесе — "
+            "сферу, средний чек и количество клиентов в месяц. "
+            "Я рассчитаю, как быстро окупится Mini App."
+        )
+
+    elif data == "smart_discount":
+        from src.tasks_tracker import tasks_tracker as tt_smart
+        progress = tt_smart.get_user_progress(user_id)
+        discount = progress.get_discount_percent()
+        coins = progress.total_coins
+        text = (
+            f"🎁 Ваша текущая скидка: {discount}%\n"
+            f"💰 Монеты: {coins}\n\n"
+            "Зарабатывайте монеты через задания (/bonus) и увеличивайте скидку до 15%!"
+        )
+        await query.message.reply_text(text)
+
+    elif data == "smart_consult":
+        await query.message.reply_text(
+            "📞 Отлично! Напишите удобное время для созвона — "
+            "менеджер свяжется с вами. Или просто расскажите о проекте здесь, "
+            "и я помогу подготовить всю информацию."
+        )
+        lead_manager.create_lead(user_id=user_id, username=query.from_user.username, first_name=query.from_user.first_name)
+        lead_manager.add_tag(user_id, "consult_request")
+
+    elif data == "smart_brief":
+        await query.message.reply_text(
+            "📋 Давайте составим техническое задание!\n\n"
+            "Опишите ваш проект: что за бизнес, какие функции нужны, "
+            "есть ли дизайн-макеты, и примерные сроки — я всё оформлю."
+        )
+
+    elif data == "smart_lead":
+        lead_manager.create_lead(user_id=user_id, username=query.from_user.username, first_name=query.from_user.first_name)
+        from src.leads import LeadPriority
+        lead_manager.update_lead(user_id, score=40, priority=LeadPriority.HOT)
+        await query.message.reply_text(
+            "✅ Заявка создана!\n\n"
+            "Менеджер свяжется с вами в ближайшее время. "
+            "А пока расскажите подробнее о проекте — что хотите реализовать?"
+        )
+
+    elif data == "smart_payment":
+        from src.payments import get_payment_keyboard
+        await query.message.reply_text(
+            "💳 Выберите способ оплаты:",
+            reply_markup=get_payment_keyboard()
+        )
+
+    elif data == "smart_contract":
+        await query.message.reply_text(
+            "📄 Договор формируется после согласования ТЗ и стоимости.\n\n"
+            "Оставьте заявку — и менеджер подготовит договор для вас.",
+            reply_markup=get_lead_keyboard()
+        )
+
+    elif data == "smart_manager":
+        import os
+        manager_id = os.environ.get("MANAGER_CHAT_ID")
+        lead_manager.create_lead(user_id=user_id, username=query.from_user.username, first_name=query.from_user.first_name)
+        lead_manager.add_tag(user_id, "manager_request")
+        await query.message.reply_text(
+            "📞 Запрос передан менеджеру. Он свяжется с вами в ближайшее время!"
+        )
+        if manager_id:
+            try:
+                await context.bot.send_message(
+                    int(manager_id),
+                    f"🔔 Запрос от клиента\n"
+                    f"👤 {query.from_user.first_name} (@{query.from_user.username or 'нет'})\n"
+                    f"🆔 {user_id}",
+                    parse_mode="HTML"
+                )
+            except Exception:
+                pass
+
     else:
         logger.warning(f"Unknown callback_data: {data} from user {user_id}")

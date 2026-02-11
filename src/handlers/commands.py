@@ -12,7 +12,7 @@ from src.keyboards import (
     get_faq_keyboard
 )
 from src.calculator import calculator_manager
-from src.knowledge_base import HELP_MESSAGE, PORTFOLIO_MESSAGE, CONTACT_MESSAGE, CLEAR_MESSAGE, PRIVACY_POLICY, FAQ_DATA
+from src.knowledge_base import HELP_MESSAGE, PORTFOLIO_MESSAGE, CONTACT_MESSAGE, CLEAR_MESSAGE, PRIVACY_POLICY, FAQ_DATA, WELCOME_MESSAGE_RETURNING
 from src.tasks_tracker import tasks_tracker
 from src.referrals import referral_manager, REFERRER_REWARD, REFERRED_REWARD
 from src.pricing import get_price_main_text, get_price_main_keyboard
@@ -83,7 +83,21 @@ async def start_handler(update: Update, context: ContextTypes.DEFAULT_TYPE) -> N
     welcome_variant = ab_testing.get_variant(user.id, "welcome_voice")
     ab_testing.track_event(user.id, "welcome_voice", "start_command", {"variant": welcome_variant})
     
-    if lang_code.startswith("ru"):
+    from src.context_builder import is_returning_user, get_returning_context
+    is_returning = is_returning_user(user.id)
+    
+    if is_returning and lang_code.startswith("ru"):
+        returning_ctx = get_returning_context(user.id)
+        if returning_ctx:
+            short_ctx = returning_ctx[:200]
+            welcome_text = WELCOME_MESSAGE_RETURNING.format(
+                context=f"В прошлый раз мы обсуждали: {short_ctx}..."
+            )
+        else:
+            welcome_text = WELCOME_MESSAGE_RETURNING.format(
+                context="Помню вас) Как продвигаются дела с проектом?"
+            )
+    elif lang_code.startswith("ru"):
         welcome_text = WELCOME_MESSAGES["ru"].format(name=name_part)
     elif lang_code.startswith("uk"):
         welcome_text = WELCOME_MESSAGES["uk"].format(name=name_part)

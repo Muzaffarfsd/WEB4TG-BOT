@@ -570,7 +570,7 @@ async def message_handler(update: Update, context: ContextTypes.DEFAULT_TYPE) ->
     follow_up_manager.cancel_follow_ups(user.id)
     follow_up_manager.schedule_follow_up(user.id)
     
-    from src.context_builder import build_full_context
+    from src.context_builder import build_full_context, get_dynamic_buttons
     client_context = build_full_context(user.id, user_message, user.username, user.first_name)
     
     typing_task = asyncio.create_task(
@@ -686,14 +686,23 @@ async def message_handler(update: Update, context: ContextTypes.DEFAULT_TYPE) ->
         except asyncio.CancelledError:
             pass
 
+        dynamic_btns = get_dynamic_buttons(user.id, user_message, session.message_count)
+        reply_markup = None
+        if dynamic_btns:
+            keyboard_rows = [[InlineKeyboardButton(text, callback_data=cb)] for text, cb in dynamic_btns[:3]]
+            reply_markup = InlineKeyboardMarkup(keyboard_rows)
+
         if len(response) > 4096:
             chunks = [response[i:i+4096] for i in range(0, len(response), 4096)]
-            for chunk in chunks:
-                await update.message.reply_text(chunk)
+            for i, chunk in enumerate(chunks):
+                if i == len(chunks) - 1:
+                    await update.message.reply_text(chunk, reply_markup=reply_markup)
+                else:
+                    await update.message.reply_text(chunk)
         else:
-            await update.message.reply_text(response)
+            await update.message.reply_text(response, reply_markup=reply_markup)
 
-        logger.info(f"User {user.id}: processed message #{session.message_count}")
+        logger.info(f"User {user.id}: processed message #{session.message_count} (stage buttons attached)")
 
         auto_tag_lead(user.id, user_message)
         auto_score_lead(user.id, user_message)

@@ -20,6 +20,9 @@ def check_status():
         ("src.broadcast", "Broadcast System"),
         ("src.analytics", "Analytics"),
         ("src.security", "Security"),
+        ("src.context_builder", "Context Builder (Funnel/SPIN/Neuro)"),
+        ("src.knowledge_base", "Knowledge Base (System Prompt)"),
+        ("src.session", "Session Manager (Persistent Memory)"),
         ("src.handlers", "Handlers"),
     ]
     

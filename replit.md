@@ -37,21 +37,22 @@ To get custom emoji IDs: send a custom emoji from a sticker pack to the bot, use
 Button styles (Bot API 9.4): `constructive` (green), `destructive` (red) applied via `styled_button_api_kwargs()`.
 
 ## Recent Changes (Feb 11, 2026)
-- **Persistent Memory**: Rewrote `src/session.py` — conversation history now stored in PostgreSQL `conversation_history` table, survives bot restarts, auto-cleanup after 7 days
-- **Context Builder** (`src/context_builder.py`): Builds client profile for AI including lead score, coins/discount, loyalty status, referrals, and action history
-- **Objection Detection**: 5 objection types (price/delay/competitor/doubt/trust) with counter-strategies injected into AI context
-- **Multimodal AI**: Photo handler in `src/handlers/media.py` now analyzes images via Gemini Vision (screenshots, designs, documents)
-- **6 New AI Tools**: `calculate_roi`, `compare_plans`, `schedule_consultation`, `generate_brief`, `check_discount` + existing 5 tools
-- **Enhanced System Prompt**: Added sales funnel stages, objection handling scripts, client profile usage guide, multimodality instructions
-- **Context Injection**: AI receives `[ПРОФИЛЬ КЛИЕНТА]` + `[ОБНАРУЖЕНО ВОЗРАЖЕНИЕ]` as prepended context messages before conversation history
-- Previous fixes: callback routing, subscription buttons, `add_coins` method, dead code removal, full audit (81 callbacks, 31 commands)
+- **2025-2026 Sales Techniques**: Full implementation of neuro-selling (3-brain model), SPIN methodology, micro-commitments, progressive disclosure
+- **Sales Funnel Detection**: 5 stages (Awareness→Interest→Consideration→Decision→Action) with stage-specific AI behavior
+- **Dynamic Buttons**: Context-aware inline buttons change based on funnel stage — early stage shows prices/portfolio, late stage shows lead/consult/payment
+- **Personalized Greetings**: Returning users see conversation context summary; new users get warm SPIN-style opener
+- **Context Builder Upgrade**: Funnel detection, momentum tracking (low engagement, topic drift), social proof engine (auto-inserts case studies), 8 objection types
+- **System Prompt Rewrite**: Neuro-selling (reptilian/emotional/rational), SPIN selling, commitment ladder (6 steps), value-first, one-question-per-message, max 80 words, anthropomorphic signals, grounded AI guardrails
+- **Smart Callback Handlers**: 13 new smart_* callbacks for dynamic funnel-stage buttons
+- Previous: persistent memory, multimodal AI, 11 AI tools, agentic loop, auto lead scoring, insight extraction
 
 ## Super Agent Architecture
 - **Agentic Loop**: `src/ai_client.py` → `agentic_loop()` — multi-step tool calling (up to 4 steps), AI chains tools and synthesizes results
 - **Session + Memory Summarization**: `src/session.py` — persistent memory (PostgreSQL), auto-summarization at 20+ messages, summary stored in `conversation_summaries` table
-- **Context Builder + EQ**: `src/context_builder.py` — client profiling, objection detection (5 types), emotional intelligence (5 tones: frustrated/excited/confused/urgent/skeptical)
+- **Context Builder (Funnel/SPIN/Neuro)**: `src/context_builder.py` — 5-stage funnel detection, momentum tracking, social proof engine, 8 objection types, emotional intelligence (5 tones), dynamic button selection
+- **Knowledge Base (Neuro-Selling Prompt)**: `src/knowledge_base.py` — 3-brain model, SPIN framework, commitment ladder, progressive disclosure, anthropomorphic signals, guardrails
+- **Dynamic Button System**: `src/context_builder.py` → `get_dynamic_buttons()` → `src/handlers/messages.py` attaches stage-aware buttons to every AI response
 - **AI Client**: `src/ai_client.py` — Gemini API with 11 function-calling tools, streaming, thinking modes, agentic loop
-- **Knowledge Base**: `src/knowledge_base.py` — system prompt with sales funnel, objection scripts, guardrails, multimodality
 - **Auto Lead Scoring**: `src/handlers/messages.py` — 9 buying signal categories with weighted scoring, auto-priority escalation
 - **Insight Extraction**: `src/handlers/messages.py` — AI extracts budget/timeline/needs from conversation every 5 messages, auto-saves to lead profile
 - **Guardrails**: System prompt rules preventing unauthorized promises (discounts, delivery dates, free features)
