@@ -24,6 +24,7 @@ FEATURES = {
     "analytics": {"name": "Аналитика", "price": 45000},
     "admin": {"name": "Админ-панель", "price": 75000},
     "crm": {"name": "CRM-система", "price": 120000},
+    "progress": {"name": "Трекинг прогресса", "price": 45000},
     "booking": {"name": "Система бронирования", "price": 55000},
     "queue": {"name": "Управление очередями", "price": 45000},
     "calendar": {"name": "Синхронизация календаря", "price": 30000},

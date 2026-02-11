@@ -41,12 +41,13 @@ Button styles (Bot API 9.4): `constructive` (green), `destructive` (red) applied
 - **Hybrid Funnel Detection**: 3-signal system (keyword + semantic intent + lead score), picks highest stage, then applies backslide check. Semantic patterns detect implicit intent ("нужно автоматизировать заказы" → decision).
 - **Funnel Backslide**: Detects doubt keywords ("подумаю", "дорого", "не уверен") and downgrades stage (decision→consideration, consideration→interest).
 - **Client Style Detection**: `detect_client_style()` — 4 styles (laconic/detailed/formal/casual) with adaptive response instructions. Integrated into context builder.
-- **Proactive Value Delivery**: Industry-specific ROI benchmarks (shop/restaurant/beauty/fitness/medical/AI) + stage-specific micro-assets (checklists, calculators, comparisons).
-- **Industry-Matched Case Studies**: `get_relevant_case_study()` — Radiance for shops, DeluxeDine for restaurants, GlowSpa for beauty, FitPro for fitness. Auto-selected by client's industry tag.
+- **Proactive Value Delivery**: Industry-specific ROI benchmarks (shop/restaurant/beauty/fitness/medical/AI/services/education/delivery) + stage-specific micro-assets (checklists, calculators, comparisons).
+- **Industry-Matched Case Studies**: `get_relevant_case_study()` — Radiance for shops, DeluxeDine for restaurants, GlowSpa for beauty, FitPro for fitness, MedLine for medical, CleanPro for services, SkillUp for education. Auto-selected by client's industry tag.
 - **Client Profiles (30+ days)**: New `client_profiles` table — stores industry, budget, timeline, needs, objections, style, timezone. Populated from AI insight extraction. Injected into context as [ДОЛГОСРОЧНЫЙ ПРОФИЛЬ].
 - **Win-Back Follow-Up (4th touch)**: New follow-up #4 at 14-21 days with fresh value proposition (new case study, free audit offer). AI-generated with win-back prompt template.
 - **Timezone-Aware Follow-Ups**: Uses `timezone_offset` from client profile to schedule follow-ups during business hours (9:00-20:00 client time).
 - **Conversation History Extended**: TTL increased from 7 to 30 days for B2B sales cycle support.
+- **Data Consistency Fixes**: compare_plans tool aligned with pricing.py (150k/170k/180k/200k templates, 9.9k/14.9k/24.9k subscriptions). Discount display corrected from max 15% to max 25% (5 tiers). Privacy policy TTL fixed from 24h to 30 days. Calculator.py synced with pricing.py (added progress feature). Industry mapping expanded (education, delivery, services). Semantic/backslide patterns expanded for better coverage.
 - Previous: persistent memory, multimodal AI, 11 AI tools, agentic loop, auto lead scoring, insight extraction, dynamic buttons, smart callbacks
 
 ## Super Agent Architecture
