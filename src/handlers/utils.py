@@ -83,6 +83,20 @@ ABBREVIATION_MAP = {
     "QR": "кью-ар",
     "NDA": "эн-ди-эй",
     "ТЗ": "тэ-зэ",
+    "CMS": "си-эм-эс",
+    "SDK": "эс-ди-кей",
+    "ERP": "и-ар-пи",
+    "PR": "пи-ар",
+    "HR": "эйч-ар",
+    "ИП": "ай-пи",
+    "ООО": "о-о-о",
+    "ИНН": "и-эн-эн",
+    "CDEK": "сдэк",
+    "Telegram": "Телегра́м",
+    "WhatsApp": "Вотсапп",
+    "Instagram": "Инстаграм",
+    "YouTube": "Ютуб",
+    "Google": "Гугл",
 }
 
 
@@ -145,7 +159,136 @@ STRESS_DICTIONARY = {
     "доставка": "доста́вка",
     "ресторан": "рестора́н",
     "фитнес": "фи́тнес",
+    "продвижение": "продвиже́ние",
+    "сообщество": "соо́бщество",
+    "преимущество": "преиму́щество",
+    "обслуживание": "обслу́живание",
+    "предложение": "предложе́ние",
+    "приветствие": "приве́тствие",
+    "потенциал": "потенциа́л",
+    "программист": "программи́ст",
+    "разработчик": "разрабо́тчик",
+    "технология": "техноло́гия",
+    "платформа": "платфо́рма",
+    "инструмент": "инструме́нт",
+    "обновление": "обновле́ние",
+    "функциональность": "функциона́льность",
+    "архитектура": "архитекту́ра",
+    "производительность": "производи́тельность",
+    "масштабирование": "масштаби́рование",
+    "рентабельность": "рента́бельность",
+    "окупаемость": "окупа́емость",
 }
+
+
+ONES = {
+    0: '', 1: 'одна', 2: 'две', 3: 'три', 4: 'четыре', 5: 'пять',
+    6: 'шесть', 7: 'семь', 8: 'восемь', 9: 'девять', 10: 'десять',
+    11: 'одиннадцать', 12: 'двенадцать', 13: 'тринадцать', 14: 'четырнадцать',
+    15: 'пятнадцать', 16: 'шестнадцать', 17: 'семнадцать', 18: 'восемнадцать', 19: 'девятнадцать',
+}
+ONES_MASC = {1: 'один', 2: 'два'}
+TENS = {
+    2: 'двадцать', 3: 'тридцать', 4: 'сорок', 5: 'пятьдесят',
+    6: 'шестьдесят', 7: 'семьдесят', 8: 'восемьдесят', 9: 'девяносто',
+}
+HUNDREDS = {
+    1: 'сто', 2: 'двести', 3: 'триста', 4: 'четыреста', 5: 'пятьсот',
+    6: 'шестьсот', 7: 'семьсот', 8: 'восемьсот', 9: 'девятьсот',
+}
+
+
+def _number_to_words_russian(n: int) -> str:
+    if n == 0:
+        return 'ноль'
+    if n < 0:
+        return 'минус ' + _number_to_words_russian(-n)
+
+    parts = []
+
+    if n >= 1_000_000:
+        millions = n // 1_000_000
+        n %= 1_000_000
+        m_word = _small_number_to_words(millions, masculine=True)
+        if millions % 10 == 1 and millions % 100 != 11:
+            parts.append(m_word + ' миллион')
+        elif 2 <= millions % 10 <= 4 and not (12 <= millions % 100 <= 14):
+            parts.append(m_word + ' миллиона')
+        else:
+            parts.append(m_word + ' миллионов')
+
+    if n >= 1000:
+        thousands = n // 1000
+        n %= 1000
+        t_word = _small_number_to_words(thousands, masculine=False)
+        if thousands % 10 == 1 and thousands % 100 != 11:
+            parts.append(t_word + ' тысяча')
+        elif 2 <= thousands % 10 <= 4 and not (12 <= thousands % 100 <= 14):
+            parts.append(t_word + ' тысячи')
+        else:
+            parts.append(t_word + ' тысяч')
+
+    if n > 0:
+        parts.append(_small_number_to_words(n, masculine=True))
+
+    return ' '.join(parts).strip()
+
+
+def _small_number_to_words(n: int, masculine: bool = True) -> str:
+    if n == 0:
+        return ''
+    parts = []
+    if n >= 100:
+        parts.append(HUNDREDS[n // 100])
+        n %= 100
+    if 10 <= n <= 19:
+        parts.append(ONES[n])
+        return ' '.join(parts)
+    if n >= 20:
+        parts.append(TENS[n // 10])
+        n %= 10
+    if 1 <= n <= 9:
+        if masculine and n in ONES_MASC:
+            parts.append(ONES_MASC[n])
+        else:
+            parts.append(ONES[n])
+    return ' '.join(parts)
+
+
+def numbers_to_words(text: str) -> str:
+    def replace_number(match):
+        num_str = match.group(0).replace(' ', '').replace('\u00a0', '')
+        try:
+            n = int(num_str)
+            if n > 10_000_000 or n < 0:
+                return match.group(0)
+            return _number_to_words_russian(n)
+        except ValueError:
+            return match.group(0)
+
+    result = re.sub(r'\d[\d\s\u00a0]*\d', replace_number, text)
+    result = re.sub(r'(?<!\w)\d+(?!\w)', replace_number, result)
+    return result
+
+
+def naturalize_speech(text: str) -> str:
+    result = text
+    result = re.sub(r'(\d+)\s*₽', lambda m: m.group(1) + ' рублей', result)
+    result = re.sub(r'(\d+)\s*%', lambda m: m.group(1) + ' процентов', result)
+    result = re.sub(r'\+\s*(\d)', lambda m: 'плюс ' + m.group(1), result)
+    result = result.replace(' / ', ' или ')
+    result = re.sub(r'(\d+)-(\d+)', lambda m: m.group(1) + ' — ' + m.group(2), result)
+    result = re.sub(r'\bтел\.', 'телефон', result)
+    result = re.sub(r'\bдоп\.', 'дополнительный', result)
+    result = re.sub(r'\bнапр\.', 'например', result)
+    result = re.sub(r'\bт\.д\.', 'так далее', result)
+    result = re.sub(r'\bт\.п\.', 'тому подобное', result)
+    result = re.sub(r'\bи т\.д\.', 'и так далее', result)
+    result = re.sub(r'\bи т\.п\.', 'и тому подобное', result)
+    result = re.sub(r'\bруб\.', 'рублей', result)
+    result = re.sub(r'\bмес\.', 'месяц', result)
+    result = re.sub(r'\bмин\.', 'минут', result)
+    return result
 
 
 def expand_abbreviations(text: str) -> str:

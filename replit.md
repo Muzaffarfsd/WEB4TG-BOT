@@ -79,8 +79,11 @@ Button styles (Bot API 9.4): `constructive` (green), `destructive` (red) applied
 - **Voice Settings**: stability=0.4, similarity_boost=0.8, style=0.6 — optimized for v3 expressiveness (use_speaker_boost not supported on v3)
 - **Emotion Preprocessing**: Gemini Flash analyzes response text and inserts native v3 audio tags before TTS
 - **Voice-Aware Prompt**: VOICE_CONTEXT_INSTRUCTION injected into AI context — forces conversational style, 500-700 chars, no markdown/emoji, expanded abbreviations
-- **Abbreviation Expansion**: 30-entry ABBREVIATION_MAP (ROI→ар-о-ай, CRM→си-ар-эм, etc.) applied before TTS for natural pronunciation
-- **Stress Dictionary**: 55+ word pronunciation guide for correct Russian stress marks
+- **Abbreviation Expansion**: 40+ entry ABBREVIATION_MAP (ROI→ар-о-ай, CRM→си-ар-эм, Telegram→Телеграм, WhatsApp→Вотсапп, etc.) applied before TTS for natural pronunciation
+- **Stress Dictionary**: 75+ word pronunciation guide for correct Russian stress marks (business/IT/sales terms)
+- **Number-to-Words Converter**: Full Russian number system (ones/tens/hundreds/thousands/millions with correct gender) for natural price pronunciation (150 000→сто пятьдесят тысяч)
+- **Speech Naturalizer**: naturalize_speech() — converts ₽→рублей, %→процентов, +40→плюс 40, доп.→дополнительный, 7-10→семь — десять
+- **Contextual Voice Profiles**: 5 profiles (greeting/empathy/factual/excited/default) with auto-detection — different VoiceSettings per emotional context (stability 0.3-0.5, style 0.5-0.8)
 - **Singleton ElevenLabs Client**: _get_elevenlabs_client() — reuses connection, avoids per-request overhead
 - **Voice Caching**: generate_voice_response(use_cache=True) — caches welcome audio and repeated responses (LRU 10 entries)
 - **Voice Preference Tracking**: context.user_data['prefers_voice'] and voice_message_count for analytics
@@ -88,7 +91,7 @@ Button styles (Bot API 9.4): `constructive` (green), `destructive` (red) applied
 - **Dynamic Buttons**: Stage-aware buttons shown after voice response ("Ответил голосовым. Если нужны детали:")
 - **Follow-Up Integration**: cancel + reschedule follow-ups on voice message (same as text)
 - **Fallback**: If agentic loop fails, falls back to direct Gemini with context + history + voice instruction
-- **Text Cleanup**: Unicode emoji removal, markdown stripping, stress dictionary, abbreviation expansion, 4500 char limit with sentence boundary
-- **Welcome Greeting**: Pre-tagged with [warm], [excited], [friendly], [curious] emotion tags, cached for generic greetings
+- **Text Cleanup**: Unicode emoji removal, markdown stripping, stress dictionary, abbreviation expansion, number-to-words, speech naturalization, 4500 char limit with sentence boundary
+- **Welcome Greeting**: Pre-tagged with [warm], [friendly], [calm], [curious] emotion tags, natural pauses, cached for generic greetings
 - **Photo Handler**: Upgraded with build_full_context, dynamic buttons, lead scoring (partial agentic parity)
 - **Format**: mp3_44100_192 for maximum quality with v3 model
