@@ -448,6 +448,36 @@ class TasksTracker:
             if conn:
                 self._put_connection(conn)
     
+    def add_coins(self, telegram_id: int, coins: int, reason: str = "bonus"):
+        if not DATABASE_URL or coins <= 0:
+            return False
+        
+        conn = None
+        try:
+            conn = self._get_connection()
+            with conn.cursor() as cur:
+                cur.execute("""
+                    INSERT INTO user_coins (telegram_id, total_coins, last_activity_date)
+                    VALUES (%s, %s, CURRENT_DATE)
+                    ON CONFLICT (telegram_id) 
+                    DO UPDATE SET total_coins = user_coins.total_coins + %s, 
+                                  last_activity_date = CURRENT_DATE,
+                                  updated_at = NOW()
+                """, (telegram_id, coins, coins))
+                conn.commit()
+            
+            cache_key = f"progress_{telegram_id}"
+            self._user_cache.pop(cache_key, None)
+            
+            logger.info(f"Added {coins} coins to user {telegram_id}, reason: {reason}")
+            return True
+        except Exception as e:
+            logger.error(f"Error adding coins to user {telegram_id}: {e}")
+            return False
+        finally:
+            if conn:
+                self._put_connection(conn)
+
     def get_available_tasks(self, telegram_id: int) -> dict:
         progress = self.get_user_progress(telegram_id)
         daily_completed_today = self._get_daily_tasks_completed_today(telegram_id)

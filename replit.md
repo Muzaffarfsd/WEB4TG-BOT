@@ -44,6 +44,7 @@ Button styles (Bot API 9.4): `constructive` (green), `destructive` (red) applied
 - Improved `package_` handler: added proper "Назад → loyalty_packages" navigation and fallback for unknown package IDs
 - Full callback_data audit: all 81 callback_data values handled, 31 commands registered, 0 syntax errors, 0 dead routes
 - Prefix conflict `bc_` → `bc_audience_` verified as correct nested elif (not a routing bug)
+- **Critical fix**: Added missing `add_coins` method to `TasksTracker` class — was causing `AttributeError` when manager approves a review (callback `mod_approve_*`)
 
 ## External Dependencies
 - **Telegram Bot API**: Version 9.4 (via `python-telegram-bot` 22.6) for core bot functionalities.
