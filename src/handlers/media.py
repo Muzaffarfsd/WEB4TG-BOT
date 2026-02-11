@@ -17,48 +17,66 @@ from src.handlers.utils import (
 logger = logging.getLogger(__name__)
 
 
+VOICE_EMOTION_PROMPT = """Ты эксперт по подготовке текста для озвучки через ElevenLabs v3.
+
+Твоя задача: добавить нативные audio-теги ElevenLabs v3 для максимально естественного и выразительного звучания.
+
+ДОСТУПНЫЕ ТЕГИ v3 (вставляй в квадратных скобках перед фразой):
+
+Эмоциональные:
+- [happy] — радостно, позитивно
+- [sad] — грустно, сочувственно
+- [angry] — с напором, решительно
+- [excited] — с энтузиазмом, воодушевлённо
+- [nervous] — с волнением, неуверенно
+
+Акустические:
+- [whispers] — шёпот, интимно, секрет
+- [shouts] — громко, призыв
+- [laughs] — смех перед фразой
+- [giggles] — лёгкий смешок
+- [sighs] — вздох (усталость, облегчение, задумчивость)
+
+Стилевые:
+- [friendly] — дружелюбно
+- [calm] — спокойно, размеренно
+- [confident] — уверенно, авторитетно
+- [warm] — тепло, заботливо
+- [curious] — с интересом, вопросительно
+
+ПРАВИЛА:
+1. Приветствия и знакомство: [friendly] или [warm]
+2. Цены, факты, гарантии: [confident]
+3. Выгоды и результаты кейсов: [excited]
+4. Вопросы к клиенту: [curious]
+5. Эмпатия при возражениях: [calm] или [warm]
+6. Инсайты и секреты: [whispers] — для эффекта "между нами"
+7. Впечатляющие цифры: [excited] перед числом
+8. Максимум 3-4 тега на абзац, не переусердствуй
+9. Убери ВСЮ markdown разметку: **, *, #, •, `, _
+10. Замени \\n\\n на точку и пробел для пауз
+11. Замени \\n на запятую для лёгких пауз
+12. Убери emoji (они не озвучиваются)
+13. НЕ меняй смысл и слова, только добавь теги и очисти разметку
+14. Числа пиши словами или с пробелами (150 000, не 150000)
+
+Верни ТОЛЬКО обработанный текст, без объяснений и комментариев.
+
+Текст для обработки:
+"""
+
+
 async def analyze_emotions_and_prepare_text(text: str) -> str:
     from google import genai
     from google.genai import types
     
     client = genai.Client(api_key=config.gemini_api_key)
     
-    prompt = """Ты эксперт по подготовке текста для естественного озвучивания.
-
-Твоя задача: добавить эмоциональные теги ElevenLabs v3 в текст для естественного звучания.
-
-Доступные теги (вставляй в квадратных скобках перед фразой):
-- [friendly] - дружелюбно
-- [excited] - с энтузиазмом  
-- [calm] - спокойно
-- [professional] - деловой тон
-- [warm] - тепло
-- [curious] - с интересом
-- [confident] - уверенно
-- [helpful] - услужливо
-
-Правила:
-1. Добавляй теги перед предложениями/фразами где меняется эмоция
-2. Не переусердствуй - 2-4 тега на абзац максимум
-3. Приветствия: [friendly, warm]
-4. Цены/факты: [confident, professional]  
-5. Предложения помощи: [helpful, warm]
-6. Интересные факты: [excited]
-7. Вопросы: [curious]
-8. Убери markdown разметку (**, *, #, •)
-9. Замени переносы строк на точки или запятые для пауз
-10. НЕ меняй смысл текста, только добавь теги
-
-Верни ТОЛЬКО обработанный текст, без объяснений.
-
-Текст для обработки:
-"""
-    
     try:
         response = await asyncio.to_thread(
             client.models.generate_content,
             model="gemini-2.0-flash",
-            contents=[prompt + text],
+            contents=[VOICE_EMOTION_PROMPT + text],
             config=types.GenerateContentConfig(
                 max_output_tokens=2000,
                 temperature=0.3
@@ -79,11 +97,18 @@ async def generate_voice_response(text: str) -> bytes:
     client = ElevenLabs(api_key=config.elevenlabs_api_key)
     
     clean_text = text.replace("**", "").replace("*", "").replace("#", "").replace("•", ",")
+    clean_text = clean_text.replace("`", "").replace("_", "")
     clean_text = clean_text.replace("\n\n", ". ").replace("\n", ", ")
+    
+    import re
+    clean_text = re.sub(r'[^\w\s\[\].,!?;:\'\"—–\-()₽%+=/\\]', '', clean_text)
     
     voice_text = await analyze_emotions_and_prepare_text(clean_text)
     
     voice_text = apply_stress_marks(voice_text)
+    
+    if len(voice_text) > 4500:
+        voice_text = voice_text[:4500].rsplit('.', 1)[0] + '.'
     
     try:
         audio_generator = await asyncio.to_thread(
@@ -91,7 +116,13 @@ async def generate_voice_response(text: str) -> bytes:
             voice_id=config.elevenlabs_voice_id,
             text=voice_text,
             model_id="eleven_v3",
-            output_format="mp3_44100_192"
+            output_format="mp3_44100_192",
+            voice_settings={
+                "stability": 0.4,
+                "similarity_boost": 0.8,
+                "style": 0.6,
+                "use_speaker_boost": True,
+            }
         )
         
         audio_bytes = b"".join(audio_generator)
@@ -101,18 +132,56 @@ async def generate_voice_response(text: str) -> bytes:
         raise
 
 
+async def _transcribe_voice(voice_bytes: bytes) -> str:
+    from google import genai
+    from google.genai import types
+    
+    client = genai.Client(api_key=config.gemini_api_key)
+    
+    audio_part = types.Part.from_bytes(data=bytes(voice_bytes), mime_type="audio/ogg")
+    text_part = types.Part(text=(
+        "Расшифруй это голосовое сообщение дословно. "
+        "Верни ТОЛЬКО текст того, что сказал человек. "
+        "Без комментариев, без пояснений, без кавычек."
+    ))
+    
+    response = await asyncio.to_thread(
+        client.models.generate_content,
+        model="gemini-2.0-flash",
+        contents=[audio_part, text_part],
+        config=types.GenerateContentConfig(
+            max_output_tokens=500,
+            temperature=0.1
+        )
+    )
+    
+    if response.text:
+        return response.text.strip()
+    return ""
+
+
 async def voice_handler(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
     user = update.effective_user
     
     typing_task = asyncio.create_task(
-        send_typing_action(update, duration=30.0)
+        send_typing_action(update, duration=60.0)
     )
     
     try:
         voice = update.message.voice
         file = await context.bot.get_file(voice.file_id)
-        
         voice_bytes = await file.download_as_bytearray()
+        
+        transcription = await _transcribe_voice(voice_bytes)
+        
+        if not transcription:
+            typing_task.cancel()
+            await update.message.reply_text(
+                "Не удалось распознать сообщение. Попробуйте ещё раз или напишите текстом."
+            )
+            return
+        
+        logger.info(f"User {user.id} voice transcribed: {transcription[:100]}...")
         
         session = session_manager.get_session(
             user_id=user.id,
@@ -120,56 +189,199 @@ async def voice_handler(update: Update, context: ContextTypes.DEFAULT_TYPE) -> N
             first_name=user.first_name
         )
         
-        from google import genai
-        from google.genai import types
-        from src.knowledge_base import SYSTEM_PROMPT
+        session.add_message("user", transcription, config.max_history_length)
+        lead_manager.save_message(user.id, "user", f"[Голосовое] {transcription}")
+        lead_manager.log_event("voice_message", user.id)
+        lead_manager.update_activity(user.id)
         
-        client = genai.Client(api_key=config.gemini_api_key)
+        from src.followup import follow_up_manager
+        follow_up_manager.cancel_follow_ups(user.id)
+        follow_up_manager.schedule_follow_up(user.id)
         
-        audio_part = types.Part.from_bytes(data=bytes(voice_bytes), mime_type="audio/ogg")
-        text_part = types.Part(text="Это голосовое сообщение от клиента. Пойми что он сказал и сразу ответь на его вопрос как консультант Алекс из WEB4TG Studio. НЕ пиши расшифровку, НЕ пиши 'вы сказали', просто отвечай на вопрос.")
+        from src.context_builder import build_full_context, get_dynamic_buttons
+        client_context = build_full_context(user.id, transcription, user.username, user.first_name)
         
-        response = await asyncio.to_thread(
-            client.models.generate_content,
-            model=config.model_name,
-            contents=[audio_part, text_part],
-            config=types.GenerateContentConfig(
-                system_instruction=SYSTEM_PROMPT,
-                max_output_tokens=1000,
-                temperature=0.7
+        from src.ai_client import ai_client
+        
+        messages_for_ai = session.get_history()
+        if client_context:
+            context_msg = {
+                "role": "user",
+                "parts": [{"text": f"[СИСТЕМНЫЙ КОНТЕКСТ — не показывай клиенту, используй для персонализации]\n{client_context}"}]
+            }
+            response_ack = {
+                "role": "model",
+                "parts": [{"text": "Понял контекст, учту в ответе."}]
+            }
+            messages_for_ai = [context_msg, response_ack] + messages_for_ai
+        
+        from src.handlers.messages import execute_tool_call
+        
+        async def _tool_executor(tool_name, tool_args):
+            return await execute_tool_call(
+                tool_name, tool_args,
+                user.id, user.username, user.first_name
             )
-        )
+        
+        thinking_level = "high" if len(transcription) > 100 else "medium"
+        
+        response_text = None
+        special_actions = []
+        
+        try:
+            agentic_result = await ai_client.agentic_loop(
+                messages=messages_for_ai,
+                tool_executor=_tool_executor,
+                thinking_level=thinking_level,
+                max_steps=4
+            )
+            
+            special_actions = agentic_result.get("special_actions", [])
+            
+            if special_actions:
+                for action_type, action_data in special_actions:
+                    if action_type == "portfolio":
+                        from src.keyboards import get_portfolio_keyboard
+                        from src.knowledge_base import PORTFOLIO_MESSAGE
+                        await update.message.reply_text(
+                            PORTFOLIO_MESSAGE, parse_mode="Markdown",
+                            reply_markup=get_portfolio_keyboard()
+                        )
+                    elif action_type == "pricing":
+                        from src.pricing import get_price_main_text, get_price_main_keyboard
+                        await update.message.reply_text(
+                            get_price_main_text(), parse_mode="Markdown",
+                            reply_markup=get_price_main_keyboard()
+                        )
+                    elif action_type == "payment":
+                        from src.payments import get_payment_keyboard
+                        await update.message.reply_text(
+                            "💳 Выберите способ оплаты:",
+                            reply_markup=get_payment_keyboard()
+                        )
+            
+            if agentic_result.get("text"):
+                response_text = agentic_result["text"]
+            elif special_actions and not agentic_result.get("text"):
+                typing_task.cancel()
+                session.add_message("assistant", "Показал запрошенную информацию", config.max_history_length)
+                lead_manager.save_message(user.id, "assistant", "Показал запрошенную информацию")
+                _run_voice_post_processing(user.id, transcription, session)
+                return
+        except Exception as e:
+            logger.warning(f"Voice agentic loop failed, falling back to direct: {e}")
+            
+            from src.knowledge_base import SYSTEM_PROMPT
+            from google import genai
+            from google.genai import types
+            
+            client = genai.Client(api_key=config.gemini_api_key)
+            
+            history_text = ""
+            for msg in session.get_history()[-6:]:
+                role = "Клиент" if msg.get("role") == "user" else "Алекс"
+                parts = msg.get("parts", [])
+                txt = parts[0].get("text", "") if parts else ""
+                if txt and not txt.startswith("[СИСТЕМНЫЙ"):
+                    history_text += f"{role}: {txt}\n"
+            
+            context_addition = ""
+            if client_context:
+                context_addition = f"\n[КОНТЕКСТ]\n{client_context}\n"
+            
+            full_prompt = (
+                f"{context_addition}"
+                f"История диалога:\n{history_text}\n"
+                f"Клиент сказал голосовым: {transcription}\n\n"
+                f"Ответь как консультант Алекс."
+            )
+            
+            response = await asyncio.to_thread(
+                client.models.generate_content,
+                model=config.model_name,
+                contents=[full_prompt],
+                config=types.GenerateContentConfig(
+                    system_instruction=SYSTEM_PROMPT,
+                    max_output_tokens=1500,
+                    temperature=0.7
+                )
+            )
+            
+            if response.text:
+                response_text = response.text
+        
+        if not response_text:
+            response_text = "Извините, не удалось сформировать ответ. Попробуйте переформулировать вопрос."
+        
+        session.add_message("assistant", response_text, config.max_history_length)
+        lead_manager.save_message(user.id, "assistant", response_text)
         
         typing_task.cancel()
+        try:
+            await typing_task
+        except asyncio.CancelledError:
+            pass
         
-        if response.text:
-            session.add_message("user", "[Голосовое сообщение]", config.max_history_length)
-            session.add_message("assistant", response.text, config.max_history_length)
+        voice_sent = False
+        if config.elevenlabs_api_key:
+            try:
+                await update.effective_chat.send_action(ChatAction.RECORD_VOICE)
+                voice_response = await generate_voice_response(response_text)
+                await update.message.reply_voice(voice=voice_response)
+                voice_sent = True
+            except Exception as e:
+                logger.error(f"ElevenLabs TTS error ({type(e).__name__}): {e}")
+        
+        if not voice_sent:
+            dynamic_btns = get_dynamic_buttons(user.id, transcription, session.message_count)
+            reply_markup = None
+            if dynamic_btns:
+                keyboard_rows = [[InlineKeyboardButton(text, callback_data=cb)] for text, cb in dynamic_btns[:3]]
+                reply_markup = InlineKeyboardMarkup(keyboard_rows)
             
-            lead_manager.save_message(user.id, "user", "[Голосовое сообщение]")
-            lead_manager.save_message(user.id, "assistant", response.text)
-            lead_manager.log_event("voice_message", user.id)
-            lead_manager.update_activity(user.id)
-            
-            if config.elevenlabs_api_key:
-                try:
-                    await update.effective_chat.send_action(ChatAction.RECORD_VOICE)
-                    voice_response = await generate_voice_response(response.text)
-                    await update.message.reply_voice(voice=voice_response)
-                except Exception as e:
-                    logger.error(f"ElevenLabs TTS error ({type(e).__name__}): {e}")
-                    await update.message.reply_text(response.text)
+            if len(response_text) > 4096:
+                chunks = [response_text[i:i+4096] for i in range(0, len(response_text), 4096)]
+                for i, chunk in enumerate(chunks):
+                    if i == len(chunks) - 1:
+                        await update.message.reply_text(chunk, reply_markup=reply_markup)
+                    else:
+                        await update.message.reply_text(chunk)
             else:
-                await update.message.reply_text(response.text)
+                await update.message.reply_text(response_text, reply_markup=reply_markup)
         else:
-            await update.message.reply_text("Не удалось распознать сообщение. Попробуйте ещё раз или напишите текстом.")
-            
+            dynamic_btns = get_dynamic_buttons(user.id, transcription, session.message_count)
+            if dynamic_btns:
+                keyboard_rows = [[InlineKeyboardButton(text, callback_data=cb)] for text, cb in dynamic_btns[:3]]
+                reply_markup = InlineKeyboardMarkup(keyboard_rows)
+                await update.message.reply_text(
+                    "☝️ Ответил голосовым. Если нужны детали:",
+                    reply_markup=reply_markup
+                )
+        
+        logger.info(f"User {user.id}: voice message processed (agentic, voice_reply={'yes' if voice_sent else 'no'})")
+        
+        _run_voice_post_processing(user.id, transcription, session)
+        
     except Exception as e:
         typing_task.cancel()
         logger.error(f"Voice processing error: {e}")
         await update.message.reply_text(
             "Не удалось обработать голосовое сообщение. Напишите текстом, пожалуйста."
         )
+
+
+def _run_voice_post_processing(user_id: int, transcription: str, session):
+    from src.handlers.messages import auto_tag_lead, auto_score_lead, extract_insights_if_needed, summarize_if_needed
+    
+    auto_tag_lead(user_id, transcription)
+    auto_score_lead(user_id, transcription)
+    
+    asyncio.create_task(
+        extract_insights_if_needed(user_id, session)
+    )
+    asyncio.create_task(
+        summarize_if_needed(user_id, session)
+    )
 
 
 async def video_handler(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:

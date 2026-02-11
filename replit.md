@@ -68,4 +68,19 @@ Button styles (Bot API 9.4): `constructive` (green), `destructive` (red) applied
 - **Telegram Bot API**: Version 9.4 (via `python-telegram-bot` 22.6) for core bot functionalities.
 - **Google AI (Gemini 3 Pro Preview)**: For natural language processing, AI responses, function calling, and vision (multimodal).
 - **PostgreSQL**: As the primary database, hosted on Railway.
-- **ElevenLabs**: (Optional) For voice greetings.
+- **ElevenLabs**: (Optional) For voice greetings and voice responses (v3 model, native audio tags, optimized voice_settings).
+
+## Voice System Architecture
+- **Voice Handler**: `src/handlers/media.py` → `voice_handler()` — full agentic pipeline for voice messages
+- **Transcription**: Gemini Flash transcribes audio → text, then text goes through standard agentic loop
+- **Agentic Loop**: Voice messages use same `ai_client.agentic_loop()` as text — AI can call all 11 tools (calculator, portfolio, ROI, etc.)
+- **Context Injection**: build_full_context() provides funnel stage, client profile, history to voice AI responses
+- **ElevenLabs v3 TTS**: Native audio tags ([whispers], [sighs], [laughs], [giggles], [shouts], [happy], [sad], [angry], [excited], [nervous]) + style tags ([friendly], [calm], [confident], [warm], [curious])
+- **Voice Settings**: stability=0.4, similarity_boost=0.8, style=0.6, use_speaker_boost=True — optimized for expressiveness
+- **Emotion Preprocessing**: Gemini Flash analyzes response text and inserts native v3 audio tags before TTS
+- **Post-Processing Parity**: auto_tag_lead, auto_score_lead, extract_insights, summarize — identical to text handler
+- **Dynamic Buttons**: Stage-aware buttons shown after voice response ("Ответил голосовым. Если нужны детали:")
+- **Follow-Up Integration**: cancel + reschedule follow-ups on voice message (same as text)
+- **Fallback**: If agentic loop fails, falls back to direct Gemini with context + history
+- **Text Cleanup**: Markdown/emoji removal, stress dictionary, 4500 char limit with sentence boundary
+- **Format**: mp3_44100_192 for maximum quality with v3 model
