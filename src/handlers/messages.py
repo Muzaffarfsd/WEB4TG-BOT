@@ -364,7 +364,36 @@ async def extract_insights_if_needed(user_id: int, session) -> None:
         if insights.get("ready_to_buy"):
             lead_manager.update_lead(user_id, priority=LeadPriority.HOT)
             lead_manager.add_tag(user_id, "ready_to_buy")
-        
+
+        try:
+            from src.session import save_client_profile
+            profile_data = {}
+            if insights.get("business_type"):
+                industry_map = {
+                    "магазин": "shop", "shop": "shop", "интернет-магазин": "shop", "ecommerce": "shop",
+                    "ресторан": "restaurant", "restaurant": "restaurant", "доставка": "restaurant", "кафе": "restaurant",
+                    "салон": "beauty", "beauty": "beauty", "красота": "beauty", "косметология": "beauty",
+                    "фитнес": "fitness", "fitness": "fitness", "спорт": "fitness", "gym": "fitness",
+                    "клиника": "medical", "medical": "medical", "медицина": "medical",
+                }
+                btype = insights["business_type"].lower()
+                for key, val in industry_map.items():
+                    if key in btype:
+                        profile_data["industry"] = val
+                        break
+                if "industry" not in profile_data:
+                    profile_data["industry"] = insights["business_type"][:50]
+            if insights.get("budget"):
+                profile_data["budget_range"] = str(insights["budget"])[:50]
+            if insights.get("timeline"):
+                profile_data["timeline"] = str(insights["timeline"])[:50]
+            if insights.get("needs"):
+                profile_data["needs"] = ", ".join(insights["needs"][:5])[:200]
+            if profile_data:
+                save_client_profile(user_id, **profile_data)
+        except Exception as e:
+            logger.debug(f"Failed to save client profile: {e}")
+
         logger.info(f"Extracted insights for user {user_id}: {insights}")
     except Exception as e:
         logger.debug(f"Insight extraction failed for user {user_id}: {e}")

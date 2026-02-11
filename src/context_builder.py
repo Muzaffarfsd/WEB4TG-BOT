@@ -258,16 +258,53 @@ def detect_momentum(text: str) -> Optional[str]:
     return None
 
 
+SEMANTIC_INTENT_PATTERNS = {
+    "action": [
+        "хочу оплатить", "готов оплатить", "выставьте счёт", "куда переводить",
+        "как оплатить", "давайте к оплате", "оплачу сегодня", "присылайте реквизиты",
+        "хочу купить", "беру", "оформляю"
+    ],
+    "decision": [
+        "давайте начнём", "хочу заказать", "готов начать", "мне нужно это",
+        "когда сможете начать", "сделайте мне", "я решил", "берём",
+        "нужно сделать", "хочу такое же", "мне подходит", "записывайте",
+        "автоматизировать заказы", "нужно приложение", "хочу приложение",
+        "нужен бот", "сделайте приложение", "закажу"
+    ],
+    "consideration": [
+        "а если сравнить", "какие гарантии", "а вдруг не получится",
+        "стоит ли", "окупится ли", "имеет ли смысл", "не уверен что нужно",
+        "а что если", "чем отличается", "какая разница между",
+        "может подождать", "надо подумать", "посоветуюсь"
+    ],
+    "interest": [
+        "сколько это стоит", "какие цены", "какие сроки", "что входит",
+        "расскажите подробнее", "какие функции", "что умеет",
+        "можно ли сделать", "есть примеры", "покажите работы",
+        "как выглядит", "интересно узнать", "а можно", "а есть"
+    ]
+}
+
+BACKSLIDE_PATTERNS = [
+    "подумаю", "не уверен", "дорого", "позже", "не сейчас",
+    "сомневаюсь", "не готов", "рано ещё", "другие варианты",
+    "нужно посоветоваться", "не знаю нужно ли", "пока не надо"
+]
+
+
 def detect_funnel_stage(user_id: int, user_message: str, message_count: int = 0) -> str:
     text_lower = user_message.lower()
 
     lead_score = 0
     lead_actions = set()
+    lead_tags = set()
     try:
         from src.leads import lead_manager
         lead = lead_manager.get_lead(user_id)
         if lead:
             lead_score = lead.score or 0
+            if lead.tags:
+                lead_tags = set(lead.tags)
             events = lead_manager.get_events(user_id) if hasattr(lead_manager, 'get_events') else []
             for ev in events:
                 event_type = ev.get("event_type", "") if isinstance(ev, dict) else ""
@@ -275,28 +312,167 @@ def detect_funnel_stage(user_id: int, user_message: str, message_count: int = 0)
     except Exception:
         pass
 
-    if lead_score >= 60 or any(kw in text_lower for kw in FUNNEL_STAGE_SIGNALS["action"]["keywords"]):
+    has_backslide = any(bp in text_lower for bp in BACKSLIDE_PATTERNS)
+
+    keyword_stage = _keyword_stage(text_lower, lead_actions, message_count)
+    semantic_stage = _semantic_stage(text_lower)
+    score_stage = _score_stage(lead_score)
+
+    stage_priority = {"awareness": 0, "interest": 1, "consideration": 2, "decision": 3, "action": 4}
+
+    candidates = [keyword_stage, semantic_stage, score_stage]
+    best = max(candidates, key=lambda s: stage_priority.get(s, 0))
+
+    if has_backslide and stage_priority.get(best, 0) >= 3:
+        best = "consideration"
+    elif has_backslide and stage_priority.get(best, 0) >= 2:
+        best = "interest"
+
+    if "ready_to_buy" in lead_tags and not has_backslide:
+        if stage_priority.get(best, 0) < 3:
+            best = "decision"
+
+    return best
+
+
+def _keyword_stage(text_lower: str, lead_actions: set, message_count: int) -> str:
+    if any(kw in text_lower for kw in FUNNEL_STAGE_SIGNALS["action"]["keywords"]):
         return "action"
-
-    if lead_score >= 40 or any(kw in text_lower for kw in FUNNEL_STAGE_SIGNALS["decision"]["keywords"]):
+    if any(kw in text_lower for kw in FUNNEL_STAGE_SIGNALS["decision"]["keywords"]):
         return "decision"
-
     if any("payment" in a or "lead" in a or "contact" in a for a in lead_actions):
         return "decision"
-
-    if lead_score >= 20 or any(kw in text_lower for kw in FUNNEL_STAGE_SIGNALS["consideration"]["keywords"]):
+    if any(kw in text_lower for kw in FUNNEL_STAGE_SIGNALS["consideration"]["keywords"]):
         return "consideration"
-
     if any("calc" in a or "portfolio" in a or "price" in a for a in lead_actions):
         return "consideration"
-
     if any(kw in text_lower for kw in FUNNEL_STAGE_SIGNALS["interest"]["keywords"]):
         return "interest"
-
     if message_count > FUNNEL_STAGE_SIGNALS["awareness"]["max_messages"]:
         return "interest"
-
     return "awareness"
+
+
+def _semantic_stage(text_lower: str) -> str:
+    for stage in ["action", "decision", "consideration", "interest"]:
+        patterns = SEMANTIC_INTENT_PATTERNS.get(stage, [])
+        matches = sum(1 for p in patterns if p in text_lower)
+        if matches >= 1:
+            return stage
+    return "awareness"
+
+
+def _score_stage(lead_score: int) -> str:
+    if lead_score >= 60:
+        return "action"
+    if lead_score >= 40:
+        return "decision"
+    if lead_score >= 20:
+        return "consideration"
+    if lead_score >= 5:
+        return "interest"
+    return "awareness"
+
+
+def detect_client_style(user_message: str, message_count: int = 0) -> Optional[str]:
+    text = user_message.strip()
+    word_count = len(text.split())
+
+    if word_count <= 5 and message_count > 2:
+        return "СТИЛЬ: Лаконичный. Клиент пишет коротко — отвечай так же: 1-2 предложения, суть без воды. Не задавай лишних вопросов."
+
+    if word_count >= 50:
+        return "СТИЛЬ: Развёрнутый. Клиент пишет подробно — можешь дать более детальный ответ (до 150 слов). Покажи, что внимательно прочитал."
+
+    has_formal = any(w in text.lower() for w in ["уважаемый", "прошу", "будьте добры", "не могли бы", "соблаговолите"])
+    if has_formal:
+        return "СТИЛЬ: Формальный. Клиент общается официально — будь вежливее, на \"вы\", без разговорных оборотов и )."
+
+    has_casual = any(w in text.lower() for w in ["чё", "ваще", "норм", "ок", "го", "хз", "кста", "чел", "тип"])
+    if has_casual:
+        return "СТИЛЬ: Неформальный. Клиент общается свободно — будь проще, используй ), мессенджерный стиль."
+
+    return None
+
+
+PROACTIVE_VALUE_BY_INDUSTRY = {
+    "shop": "ЦЕННОСТЬ: Для интернет-магазинов — средний рост конверсии при переходе на Mini App составляет 35-45%, потому что клиент не уходит из Telegram. Предложи: \"Хотите, прикину сколько дополнительных заказов это даст при вашем трафике?\"",
+    "restaurant": "ЦЕННОСТЬ: Для ресторанов — Mini App убирает комиссию агрегаторов (15-30%). При 100 заказах/мес по 1500₽ экономия = 22-45к/мес. Предложи: \"Давайте посчитаю, сколько вы отдаёте агрегаторам — цифры обычно удивляют\"",
+    "beauty": "ЦЕННОСТЬ: Для салонов красоты — автоматическая запись через Mini App сокращает no-show на 40% (напоминания в Telegram). Предложи: \"Знаете, сколько денег теряется на отменах и неявках? Могу прикинуть.\"",
+    "fitness": "ЦЕННОСТЬ: Для фитнеса — трекинг прогресса и расписание в приложении удерживает клиентов на 60% дольше (LTV растёт). Предложи: \"Хотите, покажу как другие клубы увеличили retention?\"",
+    "medical": "ЦЕННОСТЬ: Для клиник — онлайн-запись через Telegram увеличивает заполняемость на 25%. Удобство пациента = лояльность. Предложи: \"Давайте прикинем, сколько пациентов вы теряете из-за неудобной записи?\"",
+    "ai": "ЦЕННОСТЬ: AI-бот обрабатывает 70-80% типовых вопросов без участия человека, 24/7. Экономия на 1 сотруднике поддержки = 80-120к/мес. Предложи: \"Могу показать демо AI-бота из похожей ниши\"",
+}
+
+PROACTIVE_VALUE_BY_STAGE = {
+    "awareness": "Подготовил для вас мини-чек-лист \"5 вопросов перед запуском Mini App\" — помогает понять что нужно. Показать?",
+    "interest": "У нас есть бесплатный расчёт стоимости — указываете функции, получаете точную цифру. Хотите попробовать?",
+    "consideration": "Могу подготовить для вас персональное сравнение: ваши затраты сейчас vs. с Mini App. Это бесплатно и ни к чему не обязывает.",
+    "decision": "Могу прямо сейчас набросать для вас предварительное ТЗ — это бесплатно и даст понимание всего объёма работ.",
+}
+
+
+def get_proactive_value(user_id: int, funnel_stage: str) -> str:
+    try:
+        from src.leads import lead_manager
+        lead = lead_manager.get_lead(user_id)
+        if lead and lead.tags:
+            for tag in lead.tags:
+                if tag in PROACTIVE_VALUE_BY_INDUSTRY:
+                    return f"[ПРОАКТИВНАЯ ЦЕННОСТЬ]\n{PROACTIVE_VALUE_BY_INDUSTRY[tag]}"
+    except Exception:
+        pass
+
+    if funnel_stage in PROACTIVE_VALUE_BY_STAGE:
+        return f"[ПРОАКТИВНАЯ ЦЕННОСТЬ]\n{PROACTIVE_VALUE_BY_STAGE[funnel_stage]}"
+    return ""
+
+
+INDUSTRY_CASE_STUDIES = {
+    "shop": {
+        "name": "Radiance",
+        "desc": "магазин премиум-одежды",
+        "result": "200+ заказов в первую неделю, конверсия из Telegram в покупку — 12%",
+        "quote": "Жалею что не сделал раньше — за месяц окупилось дважды"
+    },
+    "restaurant": {
+        "name": "DeluxeDine",
+        "desc": "ресторан с доставкой",
+        "result": "перешли с агрегатора, экономия 35к/мес на комиссиях, +47 заказов в первый месяц",
+        "quote": "Агрегаторы забирали 25% — теперь вся маржа наша"
+    },
+    "beauty": {
+        "name": "GlowSpa",
+        "desc": "салон красоты",
+        "result": "no-show снизился на 45%, загрузка мастеров выросла до 90%",
+        "quote": "Клиенты теперь записываются сами, даже ночью"
+    },
+    "fitness": {
+        "name": "FitPro",
+        "desc": "фитнес-клуб",
+        "result": "retention клиентов вырос на 35%, абонементы стали продлевать чаще",
+        "quote": "Трекинг в приложении — главная фишка, люди привыкают"
+    },
+}
+
+
+def get_relevant_case_study(user_id: int) -> str:
+    try:
+        from src.leads import lead_manager
+        lead = lead_manager.get_lead(user_id)
+        if lead and lead.tags:
+            for tag in lead.tags:
+                if tag in INDUSTRY_CASE_STUDIES:
+                    cs = INDUSTRY_CASE_STUDIES[tag]
+                    return (
+                        f"[РЕЛЕВАНТНЫЙ КЕЙС — {cs['name']}]\n"
+                        f"Проект: {cs['name']} ({cs['desc']})\n"
+                        f"Результат: {cs['result']}\n"
+                        f"Отзыв клиента: \"{cs['quote']}\""
+                    )
+    except Exception:
+        pass
+    return ""
 
 
 def get_social_proof(objections: list, funnel_stage: str) -> str:
@@ -389,6 +565,26 @@ def build_client_context(user_id: int, username: str = None, first_name: str = N
     except Exception as e:
         logger.debug(f"Failed to get event data: {e}")
 
+    try:
+        from src.session import get_client_profile
+        profile = get_client_profile(user_id)
+        if profile:
+            profile_parts = []
+            if profile.get("industry"):
+                profile_parts.append(f"Отрасль: {profile['industry']}")
+            if profile.get("budget_range"):
+                profile_parts.append(f"Бюджет: {profile['budget_range']}")
+            if profile.get("timeline"):
+                profile_parts.append(f"Сроки: {profile['timeline']}")
+            if profile.get("needs"):
+                profile_parts.append(f"Потребности: {profile['needs']}")
+            if profile.get("objections"):
+                profile_parts.append(f"Возражения: {profile['objections']}")
+            if profile_parts:
+                context_parts.append("[ДОЛГОСРОЧНЫЙ ПРОФИЛЬ]\n" + "\n".join(profile_parts))
+    except Exception as e:
+        logger.debug(f"Failed to get client profile: {e}")
+
     if context_parts:
         return "\n".join(context_parts)
     return ""
@@ -427,6 +623,10 @@ def build_full_context(user_id: int, user_message: str, username: str = None, fi
     if client_ctx:
         parts.append(client_ctx)
 
+    client_style = detect_client_style(user_message, message_count)
+    if client_style:
+        parts.append(f"\n[СТИЛЬ КЛИЕНТА]\n{client_style}")
+
     funnel_stage = detect_funnel_stage(user_id, user_message, message_count)
     stage_info = FUNNEL_STAGE_SIGNALS.get(funnel_stage, {})
     if stage_info.get("instruction"):
@@ -441,6 +641,10 @@ def build_full_context(user_id: int, user_message: str, username: str = None, fi
     if social_proof:
         parts.append(f"\n{social_proof}")
 
+    relevant_case = get_relevant_case_study(user_id)
+    if relevant_case and funnel_stage in ("consideration", "decision"):
+        parts.append(f"\n{relevant_case}")
+
     emotion_hint = build_emotion_hint(user_message)
     if emotion_hint:
         parts.append(f"\n[ЭМОЦИОНАЛЬНЫЙ ТОН]\n{emotion_hint}")
@@ -448,6 +652,10 @@ def build_full_context(user_id: int, user_message: str, username: str = None, fi
     momentum = detect_momentum(user_message)
     if momentum and momentum in MOMENTUM_STRATEGIES:
         parts.append(f"\n[MOMENTUM]\n{MOMENTUM_STRATEGIES[momentum]}")
+
+    proactive = get_proactive_value(user_id, funnel_stage)
+    if proactive:
+        parts.append(f"\n{proactive}")
 
     if parts:
         return "\n".join(parts)

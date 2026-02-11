@@ -37,24 +37,28 @@ To get custom emoji IDs: send a custom emoji from a sticker pack to the bot, use
 Button styles (Bot API 9.4): `constructive` (green), `destructive` (red) applied via `styled_button_api_kwargs()`.
 
 ## Recent Changes (Feb 11, 2026)
-- **2025-2026 Sales Techniques**: Full implementation of neuro-selling (3-brain model), SPIN methodology, micro-commitments, progressive disclosure
-- **Sales Funnel Detection**: 5 stages (Awareness→Interest→Consideration→Decision→Action) with stage-specific AI behavior
-- **Dynamic Buttons**: Context-aware inline buttons change based on funnel stage — early stage shows prices/portfolio, late stage shows lead/consult/payment
-- **Personalized Greetings**: Returning users see conversation context summary; new users get warm SPIN-style opener
-- **Context Builder Upgrade**: Funnel detection, momentum tracking (low engagement, topic drift), social proof engine (auto-inserts case studies), 8 objection types
-- **System Prompt Rewrite**: Neuro-selling (reptilian/emotional/rational), SPIN selling, commitment ladder (6 steps), value-first, one-question-per-message, max 80 words, anthropomorphic signals, grounded AI guardrails
-- **Smart Callback Handlers**: 13 new smart_* callbacks for dynamic funnel-stage buttons
-- Previous: persistent memory, multimodal AI, 11 AI tools, agentic loop, auto lead scoring, insight extraction
+- **System Prompt v2**: Restructured from 25+ conflicting rules to 7 core flexible principles. #1 priority = tone mirroring. Removed conflicts (3-brain-every-msg vs word-limit). Techniques now contextual, not mandatory.
+- **Hybrid Funnel Detection**: 3-signal system (keyword + semantic intent + lead score), picks highest stage, then applies backslide check. Semantic patterns detect implicit intent ("нужно автоматизировать заказы" → decision).
+- **Funnel Backslide**: Detects doubt keywords ("подумаю", "дорого", "не уверен") and downgrades stage (decision→consideration, consideration→interest).
+- **Client Style Detection**: `detect_client_style()` — 4 styles (laconic/detailed/formal/casual) with adaptive response instructions. Integrated into context builder.
+- **Proactive Value Delivery**: Industry-specific ROI benchmarks (shop/restaurant/beauty/fitness/medical/AI) + stage-specific micro-assets (checklists, calculators, comparisons).
+- **Industry-Matched Case Studies**: `get_relevant_case_study()` — Radiance for shops, DeluxeDine for restaurants, GlowSpa for beauty, FitPro for fitness. Auto-selected by client's industry tag.
+- **Client Profiles (30+ days)**: New `client_profiles` table — stores industry, budget, timeline, needs, objections, style, timezone. Populated from AI insight extraction. Injected into context as [ДОЛГОСРОЧНЫЙ ПРОФИЛЬ].
+- **Win-Back Follow-Up (4th touch)**: New follow-up #4 at 14-21 days with fresh value proposition (new case study, free audit offer). AI-generated with win-back prompt template.
+- **Timezone-Aware Follow-Ups**: Uses `timezone_offset` from client profile to schedule follow-ups during business hours (9:00-20:00 client time).
+- **Conversation History Extended**: TTL increased from 7 to 30 days for B2B sales cycle support.
+- Previous: persistent memory, multimodal AI, 11 AI tools, agentic loop, auto lead scoring, insight extraction, dynamic buttons, smart callbacks
 
 ## Super Agent Architecture
 - **Agentic Loop**: `src/ai_client.py` → `agentic_loop()` — multi-step tool calling (up to 4 steps), AI chains tools and synthesizes results
-- **Session + Memory Summarization**: `src/session.py` — persistent memory (PostgreSQL), auto-summarization at 20+ messages, summary stored in `conversation_summaries` table
-- **Context Builder (Funnel/SPIN/Neuro)**: `src/context_builder.py` — 5-stage funnel detection, momentum tracking, social proof engine, 8 objection types, emotional intelligence (5 tones), dynamic button selection
-- **Knowledge Base (Neuro-Selling Prompt)**: `src/knowledge_base.py` — 3-brain model, SPIN framework, commitment ladder, progressive disclosure, anthropomorphic signals, guardrails
+- **Session + Memory**: `src/session.py` — persistent memory (PostgreSQL, 30-day TTL), auto-summarization at 20+ messages, `client_profiles` table for long-term data (industry, budget, needs, timezone)
+- **Context Builder (Hybrid Funnel)**: `src/context_builder.py` — 3-signal hybrid funnel (keywords + semantics + score), backslide detection, client style mirroring, proactive value delivery, industry case study matching, 8 objection types, emotional intelligence (5 tones), dynamic buttons
+- **Knowledge Base (Optimized Prompt)**: `src/knowledge_base.py` — 7 core rules (mirror first), 3-brain model (pick 1-2), SPIN by stage, flexible question rule, value-first, grounded AI, ethical guardrails
 - **Dynamic Button System**: `src/context_builder.py` → `get_dynamic_buttons()` → `src/handlers/messages.py` attaches stage-aware buttons to every AI response
 - **AI Client**: `src/ai_client.py` — Gemini API with 11 function-calling tools, streaming, thinking modes, agentic loop
 - **Auto Lead Scoring**: `src/handlers/messages.py` — 9 buying signal categories with weighted scoring, auto-priority escalation
-- **Insight Extraction**: `src/handlers/messages.py` — AI extracts budget/timeline/needs from conversation every 5 messages, auto-saves to lead profile
+- **Insight Extraction + Profile**: `src/handlers/messages.py` — AI extracts budget/timeline/needs every 5 messages, auto-saves to lead tags AND `client_profiles` table with industry mapping
+- **Follow-Up System**: `src/followup.py` — 4 touches (including win-back), timezone-aware scheduling, AI-generated messages per stage
 - **Guardrails**: System prompt rules preventing unauthorized promises (discounts, delivery dates, free features)
 - **Tool Execution**: `src/handlers/messages.py` — handles all 11 AI tool calls with agentic loop and special actions
 

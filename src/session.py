@@ -188,7 +188,7 @@ def _init_conversation_table():
         )
         execute_query("""
             DELETE FROM conversation_history 
-            WHERE created_at < NOW() - INTERVAL '7 days'
+            WHERE created_at < NOW() - INTERVAL '30 days'
         """)
         execute_query("""
             CREATE TABLE IF NOT EXISTS conversation_summaries (
@@ -197,9 +197,79 @@ def _init_conversation_table():
                 updated_at TIMESTAMP DEFAULT NOW()
             )
         """)
-        logger.info("Conversation history + summaries tables initialized")
+        execute_query("""
+            CREATE TABLE IF NOT EXISTS client_profiles (
+                telegram_id BIGINT PRIMARY KEY,
+                industry VARCHAR(50),
+                budget_range VARCHAR(50),
+                timeline VARCHAR(50),
+                needs TEXT,
+                objections TEXT,
+                preferred_style VARCHAR(20),
+                timezone_offset INTEGER,
+                last_response_speed REAL,
+                updated_at TIMESTAMP DEFAULT NOW(),
+                created_at TIMESTAMP DEFAULT NOW()
+            )
+        """)
+        logger.info("Conversation history + summaries + client_profiles tables initialized")
     except Exception as e:
         logger.warning(f"Failed to init conversation_history table: {e}")
+
+
+def save_client_profile(user_id: int, **kwargs):
+    if not DATABASE_URL:
+        return
+    try:
+        from src.database import execute_query, execute_one
+        existing = execute_one(
+            "SELECT telegram_id FROM client_profiles WHERE telegram_id = %s",
+            (user_id,), dict_cursor=True
+        )
+        if existing:
+            updates = []
+            values = []
+            for key, value in kwargs.items():
+                if value is not None:
+                    updates.append(f"{key} = %s")
+                    values.append(value)
+            if updates:
+                updates.append("updated_at = NOW()")
+                values.append(user_id)
+                execute_query(
+                    f"UPDATE client_profiles SET {', '.join(updates)} WHERE telegram_id = %s",
+                    tuple(values)
+                )
+        else:
+            columns = ["telegram_id"]
+            placeholders = ["%s"]
+            values = [user_id]
+            for key, value in kwargs.items():
+                if value is not None:
+                    columns.append(key)
+                    placeholders.append("%s")
+                    values.append(value)
+            execute_query(
+                f"INSERT INTO client_profiles ({', '.join(columns)}) VALUES ({', '.join(placeholders)})",
+                tuple(values)
+            )
+    except Exception as e:
+        logger.debug(f"Failed to save client profile: {e}")
+
+
+def get_client_profile(user_id: int) -> Optional[Dict]:
+    if not DATABASE_URL:
+        return None
+    try:
+        from src.database import execute_one
+        row = execute_one(
+            "SELECT * FROM client_profiles WHERE telegram_id = %s",
+            (user_id,), dict_cursor=True
+        )
+        return dict(row) if row else None
+    except Exception as e:
+        logger.debug(f"Failed to get client profile: {e}")
+        return None
 
 
 class SessionManager:
