@@ -36,6 +36,30 @@ WELCOME_TESTS = {
         variant_b="soft",
         description="Call-to-action style: direct vs soft approach"
     ),
+    "response_style": ABTest(
+        name="response_style",
+        variant_a="formal",
+        variant_b="casual",
+        description="Dialog response style: formal professional vs casual friendly"
+    ),
+    "objection_handling": ABTest(
+        name="objection_handling",
+        variant_a="empathy_first",
+        variant_b="data_first",
+        description="Objection handling: empathy-led vs data-led approach"
+    ),
+    "pricing_reveal": ABTest(
+        name="pricing_reveal",
+        variant_a="upfront",
+        variant_b="value_first",
+        description="Pricing: show price immediately vs build value first"
+    ),
+    "followup_tone": ABTest(
+        name="followup_tone",
+        variant_a="professional",
+        variant_b="friendly",
+        description="Follow-up message tone: professional vs friendly"
+    ),
 }
 
 WELCOME_VARIANTS = {

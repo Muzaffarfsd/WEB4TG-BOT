@@ -30,6 +30,11 @@ async def execute_tool_call(tool_name: str, args: dict, user_id: int, username: 
         total = sum(FEATURES[f]["price"] for f in valid)
         lines = [f"✓ {FEATURES[f]['name']} — {FEATURES[f]['price']:,}₽".replace(",", " ") for f in valid]
         prepay = int(total * 0.35)
+        try:
+            from src.propensity import propensity_scorer
+            propensity_scorer.record_interaction(user_id, 'tool_calculator')
+        except Exception:
+            pass
         return (
             "Расчёт стоимости:\n" +
             "\n".join(lines) +
@@ -40,9 +45,19 @@ async def execute_tool_call(tool_name: str, args: dict, user_id: int, username: 
 
     elif tool_name == "show_portfolio":
         category = args.get("category", "all")
+        try:
+            from src.propensity import propensity_scorer
+            propensity_scorer.record_interaction(user_id, 'tool_portfolio')
+        except Exception:
+            pass
         return f"[PORTFOLIO:{category}]"
 
     elif tool_name == "show_pricing":
+        try:
+            from src.propensity import propensity_scorer
+            propensity_scorer.record_interaction(user_id, 'tool_pricing')
+        except Exception:
+            pass
         return "[PRICING]"
 
     elif tool_name == "create_lead":
@@ -52,9 +67,29 @@ async def execute_tool_call(tool_name: str, args: dict, user_id: int, username: 
             lead_manager.add_tag(user_id, interest[:50])
         lead_manager.update_lead(user_id, score=30, priority=LeadPriority.HOT)
         lead_manager.log_event("ai_lead", user_id, {"interest": interest})
+        try:
+            from src.propensity import propensity_scorer
+            propensity_scorer.record_interaction(user_id, 'tool_lead')
+        except Exception:
+            pass
+        try:
+            from src.feedback_loop import feedback_loop
+            feedback_loop.record_outcome(user_id, 'lead_created')
+        except Exception:
+            pass
         return f"Заявка создана. Интерес клиента: {interest}"
 
     elif tool_name == "show_payment_info":
+        try:
+            from src.propensity import propensity_scorer
+            propensity_scorer.record_interaction(user_id, 'tool_payment')
+        except Exception:
+            pass
+        try:
+            from src.feedback_loop import feedback_loop
+            feedback_loop.record_outcome(user_id, 'payment_started')
+        except Exception:
+            pass
         return "[PAYMENT]"
 
     elif tool_name == "calculate_roi":
@@ -148,6 +183,37 @@ async def execute_tool_call(tool_name: str, args: dict, user_id: int, username: 
         lead_manager.add_tag(user_id, "consultation")
         lead_manager.log_event("schedule_consultation", user_id, {"topic": topic, "time": preferred_time})
         
+        try:
+            from src.propensity import propensity_scorer
+            propensity_scorer.record_interaction(user_id, 'tool_consultation')
+        except Exception:
+            pass
+        try:
+            from src.feedback_loop import feedback_loop
+            feedback_loop.record_outcome(user_id, 'consultation_booked')
+        except Exception:
+            pass
+
+        try:
+            from src.calendar_booking import calendar_booking
+            if preferred_time:
+                parts_time = preferred_time.split()
+                date_str = parts_time[0] if len(parts_time) > 0 else ""
+                time_str_val = parts_time[1] if len(parts_time) > 1 else parts_time[0] if parts_time else ""
+                booking = calendar_booking.book_slot(user_id, date_str, time_str_val, topic, username)
+                if booking.get("success"):
+                    return calendar_booking.format_booking_confirmation(booking)
+            
+            available = calendar_booking.format_available_slots(days_ahead=5)
+            if available:
+                return (
+                    f"📅 Отлично, давайте запишем вас на консультацию!\n\n"
+                    f"Тема: {topic}\n\n"
+                    f"{available}"
+                )
+        except Exception as e:
+            logger.debug(f"Calendar booking unavailable: {e}")
+        
         time_str = f" на {preferred_time}" if preferred_time else ""
         return (
             f"📅 Заявка на консультацию создана!\n\n"
@@ -215,6 +281,54 @@ async def execute_tool_call(tool_name: str, args: dict, user_id: int, username: 
             return "🎁 Ваши доступные скидки:\n\n" + "\n".join(discounts)
         else:
             return "Пока нет скидок, но вы можете заработать монеты через задания (/bonus) и получить скидку до 25%!"
+
+    elif tool_name == "show_available_slots":
+        try:
+            from src.calendar_booking import calendar_booking
+            available = calendar_booking.format_available_slots(days_ahead=5)
+            if available:
+                return available
+        except Exception as e:
+            logger.debug(f"Calendar unavailable: {e}")
+        return "📅 Для записи на консультацию напишите предпочитаемое время — менеджер свяжется с вами."
+
+    elif tool_name == "book_consultation_slot":
+        date_str = args.get("date", "")
+        time_str = args.get("time", "")
+        topic = args.get("topic", "обсуждение проекта")
+        
+        try:
+            from src.calendar_booking import calendar_booking
+            booking = calendar_booking.book_slot(user_id, date_str, time_str, topic, username)
+            if booking.get("success"):
+                lead_manager.create_lead(user_id=user_id, username=username, first_name=first_name)
+                lead_manager.update_lead(user_id, score=40, priority=LeadPriority.HOT)
+                lead_manager.add_tag(user_id, "consultation")
+                try:
+                    from src.propensity import propensity_scorer
+                    propensity_scorer.record_interaction(user_id, 'tool_consultation')
+                except Exception:
+                    pass
+                try:
+                    from src.feedback_loop import feedback_loop
+                    feedback_loop.record_outcome(user_id, 'consultation_booked')
+                except Exception:
+                    pass
+                return calendar_booking.format_booking_confirmation(booking)
+            else:
+                return f"❌ {booking.get('error', 'Не удалось забронировать слот')}. Выберите другое время."
+        except Exception as e:
+            logger.debug(f"Calendar booking failed: {e}")
+        return "📅 Не удалось забронировать. Напишите предпочитаемое время — менеджер свяжется с вами."
+
+    elif tool_name == "show_social_links":
+        include_tasks = args.get("include_tasks", False)
+        try:
+            from src.social_links import format_social_for_message
+            return format_social_for_message(include_tasks=include_tasks)
+        except Exception as e:
+            logger.debug(f"Social links unavailable: {e}")
+        return "📱 Наши соцсети:\n📸 Instagram: https://instagram.com/web4tg\n🎵 TikTok: https://tiktok.com/@web4tg\n🎬 YouTube: https://youtube.com/@WEB4TG"
 
     return "Инструмент не найден"
 
@@ -607,6 +721,12 @@ async def message_handler(update: Update, context: ContextTypes.DEFAULT_TYPE) ->
     lead_manager.save_message(user.id, "user", user_message)
     lead_manager.log_event("message", user.id, {"length": len(user_message)})
     lead_manager.update_activity(user.id)
+
+    try:
+        from src.propensity import propensity_scorer
+        propensity_scorer.record_interaction(user.id, 'message')
+    except Exception:
+        pass
     
     from src.followup import follow_up_manager
     follow_up_manager.cancel_follow_ups(user.id)
@@ -748,7 +868,34 @@ async def message_handler(update: Update, context: ContextTypes.DEFAULT_TYPE) ->
 
         auto_tag_lead(user.id, user_message)
         auto_score_lead(user.id, user_message)
-        
+
+        try:
+            from src.feedback_loop import feedback_loop
+            from src.context_builder import detect_funnel_stage
+            stage = detect_funnel_stage(user.id, user_message, session.message_count)
+            p_score = None
+            try:
+                from src.propensity import propensity_scorer
+                p_score = propensity_scorer.get_score(user.id)
+            except Exception:
+                pass
+            from src.ab_testing import ab_testing
+            variant = None
+            try:
+                variant = ab_testing.get_variant(user.id, "response_style")
+            except Exception:
+                pass
+            feedback_loop.log_response(
+                user_id=user.id,
+                message_text=user_message[:500],
+                response_text=response[:1000] if response else "",
+                variant=variant,
+                funnel_stage=stage,
+                propensity_score=p_score
+            )
+        except Exception:
+            pass
+
         asyncio.create_task(
             extract_insights_if_needed(user.id, session)
         )

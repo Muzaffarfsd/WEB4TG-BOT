@@ -469,6 +469,49 @@ TOOL_DECLARATIONS = [
             "type": "object",
             "properties": {}
         }
+    },
+    {
+        "name": "show_available_slots",
+        "description": "Показать доступные слоты для записи на консультацию. Вызывай когда клиент хочет записаться на конкретное время или спрашивает когда можно созвониться.",
+        "parameters": {
+            "type": "object",
+            "properties": {}
+        }
+    },
+    {
+        "name": "book_consultation_slot",
+        "description": "Забронировать конкретный слот для консультации. Вызывай когда клиент выбрал дату и время для созвона.",
+        "parameters": {
+            "type": "object",
+            "properties": {
+                "date": {
+                    "type": "string",
+                    "description": "Дата в формате YYYY-MM-DD"
+                },
+                "time": {
+                    "type": "string",
+                    "description": "Время в формате HH:MM"
+                },
+                "topic": {
+                    "type": "string",
+                    "description": "Тема консультации"
+                }
+            },
+            "required": ["date", "time"]
+        }
+    },
+    {
+        "name": "show_social_links",
+        "description": "Показать ссылки на соцсети WEB4TG Studio. Вызывай когда клиент спрашивает о соцсетях, YouTube, Instagram, TikTok, или хочет подписаться.",
+        "parameters": {
+            "type": "object",
+            "properties": {
+                "include_tasks": {
+                    "type": "boolean",
+                    "description": "Показать задания за монеты (подписка = монеты)"
+                }
+            }
+        }
     }
 ]
 

@@ -651,6 +651,14 @@ def build_emotion_hint(user_message: str) -> str:
 def build_full_context(user_id: int, user_message: str, username: str = None, first_name: str = None, message_count: int = 0) -> Optional[str]:
     parts = []
 
+    try:
+        from src.rag import get_relevant_knowledge
+        rag_context = get_relevant_knowledge(user_message, limit=5)
+        if rag_context:
+            parts.append(rag_context)
+    except Exception as e:
+        logger.debug(f"RAG knowledge retrieval skipped: {e}")
+
     client_ctx = build_client_context(user_id, username, first_name)
     if client_ctx:
         parts.append(client_ctx)
@@ -663,6 +671,19 @@ def build_full_context(user_id: int, user_message: str, username: str = None, fi
     stage_info = FUNNEL_STAGE_SIGNALS.get(funnel_stage, {})
     if stage_info.get("instruction"):
         parts.append(f"\n[СТАДИЯ ВОРОНКИ]\n{stage_info['instruction']}")
+
+    try:
+        from src.propensity import propensity_scorer
+        score = propensity_scorer.get_score(user_id)
+        if score is not None:
+            if score >= 70:
+                parts.append(f"\n[PROPENSITY SCORE: {score}/100 — ГОРЯЧИЙ]\nКлиент с высокой вероятностью покупки. Действуй решительно: предлагай конкретные следующие шаги (бриф, оплата, созвон).")
+            elif score >= 40:
+                parts.append(f"\n[PROPENSITY SCORE: {score}/100 — ТЁПЛЫЙ]\nКлиент заинтересован. Усиливай ценность, показывай кейсы, предлагай калькулятор.")
+            elif score >= 20:
+                parts.append(f"\n[PROPENSITY SCORE: {score}/100 — ПРОГРЕВАЕТСЯ]\nКлиент изучает. Давай полезную информацию, не дави.")
+    except Exception as e:
+        logger.debug(f"Propensity scoring skipped: {e}")
 
     objections = detect_objections(user_message)
     objection_hint = build_objection_hint(user_message)
@@ -688,6 +709,32 @@ def build_full_context(user_id: int, user_message: str, username: str = None, fi
     proactive = get_proactive_value(user_id, funnel_stage)
     if proactive:
         parts.append(f"\n{proactive}")
+
+    try:
+        from src.ab_testing import ab_testing
+        dialog_variant = ab_testing.get_variant(user_id, "response_style")
+        if dialog_variant == "b":
+            parts.append("\n[A/B СТИЛЬ: CASUAL]\nОтвечай неформально, используй ) и мессенджерный стиль, как общение с другом.")
+        cta_variant = ab_testing.get_variant(user_id, "cta_style")
+        if cta_variant == "b":
+            parts.append("\n[A/B CTA: SOFT]\nНе предлагай действия напрямую. Вместо 'Давайте рассчитаю' → 'Кстати, могу прикинуть стоимость, если интересно'.")
+        objection_variant = ab_testing.get_variant(user_id, "objection_handling")
+        if objection_variant == "b":
+            parts.append("\n[A/B ВОЗРАЖЕНИЯ: DATA-FIRST]\nПри возражениях начинай с цифр и фактов, а не с эмпатии. Пример: 'По статистике, 87% клиентов окупают вложения за 3 месяца' вместо 'Понимаю ваши сомнения'.")
+        pricing_variant = ab_testing.get_variant(user_id, "pricing_reveal")
+        if pricing_variant == "b":
+            parts.append("\n[A/B ЦЕНЫ: VALUE-FIRST]\nНе называй цену сразу. Сначала покажи ценность: кейс, ROI, выгоды. Цену — только когда клиент спросит повторно или попросит конкретику.")
+        followup_variant = ab_testing.get_variant(user_id, "followup_tone")
+        if followup_variant == "b":
+            parts.append("\n[A/B ТОНАЛЬНОСТЬ: FRIENDLY]\nОбщайся как добрый знакомый, а не как продавец. Меньше формальности, больше заботы: 'Как у вас дела с проектом?' вместо 'Хотели бы вы продолжить обсуждение?'.")
+    except Exception as e:
+        logger.debug(f"A/B dialog testing skipped: {e}")
+
+    try:
+        from src.social_links import get_social_context_for_ai
+        parts.append(f"\n{get_social_context_for_ai()}")
+    except Exception:
+        pass
 
     if parts:
         return "\n".join(parts)
