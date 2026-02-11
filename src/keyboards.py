@@ -1,37 +1,68 @@
+import os
+
 from telegram import InlineKeyboardButton, InlineKeyboardMarkup, ReplyKeyboardMarkup, KeyboardButton, WebAppInfo
 
 from src.bot_api import styled_button_api_kwargs, copy_text_button
 
 BUTTON_EMOJI_IDS = {
-    "lead": None,
-    "payment": None,
-    "calculator": None,
-    "portfolio": None,
+    "lead": os.environ.get("EMOJI_LEAD"),
+    "payment": os.environ.get("EMOJI_PAYMENT"),
+    "calculator": os.environ.get("EMOJI_CALCULATOR"),
+    "portfolio": os.environ.get("EMOJI_PORTFOLIO"),
+    "services": os.environ.get("EMOJI_SERVICES"),
+    "manager": os.environ.get("EMOJI_MANAGER"),
+    "faq": os.environ.get("EMOJI_FAQ"),
+    "bonus": os.environ.get("EMOJI_BONUS"),
+    "stars": os.environ.get("EMOJI_STARS"),
 }
 
 
 def get_main_menu_keyboard() -> InlineKeyboardMarkup:
     keyboard = [
         [
-            InlineKeyboardButton("Услуги и цены", callback_data="menu_services"),
-            InlineKeyboardButton("Портфолио", callback_data="menu_portfolio")
+            InlineKeyboardButton(
+                "Услуги и цены", callback_data="menu_services",
+                **styled_button_api_kwargs(icon_custom_emoji_id=BUTTON_EMOJI_IDS.get("services"))
+            ),
+            InlineKeyboardButton(
+                "Портфолио", callback_data="menu_portfolio",
+                **styled_button_api_kwargs(icon_custom_emoji_id=BUTTON_EMOJI_IDS.get("portfolio"))
+            )
         ],
         [
-            InlineKeyboardButton("Калькулятор", callback_data="menu_calculator"),
+            InlineKeyboardButton(
+                "Калькулятор", callback_data="menu_calculator",
+                **styled_button_api_kwargs(icon_custom_emoji_id=BUTTON_EMOJI_IDS.get("calculator"))
+            ),
             InlineKeyboardButton("AI-агент", callback_data="menu_ai_agent")
         ],
         [
-            InlineKeyboardButton("💳 Оплата", callback_data="payment"),
-            InlineKeyboardButton("🎁 Бонусы", callback_data="loyalty_menu")
+            InlineKeyboardButton(
+                "💳 Оплата", callback_data="payment",
+                **styled_button_api_kwargs(icon_custom_emoji_id=BUTTON_EMOJI_IDS.get("payment"))
+            ),
+            InlineKeyboardButton(
+                "🎁 Бонусы", callback_data="loyalty_menu",
+                **styled_button_api_kwargs(icon_custom_emoji_id=BUTTON_EMOJI_IDS.get("bonus"))
+            )
         ],
         [
-            InlineKeyboardButton("⭐ Отзывы клиентов", callback_data="menu_testimonials"),
+            InlineKeyboardButton(
+                "⭐ Отзывы клиентов", callback_data="menu_testimonials",
+                **styled_button_api_kwargs(icon_custom_emoji_id=BUTTON_EMOJI_IDS.get("stars"))
+            ),
         ],
         [
-            InlineKeyboardButton("👨‍💼 Связаться с менеджером", callback_data="request_manager"),
+            InlineKeyboardButton(
+                "👨‍💼 Связаться с менеджером", callback_data="request_manager",
+                **styled_button_api_kwargs(icon_custom_emoji_id=BUTTON_EMOJI_IDS.get("manager"))
+            ),
         ],
         [
-            InlineKeyboardButton("❓ FAQ", callback_data="menu_faq"),
+            InlineKeyboardButton(
+                "❓ FAQ", callback_data="menu_faq",
+                **styled_button_api_kwargs(icon_custom_emoji_id=BUTTON_EMOJI_IDS.get("faq"))
+            ),
             InlineKeyboardButton(
                 "📝 Оставить заявку", callback_data="menu_lead",
                 **styled_button_api_kwargs(
@@ -237,9 +268,18 @@ def get_faq_keyboard() -> InlineKeyboardMarkup:
 
 def get_stars_payment_keyboard() -> InlineKeyboardMarkup:
     keyboard = [
-        [InlineKeyboardButton("💬 Консультация — 500 ⭐", callback_data="stars_consultation")],
-        [InlineKeyboardButton("🎨 Экспресс-дизайн — 2000 ⭐", callback_data="stars_express_design")],
-        [InlineKeyboardButton("🔍 Аудит приложения — 1000 ⭐", callback_data="stars_audit")],
+        [InlineKeyboardButton(
+            "💬 Консультация — 500 ⭐", callback_data="stars_consultation",
+            **styled_button_api_kwargs(style="constructive", icon_custom_emoji_id=BUTTON_EMOJI_IDS.get("stars"))
+        )],
+        [InlineKeyboardButton(
+            "🎨 Экспресс-дизайн — 2000 ⭐", callback_data="stars_express_design",
+            **styled_button_api_kwargs(style="constructive", icon_custom_emoji_id=BUTTON_EMOJI_IDS.get("stars"))
+        )],
+        [InlineKeyboardButton(
+            "🔍 Аудит приложения — 1000 ⭐", callback_data="stars_audit",
+            **styled_button_api_kwargs(style="constructive", icon_custom_emoji_id=BUTTON_EMOJI_IDS.get("stars"))
+        )],
         [InlineKeyboardButton("◀️ Назад", callback_data="payment")],
     ]
     return InlineKeyboardMarkup(keyboard)

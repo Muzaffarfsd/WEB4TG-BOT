@@ -20,6 +20,22 @@ Key features include:
 - **Security & Administration**: Admin access control, audit logging, and environment variable management for sensitive data.
 - **Deployment**: Exclusively deployed on Railway with a PostgreSQL database, explicitly designed *not* to run on Replit to avoid conflicts.
 
+## Custom Emoji Configuration
+Custom emoji IDs on buttons are loaded from environment variables (set on Railway):
+- `EMOJI_LEAD` — кнопка "Оставить заявку"
+- `EMOJI_PAYMENT` — кнопка "Оплата"
+- `EMOJI_CALCULATOR` — кнопка "Калькулятор"
+- `EMOJI_PORTFOLIO` — кнопка "Портфолио"
+- `EMOJI_SERVICES` — кнопка "Услуги и цены"
+- `EMOJI_MANAGER` — кнопка "Связаться с менеджером"
+- `EMOJI_FAQ` — кнопка "FAQ"
+- `EMOJI_BONUS` — кнопка "Бонусы"
+- `EMOJI_STARS` — кнопки Stars-оплаты
+
+To get custom emoji IDs: send a custom emoji from a sticker pack to the bot, use `getCustomEmojiStickers` API, or find them in Telegram sticker sets. If env vars are not set, buttons work normally without custom icons.
+
+Button styles (Bot API 9.4): `constructive` (green), `destructive` (red) applied via `styled_button_api_kwargs()`.
+
 ## External Dependencies
 - **Telegram Bot API**: Version 9.4 (via `python-telegram-bot` 22.6) for core bot functionalities.
 - **Google AI (Gemini 3 Pro Preview)**: For natural language processing, AI responses, and function calling.
