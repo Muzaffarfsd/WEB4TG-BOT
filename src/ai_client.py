@@ -175,6 +175,54 @@ class AIClient:
                 logger.error(f"Gemini request failed: {error_type}: {error_msg}")
                 return "Произошла техническая ошибка. Попробуйте ещё раз или напишите позже."
     
+    async def generate_response_with_tools(
+        self,
+        messages: List[Dict],
+        thinking_level: str = "medium",
+        on_chunk=None
+    ) -> dict:
+        """Returns {"text": str, "tool_calls": list[dict]}"""
+        try:
+            model = config.fast_model_name
+            tools = types.Tool(function_declarations=TOOL_DECLARATIONS)
+            gen_config = types.GenerateContentConfig(
+                system_instruction=SYSTEM_PROMPT,
+                max_output_tokens=config.max_tokens,
+                temperature=config.temperature,
+                tools=[tools],
+                tool_config=types.ToolConfig(
+                    function_calling_config=types.FunctionCallingConfig(mode='AUTO')
+                )
+            )
+
+            response = await asyncio.to_thread(
+                self._client.models.generate_content,
+                model=model,
+                contents=messages,
+                config=gen_config
+            )
+
+            tool_calls = []
+            if response.candidates and response.candidates[0].content and response.candidates[0].content.parts:
+                for part in response.candidates[0].content.parts:
+                    if part.function_call:
+                        fc = part.function_call
+                        tool_calls.append({
+                            "name": fc.name,
+                            "args": dict(fc.args) if fc.args else {}
+                        })
+
+            if tool_calls:
+                return {"text": None, "tool_calls": tool_calls}
+
+            text = response.text if response.text else None
+            return {"text": text, "tool_calls": []}
+
+        except Exception as e:
+            logger.warning(f"Tool calling failed, falling back to regular response: {e}")
+            fallback = await self.generate_response(messages, thinking_level)
+            return {"text": fallback, "tool_calls": []}
+
     async def analyze_complex_query(
         self,
         query: str,
@@ -190,6 +238,74 @@ class AIClient:
     async def quick_response(self, query: str) -> str:
         messages = [{"role": "user", "parts": [{"text": query}]}]
         return await self.generate_response(messages, thinking_level="low")
+
+
+TOOL_DECLARATIONS = [
+    {
+        "name": "calculate_price",
+        "description": "Рассчитать стоимость разработки Telegram Mini App по набору функций. Вызывай когда клиент спрашивает цену конкретного набора функций или хочет посчитать стоимость.",
+        "parameters": {
+            "type": "object",
+            "properties": {
+                "features": {
+                    "type": "array",
+                    "items": {"type": "string"},
+                    "description": "Список функций: catalog, cart, auth, search, favorites, reviews, payments, subscriptions, installments, delivery, pickup, express, push, chat, video, loyalty, promo, referral, analytics, admin, crm, booking, queue, calendar, ai, ai_rec, auto_reply, smart_search, voice, tg_bot, whatsapp, maps, sms, email, 1c, api"
+                }
+            },
+            "required": ["features"]
+        }
+    },
+    {
+        "name": "show_portfolio",
+        "description": "Показать примеры работ из портфолио. Вызывай когда клиент хочет увидеть примеры, кейсы или портфолио.",
+        "parameters": {
+            "type": "object",
+            "properties": {
+                "category": {
+                    "type": "string",
+                    "enum": ["ecommerce", "services", "fintech", "education", "all"],
+                    "description": "Категория портфолио"
+                }
+            },
+            "required": ["category"]
+        }
+    },
+    {
+        "name": "show_pricing",
+        "description": "Показать общий прайс-лист услуг. Вызывай когда клиент спрашивает о ценах в общем.",
+        "parameters": {
+            "type": "object",
+            "properties": {}
+        }
+    },
+    {
+        "name": "create_lead",
+        "description": "Создать заявку от клиента. Вызывай когда клиент говорит что хочет заказать, готов начать, просит связаться с ним.",
+        "parameters": {
+            "type": "object",
+            "properties": {
+                "interest": {
+                    "type": "string",
+                    "description": "Что интересует клиента"
+                },
+                "budget": {
+                    "type": "string",
+                    "description": "Примерный бюджет, если озвучен"
+                }
+            },
+            "required": ["interest"]
+        }
+    },
+    {
+        "name": "show_payment_info",
+        "description": "Показать реквизиты для оплаты. Вызывай когда клиент готов оплатить или спрашивает как оплатить.",
+        "parameters": {
+            "type": "object",
+            "properties": {}
+        }
+    }
+]
 
 
 ai_client = AIClient()

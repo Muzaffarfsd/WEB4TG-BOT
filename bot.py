@@ -3,7 +3,8 @@ import logging
 from telegram import Update, BotCommand, MenuButtonCommands
 from telegram.ext import (
     Application, CommandHandler, MessageHandler, 
-    CallbackQueryHandler, InlineQueryHandler, ContextTypes, filters
+    CallbackQueryHandler, InlineQueryHandler, ContextTypes, filters,
+    PreCheckoutQueryHandler
 )
 
 from telegram.error import Forbidden
@@ -18,7 +19,7 @@ from src.handlers import (
     followup_handler, broadcast_handler, privacy_handler, inline_query_handler,
     faq_handler, promo_handler, testimonials_handler,
     promo_create_handler, promo_list_handler, promo_off_handler,
-    generate_daily_digest,
+    generate_daily_digest, handoff_handler,
 )
 
 logging.basicConfig(
@@ -169,6 +170,38 @@ async def process_follow_ups(context: ContextTypes.DEFAULT_TYPE) -> None:
         logger.error(f"Follow-up processing error: {e}")
 
 
+async def pre_checkout_handler(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
+    await update.pre_checkout_query.answer(ok=True)
+
+
+async def successful_payment_handler(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
+    payment = update.message.successful_payment
+    from src.payments import handle_successful_payment
+    
+    result_text = await handle_successful_payment(
+        user_id=update.effective_user.id,
+        payload=payment.invoice_payload,
+        total_amount=payment.total_amount
+    )
+    await update.message.reply_text(result_text)
+    
+    import os
+    manager_id = os.environ.get("MANAGER_CHAT_ID")
+    if manager_id:
+        try:
+            user = update.effective_user
+            await context.bot.send_message(
+                int(manager_id),
+                f"💫 <b>Оплата Stars!</b>\n\n"
+                f"👤 {user.first_name} (@{user.username or 'нет'})\n"
+                f"💰 {payment.total_amount} ⭐\n"
+                f"📦 {payment.invoice_payload}",
+                parse_mode="HTML"
+            )
+        except Exception:
+            pass
+
+
 def main() -> None:
     application = Application.builder().token(config.telegram_token).post_init(post_init).build()
     
@@ -201,10 +234,13 @@ def main() -> None:
     application.add_handler(CommandHandler("followup", followup_handler))
     application.add_handler(CommandHandler("broadcast", broadcast_handler))
     application.add_handler(CommandHandler("privacy", privacy_handler))
+    application.add_handler(CommandHandler("manager", handoff_handler))
     
+    application.add_handler(PreCheckoutQueryHandler(pre_checkout_handler))
     application.add_handler(InlineQueryHandler(inline_query_handler))
     application.add_handler(CallbackQueryHandler(callback_handler))
     
+    application.add_handler(MessageHandler(filters.SUCCESSFUL_PAYMENT, successful_payment_handler))
     application.add_handler(MessageHandler(filters.VOICE, voice_handler))
     application.add_handler(MessageHandler(filters.VIDEO | filters.VIDEO_NOTE, video_handler))
     application.add_handler(MessageHandler(filters.PHOTO, photo_handler))

@@ -175,5 +175,53 @@ def copy_text_button(text: str, copy_text: str) -> dict:
     }
 
 
+async def create_private_topic(
+    bot: Bot,
+    chat_id: int,
+    name: str,
+    icon_custom_emoji_id: Optional[str] = None
+) -> Optional[int]:
+    api_kwargs = {
+        "chat_id": chat_id,
+        "name": name,
+    }
+    if icon_custom_emoji_id:
+        api_kwargs["icon_custom_emoji_id"] = icon_custom_emoji_id
+    
+    try:
+        result = await bot.do_api_request(
+            endpoint="createForumTopic",
+            api_kwargs=api_kwargs
+        )
+        if isinstance(result, dict):
+            return result.get("message_thread_id")
+        return None
+    except Exception as e:
+        logger.debug(f"createForumTopic not available: {e}")
+        return None
+
+
+async def send_to_topic(
+    bot: Bot,
+    chat_id: int,
+    message_thread_id: int,
+    text: str,
+    parse_mode: Optional[str] = None,
+    reply_markup=None
+) -> bool:
+    try:
+        await bot.send_message(
+            chat_id=chat_id,
+            text=text,
+            message_thread_id=message_thread_id,
+            parse_mode=parse_mode,
+            reply_markup=reply_markup
+        )
+        return True
+    except Exception as e:
+        logger.debug(f"send_to_topic failed: {e}")
+        return False
+
+
 def get_api_version() -> str:
     return BOT_API_VERSION

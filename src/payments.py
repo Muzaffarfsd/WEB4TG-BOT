@@ -35,6 +35,28 @@ def _init_payment_requests_table():
 _init_payment_requests_table()
 
 
+def _init_star_payments_table():
+    if not DATABASE_URL:
+        return
+    try:
+        with get_connection() as conn:
+            with conn.cursor() as cur:
+                cur.execute("""
+                    CREATE TABLE IF NOT EXISTS star_payments (
+                        id SERIAL PRIMARY KEY,
+                        user_id BIGINT NOT NULL,
+                        payload VARCHAR(200),
+                        amount INTEGER NOT NULL,
+                        paid_at TIMESTAMP DEFAULT NOW()
+                    )
+                """)
+        logger.info("star_payments table initialized")
+    except Exception as e:
+        logger.error(f"Failed to init star_payments table: {e}")
+
+_init_star_payments_table()
+
+
 def record_payment_request(user_id: int, payment_type: str) -> None:
     if not DATABASE_URL:
         return
@@ -115,6 +137,7 @@ BANK_DETAILS = {
 def get_payment_keyboard() -> InlineKeyboardMarkup:
     """Get payment options keyboard."""
     return InlineKeyboardMarkup([
+        [InlineKeyboardButton("⭐ Оплата через Stars", callback_data="payment_stars")],
         [InlineKeyboardButton("💳 Оплата картой Visa", callback_data="pay_card")],
         [InlineKeyboardButton("🏦 Банковский перевод", callback_data="pay_bank")],
         [InlineKeyboardButton("📄 Скачать договор", callback_data="pay_contract")],
@@ -259,6 +282,67 @@ def get_payment_confirm_text() -> str:
 Наш менеджер проверит платёж и свяжется с вами в течение 24 часов.
 
 Если у вас есть вопросы — просто напишите!"""
+
+
+STARS_PRODUCTS = {
+    "consultation": {
+        "title": "Консультация WEB4TG",
+        "description": "60 минут персональной консультации по разработке Telegram Mini App",
+        "price_stars": 500,
+        "price_label": "500 ⭐",
+    },
+    "express_design": {
+        "title": "Экспресс-дизайн",
+        "description": "Дизайн-макет вашего приложения за 48 часов", 
+        "price_stars": 2000,
+        "price_label": "2000 ⭐",
+    },
+    "audit": {
+        "title": "Аудит приложения",
+        "description": "Полный технический и UX аудит существующего Mini App",
+        "price_stars": 1000,
+        "price_label": "1000 ⭐",
+    }
+}
+
+
+async def create_stars_invoice(bot, chat_id: int, product_id: str) -> bool:
+    product = STARS_PRODUCTS.get(product_id)
+    if not product:
+        return False
+    
+    try:
+        await bot.send_invoice(
+            chat_id=chat_id,
+            title=product["title"],
+            description=product["description"],
+            payload=f"stars_{product_id}_{chat_id}",
+            currency="XTR",
+            prices=[{"label": product["title"], "amount": product["price_stars"]}],
+            provider_token="",
+        )
+        record_payment_request(chat_id, f"stars_{product_id}")
+        return True
+    except Exception as e:
+        logger.error(f"Failed to create Stars invoice: {e}")
+        return False
+
+
+async def handle_successful_payment(user_id: int, payload: str, total_amount: int) -> str:
+    try:
+        if DATABASE_URL:
+            with get_connection() as conn:
+                with conn.cursor() as cur:
+                    cur.execute("""
+                        INSERT INTO star_payments (user_id, payload, amount, paid_at)
+                        VALUES (%s, %s, %s, NOW())
+                    """, (user_id, payload, total_amount))
+        
+        logger.info(f"Stars payment received: user={user_id}, payload={payload}, amount={total_amount}")
+        return f"✅ Оплата {total_amount} ⭐ получена! Спасибо за покупку. Менеджер свяжется с вами в ближайшее время."
+    except Exception as e:
+        logger.error(f"Failed to record Stars payment: {e}")
+        return "✅ Оплата получена! Менеджер скоро свяжется с вами."
 
 
 async def handle_payment_callback(update: Update, context: ContextTypes.DEFAULT_TYPE, action: str) -> None:

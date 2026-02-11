@@ -16,6 +16,7 @@ from src.handlers.commands import (
     promo_handler,
     testimonials_handler,
     inline_query_handler,
+    handoff_handler,
 )
 
 from src.handlers.callbacks import callback_handler
@@ -94,6 +95,7 @@ __all__ = [
     'generate_daily_digest',
     'promo_handler',
     'testimonials_handler',
+    'handoff_handler',
     'message_handler',
     'error_handler',
     'send_typing_action',

@@ -2,6 +2,13 @@ from telegram import InlineKeyboardButton, InlineKeyboardMarkup, ReplyKeyboardMa
 
 from src.bot_api import styled_button_api_kwargs, copy_text_button
 
+BUTTON_EMOJI_IDS = {
+    "lead": None,
+    "payment": None,
+    "calculator": None,
+    "portfolio": None,
+}
+
 
 def get_main_menu_keyboard() -> InlineKeyboardMarkup:
     keyboard = [
@@ -21,10 +28,16 @@ def get_main_menu_keyboard() -> InlineKeyboardMarkup:
             InlineKeyboardButton("⭐ Отзывы клиентов", callback_data="menu_testimonials"),
         ],
         [
+            InlineKeyboardButton("👨‍💼 Связаться с менеджером", callback_data="request_manager"),
+        ],
+        [
             InlineKeyboardButton("❓ FAQ", callback_data="menu_faq"),
             InlineKeyboardButton(
                 "📝 Оставить заявку", callback_data="menu_lead",
-                **styled_button_api_kwargs(style="constructive")
+                **styled_button_api_kwargs(
+                    style="constructive",
+                    icon_custom_emoji_id=BUTTON_EMOJI_IDS.get("lead")
+                )
             )
         ]
     ]
@@ -219,6 +232,16 @@ def get_faq_keyboard() -> InlineKeyboardMarkup:
     for key, faq in FAQ_DATA.items():
         keyboard.append([InlineKeyboardButton(faq["question"], callback_data=key)])
     keyboard.append([InlineKeyboardButton("Назад в меню", callback_data="menu_back")])
+    return InlineKeyboardMarkup(keyboard)
+
+
+def get_stars_payment_keyboard() -> InlineKeyboardMarkup:
+    keyboard = [
+        [InlineKeyboardButton("💬 Консультация — 500 ⭐", callback_data="stars_consultation")],
+        [InlineKeyboardButton("🎨 Экспресс-дизайн — 2000 ⭐", callback_data="stars_express_design")],
+        [InlineKeyboardButton("🔍 Аудит приложения — 1000 ⭐", callback_data="stars_audit")],
+        [InlineKeyboardButton("◀️ Назад", callback_data="payment")],
+    ]
     return InlineKeyboardMarkup(keyboard)
 
 

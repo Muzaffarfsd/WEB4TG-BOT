@@ -435,6 +435,29 @@ async def generate_daily_digest(bot, admin_chat_id: int) -> None:
 
         total_users = len(broadcast_manager.get_user_ids('all'))
 
+        stars_today = 0
+        stars_amount = 0
+        try:
+            from src.database import execute_one, DATABASE_URL
+            if DATABASE_URL:
+                result = execute_one(
+                    "SELECT COUNT(*) as cnt, COALESCE(SUM(amount), 0) as total FROM star_payments WHERE paid_at > NOW() - INTERVAL '24 hours'"
+                )
+                if result:
+                    stars_today = result[0] if result[0] else 0
+                    stars_amount = result[1] if result[1] else 0
+        except Exception:
+            stars_today = 0
+            stars_amount = 0
+
+        followups_sent = 0
+        try:
+            from src.followup import follow_up_manager
+            fu_stats = follow_up_manager.get_stats()
+            followups_sent = fu_stats.get("sent_today", 0) if fu_stats else 0
+        except Exception:
+            pass
+
         text = f"""📊 <b>Ежедневная сводка</b>
 
 <b>За последние 24 часа:</b>
@@ -448,6 +471,12 @@ async def generate_daily_digest(bot, admin_chat_id: int) -> None:
 ✅ Квалифицированы: {stats.get('qualified', 0)}
 💰 Конвертированы: {stats.get('converted', 0)}
 📈 Всего: {stats.get('total', 0)}
+
+<b>Stars оплаты:</b>
+💫 За 24ч: {stars_today} ({stars_amount} ⭐)
+
+<b>Автоматизация:</b>
+📨 Follow-up отправлено: {followups_sent}
 
 <b>База:</b>
 👥 Всего пользователей: {total_users}

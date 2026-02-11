@@ -1,3 +1,4 @@
+import os
 import logging
 from telegram import Update, InlineKeyboardMarkup, InlineKeyboardButton, WebAppInfo, InlineQueryResultArticle, InputTextMessageContent
 from telegram.ext import ContextTypes
@@ -419,3 +420,60 @@ async def inline_query_handler(update: Update, context: ContextTypes.DEFAULT_TYP
             )
     
     await update.inline_query.answer(results, cache_time=300)
+
+
+async def handoff_handler(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
+    """Request manager contact - available to all users."""
+    user = update.effective_user
+    
+    from src.leads import lead_manager, LeadPriority
+    lead_manager.create_lead(user_id=user.id, username=user.username, first_name=user.first_name)
+    lead_manager.update_lead(user.id, score=40, priority=LeadPriority.HOT)
+    lead_manager.log_event("handoff_request", user.id)
+    
+    await update.message.reply_text(
+        "👨‍💼 <b>Передаю вас менеджеру</b>\n\n"
+        "Менеджер свяжется с вами в ближайшее время.\n"
+        "А пока — можете написать, что именно вас интересует, и я передам ему контекст.",
+        parse_mode="HTML"
+    )
+    
+    manager_chat_id = os.environ.get("MANAGER_CHAT_ID")
+    if manager_chat_id:
+        try:
+            from src.session import session_manager
+            session = session_manager.get_session(user.id, user.username, user.first_name)
+            history = session.get_history()
+            
+            context_lines = []
+            for msg in history[-6:]:
+                role = "👤" if msg.get("role") == "user" else "🤖"
+                text = ""
+                if isinstance(msg.get("parts"), list):
+                    for part in msg["parts"]:
+                        if isinstance(part, dict) and "text" in part:
+                            text = part["text"][:200]
+                            break
+                        elif isinstance(part, str):
+                            text = part[:200]
+                            break
+                if text:
+                    context_lines.append(f"{role} {text}")
+            
+            lead = lead_manager.get_lead(user.id)
+            tags = ""
+            if lead and lead.tags:
+                tags = f"\n🏷 Теги: {lead.tags}"
+            
+            context_text = "\n".join(context_lines) if context_lines else "Нет истории"
+            
+            await context.bot.send_message(
+                int(manager_chat_id),
+                f"🔔 <b>Запрос на менеджера!</b>\n\n"
+                f"👤 {user.first_name} (@{user.username or 'нет'})\n"
+                f"🆔 <code>{user.id}</code>{tags}\n\n"
+                f"<b>Контекст разговора:</b>\n{context_text}",
+                parse_mode="HTML"
+            )
+        except Exception as e:
+            logging.getLogger(__name__).error(f"Handoff notification failed: {e}")

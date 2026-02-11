@@ -41,6 +41,35 @@ async def callback_handler(update: Update, context: ContextTypes.DEFAULT_TYPE) -
             reply_markup=get_main_menu_keyboard()
         )
     
+    elif data == "request_manager":
+        from src.leads import lead_manager as lm_handoff, LeadPriority
+        user = query.from_user
+        lm_handoff.create_lead(user_id=user.id, username=user.username, first_name=user.first_name)
+        lm_handoff.update_lead(user.id, score=40, priority=LeadPriority.HOT)
+        
+        await query.message.edit_text(
+            "👨‍💼 <b>Запрос отправлен!</b>\n\n"
+            "Менеджер свяжется с вами в ближайшее время.",
+            parse_mode="HTML",
+            reply_markup=InlineKeyboardMarkup([
+                [InlineKeyboardButton("◀️ Назад в меню", callback_data="menu_back")]
+            ])
+        )
+        
+        import os
+        manager_chat_id = os.environ.get("MANAGER_CHAT_ID")
+        if manager_chat_id:
+            try:
+                await context.bot.send_message(
+                    int(manager_chat_id),
+                    f"🔔 <b>Запрос менеджера</b>\n"
+                    f"👤 {user.first_name} (@{user.username or 'нет'})\n"
+                    f"🆔 <code>{user.id}</code>",
+                    parse_mode="HTML"
+                )
+            except Exception:
+                pass
+    
     elif data == "menu_back":
         await query.edit_message_text(
             "Вот что могу показать:",
@@ -109,6 +138,25 @@ async def callback_handler(update: Update, context: ContextTypes.DEFAULT_TYPE) -
             parse_mode="Markdown",
             reply_markup=get_lead_keyboard()
         )
+    
+    elif data == "payment_stars":
+        from src.keyboards import get_stars_payment_keyboard
+        await query.message.edit_text(
+            "⭐ <b>Оплата через Telegram Stars</b>\n\n"
+            "Мгновенная оплата без банковских реквизитов.\n"
+            "Выберите услугу:",
+            parse_mode="HTML",
+            reply_markup=get_stars_payment_keyboard()
+        )
+    
+    elif data.startswith("stars_"):
+        product_id = data.replace("stars_", "")
+        from src.payments import create_stars_invoice
+        success = await create_stars_invoice(context.bot, query.from_user.id, product_id)
+        if success:
+            await query.answer("Счёт отправлен!")
+        else:
+            await query.answer("Ошибка создания счёта", show_alert=True)
     
     elif data in ("payment", "pay_card", "pay_bank", "copy_card", "copy_bank",
                    "copy_card_fallback", "copy_bank_fallback", "pay_confirm", "pay_contract"):

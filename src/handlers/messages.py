@@ -18,6 +18,48 @@ from src.keyboards import get_review_moderation_keyboard
 
 logger = logging.getLogger(__name__)
 
+
+async def execute_tool_call(tool_name: str, args: dict, user_id: int, username: str, first_name: str) -> str:
+    from src.calculator import FEATURES
+
+    if tool_name == "calculate_price":
+        features = args.get("features", [])
+        valid = [f for f in features if f in FEATURES]
+        if not valid:
+            return "Не удалось распознать функции. Доступные: " + ", ".join(sorted(FEATURES.keys()))
+        total = sum(FEATURES[f]["price"] for f in valid)
+        lines = [f"✓ {FEATURES[f]['name']} — {FEATURES[f]['price']:,}₽".replace(",", " ") for f in valid]
+        prepay = int(total * 0.35)
+        return (
+            "Расчёт стоимости:\n" +
+            "\n".join(lines) +
+            f"\n\nИтого: {total:,}₽".replace(",", " ") +
+            f"\nПредоплата 35%: {prepay:,}₽".replace(",", " ") +
+            f"\nПосле сдачи: {total - prepay:,}₽".replace(",", " ")
+        )
+
+    elif tool_name == "show_portfolio":
+        category = args.get("category", "all")
+        return f"[PORTFOLIO:{category}]"
+
+    elif tool_name == "show_pricing":
+        return "[PRICING]"
+
+    elif tool_name == "create_lead":
+        lead_manager.create_lead(user_id=user_id, username=username, first_name=first_name)
+        interest = args.get("interest", "")
+        if interest:
+            lead_manager.add_tag(user_id, interest[:50])
+        lead_manager.update_lead(user_id, score=30, priority=LeadPriority.HOT)
+        lead_manager.log_event("ai_lead", user_id, {"interest": interest})
+        return f"Заявка создана. Интерес клиента: {interest}"
+
+    elif tool_name == "show_payment_info":
+        return "[PAYMENT]"
+
+    return "Инструмент не найден"
+
+
 INTEREST_TAGS = {
     "shop": ["магазин", "товар", "продаж"],
     "restaurant": ["ресторан", "доставк", "еда", "кафе"],
@@ -235,57 +277,133 @@ async def message_handler(update: Update, context: ContextTypes.DEFAULT_TYPE) ->
     try:
         thinking_level = "high" if len(user_message) > 200 else "medium"
 
-        from src.bot_api import send_message_draft
-        last_draft_len = 0
-        draft_count = 0
+        response = None
 
-        async def on_stream_chunk(partial_text: str):
-            nonlocal last_draft_len, draft_count
-            if len(partial_text) - last_draft_len >= 40:
-                try:
-                    await send_message_draft(
-                        context.bot,
-                        update.effective_chat.id,
-                        partial_text + " ▌"
+        try:
+            result = await ai_client.generate_response_with_tools(
+                messages=session.get_history(),
+                thinking_level=thinking_level
+            )
+
+            if result["tool_calls"]:
+                tool_results = []
+                special_actions = []
+                for tc in result["tool_calls"]:
+                    tool_result = await execute_tool_call(
+                        tc["name"], tc["args"],
+                        user.id, user.username, user.first_name
                     )
-                    last_draft_len = len(partial_text)
-                    draft_count += 1
+                    if tool_result.startswith("[PORTFOLIO:"):
+                        special_actions.append(("portfolio", tool_result))
+                    elif tool_result == "[PRICING]":
+                        special_actions.append(("pricing", None))
+                    elif tool_result == "[PAYMENT]":
+                        special_actions.append(("payment", None))
+                    else:
+                        tool_results.append(tool_result)
+
+                if special_actions:
+                    for action_type, action_data in special_actions:
+                        if action_type == "portfolio":
+                            from src.keyboards import get_portfolio_keyboard
+                            from src.knowledge_base import PORTFOLIO_MESSAGE
+                            await update.message.reply_text(
+                                PORTFOLIO_MESSAGE, parse_mode="Markdown",
+                                reply_markup=get_portfolio_keyboard()
+                            )
+                        elif action_type == "pricing":
+                            await update.message.reply_text(
+                                get_price_main_text(), parse_mode="Markdown",
+                                reply_markup=get_price_main_keyboard()
+                            )
+                        elif action_type == "payment":
+                            from src.payments import get_payment_keyboard
+                            await update.message.reply_text(
+                                "💳 Выберите способ оплаты:",
+                                reply_markup=get_payment_keyboard()
+                            )
+
+                if tool_results:
+                    tool_context = "\n".join(tool_results)
+                    session.add_message("assistant", f"[Результат инструмента: {tool_context}]", config.max_history_length)
+
+                    narration = await ai_client.generate_response(
+                        messages=session.get_history(),
+                        thinking_level="medium"
+                    )
+                    response = narration
+                elif not special_actions:
+                    response = "Готово!"
+                else:
+                    typing_task.cancel()
+                    try:
+                        await typing_task
+                    except asyncio.CancelledError:
+                        pass
+                    session.add_message("assistant", "Показал запрошенную информацию", config.max_history_length)
+                    lead_manager.save_message(user.id, "assistant", "Показал запрошенную информацию")
+                    logger.info(f"User {user.id}: processed message #{session.message_count} (tool action)")
+                    auto_tag_lead(user.id, user_message)
+                    return
+            else:
+                response = result["text"]
+        except Exception as e:
+            logger.warning(f"Tool calling failed, falling back to streaming: {e}")
+
+            from src.bot_api import send_message_draft
+            last_draft_len = 0
+            draft_count = 0
+
+            async def on_stream_chunk(partial_text: str):
+                nonlocal last_draft_len, draft_count
+                if len(partial_text) - last_draft_len >= 40:
+                    try:
+                        await send_message_draft(
+                            context.bot,
+                            update.effective_chat.id,
+                            partial_text + " ▌"
+                        )
+                        last_draft_len = len(partial_text)
+                        draft_count += 1
+                    except Exception:
+                        pass
+
+            response = await ai_client.generate_response_stream(
+                messages=session.get_history(),
+                thinking_level=thinking_level,
+                on_chunk=on_stream_chunk
+            )
+
+            if draft_count > 0:
+                try:
+                    await send_message_draft(context.bot, update.effective_chat.id, "")
                 except Exception:
                     pass
 
-        response = await ai_client.generate_response_stream(
-            messages=session.get_history(),
-            thinking_level=thinking_level,
-            on_chunk=on_stream_chunk
-        )
+        if not response:
+            response = "Извините, не удалось сформировать ответ. Попробуйте переформулировать вопрос."
 
-        if draft_count > 0:
-            try:
-                await send_message_draft(context.bot, update.effective_chat.id, "")
-            except Exception:
-                pass
-        
         session.add_message("assistant", response, config.max_history_length)
-        
+
         lead_manager.save_message(user.id, "assistant", response)
-        
+
         typing_task.cancel()
         try:
             await typing_task
         except asyncio.CancelledError:
             pass
-        
+
         if len(response) > 4096:
             chunks = [response[i:i+4096] for i in range(0, len(response), 4096)]
             for chunk in chunks:
                 await update.message.reply_text(chunk)
         else:
             await update.message.reply_text(response)
-        
+
         logger.info(f"User {user.id}: processed message #{session.message_count}")
-        
+
         auto_tag_lead(user.id, user_message)
-        
+
     except Exception as e:
         typing_task.cancel()
         error_type = type(e).__name__
