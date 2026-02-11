@@ -352,7 +352,7 @@ class LoyaltySystem:
             discounts["base_discount"] + 
             discounts["returning_bonus"] + 
             discounts["package_discount"],
-            30
+            25
         )
         
         return discounts
@@ -435,7 +435,7 @@ def format_returning_customer_info() -> str:
 ✅ Суммируется с другими скидками
 ✅ Действует бессрочно
 
-💡 <i>Максимальная суммарная скидка — 30%</i>"""
+💡 <i>Максимальная суммарная скидка — 25%</i>"""
 
 
 def format_review_bonus_info() -> str:

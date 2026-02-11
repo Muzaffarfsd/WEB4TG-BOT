@@ -272,7 +272,7 @@ async def callback_handler(update: Update, context: ContextTypes.DEFAULT_TYPE) -
 ━━━━━━━━━━━━━━━
 💎 <b>Максимальная скидка:</b> {discounts['total']}%
 
-<i>Скидки суммируются (макс. 30%)</i>"""
+<i>Скидки суммируются (макс. 25%)</i>"""
         
         await query.edit_message_text(
             text,
@@ -619,8 +619,8 @@ async def callback_handler(update: Update, context: ContextTypes.DEFAULT_TYPE) -
             completed_count = len(progress.completed_tasks)
             total_tasks = sum(len(tasks) for tasks in TASKS_CONFIG.values())
             
-            tier_emoji = {0: "🔰", 5: "🥉", 10: "🥈", 15: "🥇", 20: "💎", 25: "👑"}
-            current_emoji = tier_emoji.get(progress.get_discount_percent(), "🔰")
+            tier_emoji_map = {0: "🔰", 5: "🥉", 10: "🥈", 15: "🥇", 20: "💎", 25: "👑"}
+            current_emoji = tier_emoji_map.get(progress.get_discount_percent(), "🔰")
             
             text = f"""📊 **Твой прогресс**
 
@@ -632,7 +632,7 @@ async def callback_handler(update: Update, context: ContextTypes.DEFAULT_TYPE) -
 
 **До следующего уровня:**"""
             
-            next_tiers = [(200, 5), (500, 10), (800, 15), (1200, 20), (1500, 25)]
+            next_tiers = [(500, 5), (1000, 10), (1500, 15), (2000, 20), (2500, 25)]
             for coins_need, discount in next_tiers:
                 if progress.total_coins < coins_need:
                     remaining = coins_need - progress.total_coins
@@ -653,17 +653,17 @@ async def callback_handler(update: Update, context: ContextTypes.DEFAULT_TYPE) -
         
         elif data == "tasks_back" or data == "earn_coins" or data == "tasks_menu":
             progress = tasks_tracker.get_user_progress(user_id)
-            tier_emoji = {0: "🔰", 5: "🥉", 10: "🥈", 15: "🥇"}
-            current_emoji = tier_emoji.get(progress.get_discount_percent(), "🔰")
+            tier_emoji_map = {0: "🔰", 5: "🥉", 10: "🥈", 15: "🥇", 20: "💎", 25: "👑"}
+            current_emoji = tier_emoji_map.get(progress.get_discount_percent(), "🔰")
             
-            text = f"""🎁 <b>Получи скидку до 30%!</b>
+            text = f"""🎁 <b>Получи скидку до 25%!</b>
 
 {current_emoji} <b>Уровень:</b> {progress.get_tier_name()}
 💰 <b>Монеты:</b> {progress.total_coins}
 💵 <b>Скидка:</b> {progress.get_discount_percent()}%
 
 <b>Как заработать скидку:</b>
-📱 Выполняй задания — до 15%
+📱 Выполняй задания — до 25%
 👥 Приглашай друзей — 200 монет/друг
 ⭐ Оставь отзыв — до 500 монет
 
@@ -1175,7 +1175,7 @@ async def callback_handler(update: Update, context: ContextTypes.DEFAULT_TYPE) -
         text = (
             f"🎁 Ваша текущая скидка: {discount}%\n"
             f"💰 Монеты: {coins}\n\n"
-            "Зарабатывайте монеты через задания (/bonus) и увеличивайте скидку до 15%!"
+            "Зарабатывайте монеты через задания (/bonus) и увеличивайте скидку до 25%!"
         )
         await query.message.reply_text(text)
 

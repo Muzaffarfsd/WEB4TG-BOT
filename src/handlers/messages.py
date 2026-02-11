@@ -77,7 +77,9 @@ async def execute_tool_call(tool_name: str, args: dict, user_id: int, username: 
         extra_clients = int(monthly_clients * data["conversion_boost"])
         extra_revenue = extra_clients * avg_check
         yearly_extra = extra_revenue * 12
-        app_cost = 150000
+        app_cost = args.get("app_cost", 150000)
+        if app_cost < 100000 or app_cost > 500000:
+            app_cost = 150000
         roi_percent = int((yearly_extra - app_cost) / app_cost * 100)
         payback_months = max(1, int(app_cost / extra_revenue)) if extra_revenue > 0 else 12
         
@@ -212,7 +214,7 @@ async def execute_tool_call(tool_name: str, args: dict, user_id: int, username: 
         if discounts:
             return "🎁 Ваши доступные скидки:\n\n" + "\n".join(discounts)
         else:
-            return "Пока нет скидок, но вы можете заработать монеты через задания (/bonus) и получить скидку до 10%!"
+            return "Пока нет скидок, но вы можете заработать монеты через задания (/bonus) и получить скидку до 25%!"
 
     return "Инструмент не найден"
 

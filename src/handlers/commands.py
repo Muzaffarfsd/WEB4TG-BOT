@@ -206,10 +206,10 @@ async def calc_handler(update: Update, context: ContextTypes.DEFAULT_TYPE) -> No
 async def bonus_handler(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
     user_id = update.effective_user.id
     progress = tasks_tracker.get_user_progress(user_id)
-    tier_emoji = {0: "🔰", 5: "🥉", 10: "🥈", 15: "🥇"}
+    tier_emoji = {0: "🔰", 5: "🥉", 10: "🥈", 15: "🥇", 20: "💎", 25: "👑"}
     current_emoji = tier_emoji.get(progress.get_discount_percent(), "🔰")
     
-    text = f"""🎁 <b>Получи скидку до 30%!</b>
+    text = f"""🎁 <b>Получи скидку до 25%!</b>
 
 {current_emoji} Твоя скидка: <b>{progress.get_discount_percent()}%</b>
 💰 Монеты: <b>{progress.total_coins}</b>

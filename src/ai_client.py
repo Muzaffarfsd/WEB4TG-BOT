@@ -325,7 +325,7 @@ TOOL_DECLARATIONS = [
                 "features": {
                     "type": "array",
                     "items": {"type": "string"},
-                    "description": "Список функций: catalog, cart, auth, search, favorites, reviews, payments, subscriptions, installments, delivery, pickup, express, push, chat, video, loyalty, promo, referral, analytics, admin, crm, booking, queue, calendar, ai, ai_rec, auto_reply, smart_search, voice, tg_bot, whatsapp, maps, sms, email, 1c, api"
+                    "description": "Список функций: catalog, cart, auth, search, favorites, reviews, payments, subscriptions, installments, delivery, pickup, express, push, chat, video, loyalty, promo, referral, analytics, admin, crm, booking, queue, calendar, ai, ai_rec, auto_reply, smart_search, voice, tg_bot, whatsapp, maps, sms, email, 1c, api, progress"
                 }
             },
             "required": ["features"]
@@ -397,6 +397,10 @@ TOOL_DECLARATIONS = [
                 "avg_check": {
                     "type": "integer",
                     "description": "Средний чек в рублях"
+                },
+                "app_cost": {
+                    "type": "integer",
+                    "description": "Стоимость приложения в рублях (по умолчанию 150000). Используй если клиент уже обсудил конкретный бюджет."
                 }
             },
             "required": ["business_type"]
