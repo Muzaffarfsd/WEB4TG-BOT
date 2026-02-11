@@ -1088,5 +1088,54 @@ async def callback_handler(update: Update, context: ContextTypes.DEFAULT_TYPE) -
                     parse_mode="HTML"
                 )
 
+    elif data == "leave_request":
+        analytics.track(user_id, FunnelEvent.LEAD_FORM_OPEN)
+        text = """Отлично, давайте обсудим ваш проект!
+
+Напишите мне:
+— Какой у вас бизнес?
+— Что хотите реализовать?
+— Какой бюджет рассматриваете?
+
+Я подготовлю индивидуальное предложение."""
+        await query.edit_message_text(
+            text,
+            reply_markup=get_lead_keyboard()
+        )
+
+    elif data.startswith("package_app_subscription_"):
+        months = data.replace("package_app_subscription_", "")
+        discount_map = {"3": 5, "6": 10, "12": 15}
+        discount = discount_map.get(months, 0)
+        text = (
+            f"📦 <b>Пакет: Приложение + {months} мес подписки</b>\n\n"
+            f"🎁 Скидка: <b>{discount}%</b> на всё\n\n"
+            f"Для оформления этого пакета оставьте заявку, и менеджер рассчитает итоговую стоимость с учётом скидки."
+        )
+        keyboard = InlineKeyboardMarkup([
+            [InlineKeyboardButton("📝 Оставить заявку", callback_data="leave_request")],
+            [InlineKeyboardButton("◀️ Назад", callback_data="loyalty_packages")]
+        ])
+        await query.edit_message_text(text, parse_mode="HTML", reply_markup=keyboard)
+
+    elif data.startswith("sub_"):
+        from src.pricing import SUBSCRIPTIONS, format_price
+        sub_key = data.replace("sub_", "")
+        sub = SUBSCRIPTIONS.get(sub_key)
+        if sub:
+            features_text = "\n".join([f"  • {f}" for f in sub["features"]])
+            text = (
+                f"📦 <b>{sub['name']}</b> — {format_price(sub['price'])}/мес\n\n"
+                f"<b>Что входит:</b>\n{features_text}\n\n"
+                f"Хотите подключить? Оставьте заявку!"
+            )
+            keyboard = InlineKeyboardMarkup([
+                [InlineKeyboardButton("📝 Оставить заявку", callback_data="leave_request")],
+                [InlineKeyboardButton("◀️ Назад к ценам", callback_data="price_subs")]
+            ])
+            await query.edit_message_text(text, parse_mode="HTML", reply_markup=keyboard)
+        else:
+            await query.edit_message_text("Информация не найдена", reply_markup=get_back_keyboard())
+
     else:
         logger.warning(f"Unknown callback_data: {data} from user {user_id}")

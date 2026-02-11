@@ -36,6 +36,13 @@ To get custom emoji IDs: send a custom emoji from a sticker pack to the bot, use
 
 Button styles (Bot API 9.4): `constructive` (green), `destructive` (red) applied via `styled_button_api_kwargs()`.
 
+## Recent Changes (Feb 11, 2026)
+- Fixed callback routing bug: `callback_data="menu"` in payments.py changed to `"menu_back"` (button "Назад" was not working)
+- Added handlers for subscription buttons (`sub_min`, `sub_std`, `sub_premium`) — now show detailed plan info with CTA
+- Added handlers for package deal buttons (`package_app_subscription_3/6/12`) — now show package details with discount info
+- Updated `price_subs` callback to show subscription selection buttons instead of just back button
+- Full callback_data audit: all 80+ callback_data values now have corresponding handlers
+
 ## External Dependencies
 - **Telegram Bot API**: Version 9.4 (via `python-telegram-bot` 22.6) for core bot functionalities.
 - **Google AI (Gemini 3 Pro Preview)**: For natural language processing, AI responses, and function calling.

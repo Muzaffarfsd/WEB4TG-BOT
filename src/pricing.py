@@ -318,10 +318,16 @@ async def handle_price_callback(update: Update, context: ContextTypes.DEFAULT_TY
             reply_markup=get_features_categories_keyboard()
         )
     elif action == "price_subs":
+        subs_keyboard = InlineKeyboardMarkup([
+            [InlineKeyboardButton("📦 Минимальный 9 900₽/мес", callback_data="sub_min")],
+            [InlineKeyboardButton("⭐ Стандартный 14 900₽/мес", callback_data="sub_std")],
+            [InlineKeyboardButton("👑 Премиум 24 900₽/мес", callback_data="sub_premium")],
+            [InlineKeyboardButton("◀️ Назад к ценам", callback_data="price_main")]
+        ])
         await query.edit_message_text(
             get_subscriptions_text(),
             parse_mode="Markdown",
-            reply_markup=get_price_back_keyboard()
+            reply_markup=subs_keyboard
         )
     elif action == "price_payment":
         await query.edit_message_text(

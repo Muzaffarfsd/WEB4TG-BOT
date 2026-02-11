@@ -142,7 +142,7 @@ def get_payment_keyboard() -> InlineKeyboardMarkup:
         [InlineKeyboardButton("🏦 Банковский перевод", callback_data="pay_bank")],
         [InlineKeyboardButton("📄 Скачать договор", callback_data="pay_contract")],
         [InlineKeyboardButton("✅ Я оплатил", callback_data="pay_confirm")],
-        [InlineKeyboardButton("◀️ Назад", callback_data="menu")],
+        [InlineKeyboardButton("◀️ Назад", callback_data="menu_back")],
     ])
 
 
