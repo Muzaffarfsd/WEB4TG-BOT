@@ -7,38 +7,104 @@ The WEB4TG Studio AI Agent Bot serves as an AI-powered support agent for WEB4TG 
 - **Язык общения**: Всегда писать на русском языке
 - **Развёртывание**: Бот работает ТОЛЬКО на Railway, НЕ запускать на Replit
 
+## Recent Changes (February 2026)
+- **Code Audit & Bug Fixes (Feb 11)**:
+  - FIXED: `context_builder.py` — `fetch_one` replaced with `execute_one` (undefined import bug)
+  - FIXED: `tool_handlers.py` — `compare_plans` now tracks propensity scoring
+  - SECURITY: `session.py` — added `ALLOWED_PROFILE_COLUMNS` whitelist for SQL safety
+  - PERFORMANCE: `propensity.py` — added `score is not None` check before extra DB write
+- **Admin Analytics Commands (Feb 11)**: Added `/propensity`, `/ab_results`, `/ab_detail`, `/feedback`
+- **Refactoring (Feb 11)**: Extracted `src/tool_handlers.py` from messages.py (918→550 lines)
+- **RAG Enhancement**: Weighted relevance scoring with multi-tag bonuses, 16 intent categories
+- **A/B Testing**: Chi-square statistical significance, auto-winner detection, min 30 users/variant
+- **Propensity Scoring**: All 14 tools tracked, smart social context injection
+
 ## System Architecture
-The bot is developed in Python, leveraging Telegram Bot API 9.4 for advanced features. It employs a modular handler architecture for maintainability. Key architectural decisions include a unified PostgreSQL database connection pool, TTL caching for frequently accessed data, and robust analytics for funnel tracking and A/B testing.
+The bot is developed in Python (13,656 lines, 40 files), leveraging Telegram Bot API 9.4 for advanced features. It employs a modular handler architecture for maintainability. Key architectural decisions include a unified PostgreSQL database connection pool (1-15 connections), TTL caching for frequently accessed data, and robust analytics for funnel tracking and A/B testing.
+
+### Project Structure
+```
+bot.py                          # Entry point, handler registration, background jobs
+main.py                         # Simple launcher
+status.py                       # Health check script
+src/
+├── config.py                   # Configuration from env vars
+├── database.py                 # Shared PostgreSQL connection pool
+├── ai_client.py                # Gemini API client (streaming, tools, agentic loop)
+├── tool_handlers.py            # Centralized tool execution (14 tools)
+├── context_builder.py          # Hybrid funnel, SPIN, neuro-selling context
+├── knowledge_base.py           # System prompt and knowledge
+├── rag.py                      # RAG knowledge base (PostgreSQL-backed)
+├── session.py                  # Session management, client profiles
+├── propensity.py               # Propensity scoring 0-100
+├── ab_testing.py               # A/B testing with chi-square significance
+├── feedback_loop.py            # Self-learning feedback loop
+├── leads.py                    # Lead management and scoring
+├── calculator.py               # Cost calculator (37 features)
+├── pricing.py                  # Pricing display
+├── keyboards.py                # Inline keyboards
+├── payments.py                 # Payment system
+├── loyalty.py                  # Loyalty program
+├── referrals.py                # Referral system
+├── tasks_tracker.py            # Gamification tasks
+├── calendar_booking.py         # Calendar and consultation booking
+├── social_links.py             # Social media links
+├── broadcast.py                # Broadcast messaging
+├── followup.py                 # Smart follow-up system
+├── promocodes.py               # Promo code system
+├── analytics.py                # Analytics
+├── bot_api.py                  # Telegram Bot API helpers
+├── cache.py                    # TTL caching
+├── security.py                 # Admin access control
+├── utils.py                    # Utilities
+├── handlers/
+│   ├── __init__.py             # Handler exports
+│   ├── messages.py             # Main message handler, agentic loop
+│   ├── commands.py             # Command handlers
+│   ├── callbacks.py            # Callback query handlers
+│   ├── admin.py                # Admin commands (leads, stats, analytics)
+│   ├── media.py                # Voice, video, photo handlers
+│   └── utils.py                # Handler utilities
+```
 
 **UI/UX Decisions:**
 - Custom emoji IDs are loaded from environment variables for buttons (e.g., `EMOJI_LEAD`, `EMOJI_PAYMENT`). If not set, buttons function without custom icons.
 - Button styles (`constructive` (green), `destructive` (red)) are applied via `styled_button_api_kwargs()`.
 
 **Technical Implementations & Feature Specifications:**
-- **AI Integration**: Powered by Gemini 3 Pro Preview, supporting intelligent responses, real-time streaming, and function calling (calculator, portfolio, payment).
+- **AI Integration**: Powered by Gemini 3 Pro Preview, supporting intelligent responses, real-time streaming, and function calling (14 tools).
 - **Interactive Tools**: Features an interactive cost calculator, portfolio examples, and an extensive FAQ system.
 - **Lead Management**: Includes automatic lead capture, manager notifications, AI-based lead auto-tagging, and priority setting.
 - **Gamification & Loyalty**: Implements a system for earning coins through tasks, a tiered referral program, and a loyalty program offering discounts.
 - **Payment System**: Supports manual payment integration, downloadable contracts, and automated payment reminders.
 - **Communication & Marketing**: Features a smart follow-up system with AI-generated personalized messages, a broadcast system with audience targeting, and multi-language support.
-- **Security & Administration**: Provides admin access control, audit logging, and environment variable management for sensitive data.
+- **Security & Administration**: Provides admin access control, audit logging, column whitelist for SQL safety, and environment variable management for sensitive data.
 - **Deployment**: Exclusively deployed on Railway using a PostgreSQL database.
 
 **System Design Choices (Super Agent Architecture):**
-- **Agentic Loop**: Utilizes a multi-step tool calling mechanism where the AI can chain tools and synthesize results.
-- **Session & Memory**: Implements persistent memory (PostgreSQL with 30-day TTL) and auto-summarization. It also includes a `client_profiles` table for long-term client data.
-- **Context Builder (Hybrid Funnel)**: Integrates a 3-signal hybrid funnel (keywords, semantics, score) with backslide detection, client style mirroring, proactive value delivery, industry case study matching, objection handling, and dynamic buttons.
-- **Knowledge Base**: Employs an optimized prompt with 7 core rules, a 3-brain model, and ethical guardrails.
-- **RAG Knowledge Base**: A PostgreSQL-backed searchable knowledge base (`knowledge_chunks` table) for intent-based tag matching and RAG knowledge injection.
-- **Dynamic Button System**: Attaches stage-aware buttons to every AI response.
-- **AI Client**: Interfaces with the Gemini API, offering 14 function-calling tools, streaming, and different thinking modes.
-- **Self-Learning Feedback Loop**: Tracks AI response outcomes against conversion events to provide learning insights.
-- **Propensity Scoring**: Calculates a real-time composite score based on user interaction metrics, influencing AI context.
-- **A/B Dialog Testing**: Supports A/B testing for various dialog elements like welcome messages, CTA styles, and objection handling.
-- **Calendar Booking**: Manages availability slots and bookings, including AI tools for showing slots and booking consultations.
-- **Social Links**: Provides context for AI regarding social media links and loyalty tasks.
-- **Voice System Architecture**: Features a full agentic pipeline for voice messages, including Gemini Flash for transcription, ElevenLabs v3 TTS with native audio tags, emotion preprocessing, and voice-aware prompts with abbreviation expansion and a stress dictionary. It also includes number-to-words conversion and speech naturalization.
-- **Guardrails**: System prompt rules prevent AI from making unauthorized promises.
+- **Agentic Loop**: Multi-step tool calling (max 4 steps) where AI chains tools and synthesizes results.
+- **Session & Memory**: Persistent memory (PostgreSQL with 30-day TTL) and auto-summarization at 20+ messages. `client_profiles` table for long-term client data with `ALLOWED_PROFILE_COLUMNS` whitelist.
+- **Context Builder (Hybrid Funnel)**: 3-signal hybrid funnel (keywords, semantics, score) with backslide detection, client style mirroring, proactive value delivery, industry case study matching, objection handling, and dynamic buttons.
+- **Knowledge Base**: Optimized prompt with 7 core rules, 3-brain model, and ethical guardrails.
+- **RAG Knowledge Base**: PostgreSQL-backed searchable knowledge base (`knowledge_chunks` table) with weighted relevance scoring (priority + tag_overlap×5 + word_hits×2 + title_bonus).
+- **Dynamic Button System**: Stage-aware buttons attached to every AI response.
+- **AI Client**: Gemini API with 14 function-calling tools, streaming, thinking modes (high/medium).
+- **Self-Learning Feedback Loop**: Tracks AI response outcomes, conversion rates by stage/variant, learning insights.
+- **Propensity Scoring**: Composite score 0-100 based on engagement velocity, session depth, tool usage, buying signals, and time decay.
+- **A/B Dialog Testing**: Chi-square test with p-value (0.05/0.01/0.001), auto-winner detection, min 30 users per variant. Tests: response_style, cta_style, objection_handling, pricing_reveal, followup_tone.
+- **Calendar Booking**: Availability slots and bookings with AI tools for showing/booking.
+- **Social Links**: Conditional context injection (keywords or awareness/interest stage only).
+- **Voice System**: Full agentic pipeline with Gemini Flash transcription, ElevenLabs v3 TTS, emotion preprocessing, abbreviation expansion, stress dictionary.
+- **Guardrails**: System prompt rules prevent unauthorized promises.
+
+**Admin Commands:**
+- `/leads`, `/stats`, `/export`, `/reviews`, `/history`, `/hot`, `/tag`, `/priority` — Lead management
+- `/followup`, `/broadcast` — Communication
+- `/promo_create`, `/promo_list`, `/promo_off` — Promo codes
+- `/propensity` — Propensity scoring dashboard (distribution + top prospects)
+- `/ab_results` — A/B testing summary with significance
+- `/ab_detail <test>` — Detailed A/B test stats
+- `/feedback` — Learning insights and conversion analytics
 
 ## External Dependencies
 - **Telegram Bot API**: Version 9.4 (via `python-telegram-bot` 22.6) for core bot functionalities.

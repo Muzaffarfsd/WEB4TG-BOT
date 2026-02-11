@@ -774,10 +774,10 @@ def get_returning_context(user_id: int) -> Optional[str]:
         import os
         DATABASE_URL = os.environ.get("DATABASE_URL")
         if DATABASE_URL:
-            from src.database import fetch_one
-            row = fetch_one(
+            from src.database import execute_one
+            row = execute_one(
                 "SELECT summary FROM conversation_summaries WHERE telegram_id = %s",
-                (user_id,)
+                (user_id,), dict_cursor=True
             )
             if row and row.get("summary"):
                 return row["summary"]

@@ -217,8 +217,17 @@ def _init_conversation_table():
         logger.warning(f"Failed to init conversation_history table: {e}")
 
 
+ALLOWED_PROFILE_COLUMNS = {
+    "industry", "budget_range", "timeline", "needs",
+    "objections", "preferred_style", "timezone_offset", "last_response_speed"
+}
+
+
 def save_client_profile(user_id: int, **kwargs):
     if not DATABASE_URL:
+        return
+    safe_kwargs = {k: v for k, v in kwargs.items() if k in ALLOWED_PROFILE_COLUMNS}
+    if not safe_kwargs:
         return
     try:
         from src.database import execute_query, execute_one
@@ -229,7 +238,7 @@ def save_client_profile(user_id: int, **kwargs):
         if existing:
             updates = []
             values = []
-            for key, value in kwargs.items():
+            for key, value in safe_kwargs.items():
                 if value is not None:
                     updates.append(f"{key} = %s")
                     values.append(value)
@@ -244,7 +253,7 @@ def save_client_profile(user_id: int, **kwargs):
             columns = ["telegram_id"]
             placeholders = ["%s"]
             values = [user_id]
-            for key, value in kwargs.items():
+            for key, value in safe_kwargs.items():
                 if value is not None:
                     columns.append(key)
                     placeholders.append("%s")

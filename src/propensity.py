@@ -136,12 +136,13 @@ class PropensityScorer:
                     )
 
             score = self.calculate_score(user_id)
-            with get_connection() as conn:
-                with conn.cursor() as cur:
-                    cur.execute(
-                        "UPDATE interaction_metrics SET last_score = %s, score_updated_at = CURRENT_TIMESTAMP WHERE user_id = %s",
-                        (score, user_id)
-                    )
+            if score is not None:
+                with get_connection() as conn:
+                    with conn.cursor() as cur:
+                        cur.execute(
+                            "UPDATE interaction_metrics SET last_score = %s, score_updated_at = CURRENT_TIMESTAMP WHERE user_id = %s",
+                            (score, user_id)
+                        )
         except Exception as e:
             logger.error(f"Failed to record interaction for user {user_id}: {e}")
 

@@ -106,6 +106,7 @@ async def execute_tool_call(tool_name: str, args: dict, user_id: int, username: 
 
     elif tool_name == "compare_plans":
         plan_type = args.get("plan_type", "packages")
+        _track_propensity(user_id, 'tool_compare')
 
         if plan_type == "packages":
             return (
