@@ -181,7 +181,7 @@ class AIClient:
         thinking_level: str = "medium",
         on_chunk=None
     ) -> dict:
-        """Returns {"text": str, "tool_calls": list[dict]}"""
+        """Returns {"text": str, "tool_calls": list[dict], "all_tool_calls": list}"""
         try:
             model = config.fast_model_name
             tools = types.Tool(function_declarations=TOOL_DECLARATIONS)
@@ -213,15 +213,90 @@ class AIClient:
                         })
 
             if tool_calls:
-                return {"text": None, "tool_calls": tool_calls}
+                return {"text": None, "tool_calls": tool_calls, "all_tool_calls": tool_calls}
 
             text = response.text if response.text else None
-            return {"text": text, "tool_calls": []}
+            return {"text": text, "tool_calls": [], "all_tool_calls": []}
 
         except Exception as e:
             logger.warning(f"Tool calling failed, falling back to regular response: {e}")
             fallback = await self.generate_response(messages, thinking_level)
-            return {"text": fallback, "tool_calls": []}
+            return {"text": fallback, "tool_calls": [], "all_tool_calls": []}
+
+    async def agentic_loop(
+        self,
+        messages: List[Dict],
+        tool_executor,
+        thinking_level: str = "medium",
+        max_steps: int = 4
+    ) -> dict:
+        """Multi-step agentic loop: AI calls tools, gets results, decides next action.
+        
+        Returns {"text": str, "special_actions": list, "all_tool_results": list}
+        """
+        all_tool_results = []
+        special_actions = []
+        current_messages = list(messages)
+        
+        for step in range(max_steps):
+            result = await self.generate_response_with_tools(
+                messages=current_messages,
+                thinking_level=thinking_level
+            )
+            
+            if not result["tool_calls"]:
+                return {
+                    "text": result["text"],
+                    "special_actions": special_actions,
+                    "all_tool_results": all_tool_results
+                }
+            
+            step_tool_results = []
+            for tc in result["tool_calls"]:
+                try:
+                    tool_result = await tool_executor(tc["name"], tc["args"])
+                except Exception as e:
+                    tool_result = f"Ошибка вызова инструмента {tc['name']}: {e}"
+                    logger.error(f"Tool executor error for {tc['name']}: {e}")
+                
+                if not isinstance(tool_result, str):
+                    tool_result = str(tool_result) if tool_result is not None else "Нет результата"
+                
+                if tool_result.startswith("[PORTFOLIO:"):
+                    special_actions.append(("portfolio", tool_result))
+                    step_tool_results.append(f"{tc['name']}: показано портфолио")
+                elif tool_result == "[PRICING]":
+                    special_actions.append(("pricing", None))
+                    step_tool_results.append(f"{tc['name']}: показан прайс")
+                elif tool_result == "[PAYMENT]":
+                    special_actions.append(("payment", None))
+                    step_tool_results.append(f"{tc['name']}: показана оплата")
+                else:
+                    step_tool_results.append(f"{tc['name']}: {tool_result}")
+                    all_tool_results.append({"tool": tc["name"], "result": tool_result})
+            
+            tool_results_text = "\n\n".join(step_tool_results)
+            current_messages.append({
+                "role": "model",
+                "parts": [{"text": f"Я вызвал инструменты. Результаты:\n{tool_results_text}"}]
+            })
+            current_messages.append({
+                "role": "user",
+                "parts": [{"text": "Проанализируй результаты. Если нужно — вызови ещё инструменты для полного ответа. Если данных достаточно — сформулируй финальный ответ клиенту."}]
+            })
+            
+            logger.info(f"Agentic loop step {step+1}: {len(result['tool_calls'])} tool calls")
+        
+        final_response = await self.generate_response(
+            messages=current_messages,
+            thinking_level=thinking_level
+        )
+        
+        return {
+            "text": final_response,
+            "special_actions": special_actions,
+            "all_tool_results": all_tool_results
+        }
 
     async def analyze_complex_query(
         self,

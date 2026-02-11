@@ -46,12 +46,16 @@ Button styles (Bot API 9.4): `constructive` (green), `destructive` (red) applied
 - **Context Injection**: AI receives `[ПРОФИЛЬ КЛИЕНТА]` + `[ОБНАРУЖЕНО ВОЗРАЖЕНИЕ]` as prepended context messages before conversation history
 - Previous fixes: callback routing, subscription buttons, `add_coins` method, dead code removal, full audit (81 callbacks, 31 commands)
 
-## AI Agent Architecture
-- **Session**: `src/session.py` — persistent conversation memory (PostgreSQL + in-memory cache)
-- **Context Builder**: `src/context_builder.py` — client profiling + objection detection
-- **AI Client**: `src/ai_client.py` — Gemini API with 11 function-calling tools, streaming, thinking modes
-- **Knowledge Base**: `src/knowledge_base.py` — system prompt with sales funnel, pricing, FAQ
-- **Tool Execution**: `src/handlers/messages.py` — handles all 11 AI tool calls with special actions
+## Super Agent Architecture
+- **Agentic Loop**: `src/ai_client.py` → `agentic_loop()` — multi-step tool calling (up to 4 steps), AI chains tools and synthesizes results
+- **Session + Memory Summarization**: `src/session.py` — persistent memory (PostgreSQL), auto-summarization at 20+ messages, summary stored in `conversation_summaries` table
+- **Context Builder + EQ**: `src/context_builder.py` — client profiling, objection detection (5 types), emotional intelligence (5 tones: frustrated/excited/confused/urgent/skeptical)
+- **AI Client**: `src/ai_client.py` — Gemini API with 11 function-calling tools, streaming, thinking modes, agentic loop
+- **Knowledge Base**: `src/knowledge_base.py` — system prompt with sales funnel, objection scripts, guardrails, multimodality
+- **Auto Lead Scoring**: `src/handlers/messages.py` — 9 buying signal categories with weighted scoring, auto-priority escalation
+- **Insight Extraction**: `src/handlers/messages.py` — AI extracts budget/timeline/needs from conversation every 5 messages, auto-saves to lead profile
+- **Guardrails**: System prompt rules preventing unauthorized promises (discounts, delivery dates, free features)
+- **Tool Execution**: `src/handlers/messages.py` — handles all 11 AI tool calls with agentic loop and special actions
 
 ## External Dependencies
 - **Telegram Bot API**: Version 9.4 (via `python-telegram-bot` 22.6) for core bot functionalities.

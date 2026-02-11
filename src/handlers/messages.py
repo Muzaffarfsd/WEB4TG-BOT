@@ -221,6 +221,155 @@ INTEREST_TAGS = {
 }
 
 
+BUYING_SIGNALS = {
+    "budget": (["бюджет", "готов заплатить", "сколько стоит", "какая цена", "прайс", "budget", "price", "cost"], 5),
+    "payment": (["оплат", "предоплат", "реквизит", "карт", "перевод", "pay", "invoice"], 15),
+    "deadline": (["когда начнём", "сроки", "как быстро", "дедлайн", "к какому числу", "deadline", "asap"], 10),
+    "commitment": (["хочу заказать", "готов начать", "давайте начнём", "оформляем", "подписываем", "go ahead", "let's start"], 20),
+    "details": (["техзадание", "ТЗ", "бриф", "функционал", "фичи", "requirements", "features"], 8),
+    "contact": (["позвоните", "созвонимся", "мой номер", "мой телефон", "call me", "напишите мне"], 12),
+    "comparison": (["а если сравнить", "что лучше", "разница между", "compare", "vs"], 3),
+    "positive": (["отлично", "круто", "интересно", "нравится", "вау", "wow", "great", "cool", "amazing"], 2),
+    "photo": (["вот скриншот", "вот макет", "вот дизайн", "смотрите фото"], 5),
+}
+
+
+def auto_score_lead(user_id: int, message_text: str) -> None:
+    try:
+        text_lower = message_text.lower()
+        score_delta = 0
+        
+        for signal_type, (keywords, points) in BUYING_SIGNALS.items():
+            for kw in keywords:
+                if kw.lower() in text_lower:
+                    score_delta += points
+                    break
+        
+        if score_delta > 0:
+            lead = lead_manager.get_lead(user_id)
+            if lead:
+                new_score = min(100, (lead.score or 0) + score_delta)
+                new_priority = lead.priority
+                if new_score >= 60:
+                    new_priority = LeadPriority.HOT
+                elif new_score >= 30:
+                    new_priority = LeadPriority.WARM
+                lead_manager.update_lead(user_id, score=new_score, priority=new_priority)
+                logger.debug(f"Auto-scored lead {user_id}: +{score_delta} → {new_score}")
+    except Exception as e:
+        logger.debug(f"Auto-scoring failed for user {user_id}: {e}")
+
+
+async def summarize_if_needed(user_id: int, session) -> None:
+    try:
+        if not session._needs_summarization:
+            return
+        if session.message_count < 20:
+            return
+        
+        old_messages = session.messages[:len(session.messages) - 10]
+        texts = []
+        for msg in old_messages:
+            if msg.get("parts"):
+                for part in msg["parts"]:
+                    if isinstance(part, dict) and part.get("text"):
+                        text = part["text"][:150]
+                        texts.append(f"{msg['role']}: {text}")
+        
+        if not texts:
+            return
+        
+        conversation_text = "\n".join(texts)
+        existing_summary = session._summary or ""
+        
+        prompt = f"""Сожми этот диалог в компактное резюме (максимум 200 слов). Сохрани ключевую информацию: тип бизнеса, потребности, бюджет, решения, договорённости. 
+
+{f'Предыдущее резюме: {existing_summary}' if existing_summary else ''}
+
+Диалог для сжатия:
+{conversation_text}
+
+Верни ТОЛЬКО резюме, без пояснений."""
+        
+        from src.ai_client import ai_client
+        summary = await ai_client.quick_response(prompt)
+        
+        if summary and len(summary) > 20:
+            session.set_summary(summary)
+            session.messages = session.messages[-10:]
+            logger.info(f"Summarized conversation for user {user_id}: {len(summary)} chars")
+    except Exception as e:
+        logger.debug(f"Summarization failed for user {user_id}: {e}")
+
+
+async def extract_insights_if_needed(user_id: int, session) -> None:
+    try:
+        if session.message_count < 6 or session.message_count % 5 != 0:
+            return
+        
+        history = session.get_history()
+        if len(history) < 6:
+            return
+        
+        recent_texts = []
+        for msg in history[-10:]:
+            if msg.get("parts"):
+                for part in msg["parts"]:
+                    if isinstance(part, dict) and part.get("text"):
+                        recent_texts.append(f"{msg['role']}: {part['text'][:200]}")
+        
+        if not recent_texts:
+            return
+        
+        conversation_text = "\n".join(recent_texts)
+        
+        prompt = f"""Проанализируй диалог и извлеки ключевые данные о клиенте. Верни ТОЛЬКО JSON (без markdown):
+{{"business_type": "тип бизнеса или null", "budget": "бюджет или null", "timeline": "желаемые сроки или null", "needs": ["список потребностей"], "ready_to_buy": true/false}}
+
+Диалог:
+{conversation_text}"""
+        
+        from src.ai_client import ai_client
+        result = await ai_client.quick_response(prompt)
+        
+        import json
+        import re
+        result = result.strip()
+        if result.startswith("```"):
+            result = result.split("\n", 1)[1] if "\n" in result else result
+            result = result.rsplit("```", 1)[0] if "```" in result else result
+            result = result.strip()
+        
+        json_match = re.search(r'\{[^{}]*(?:\{[^{}]*\}[^{}]*)*\}', result)
+        if json_match:
+            result = json_match.group(0)
+        
+        try:
+            insights = json.loads(result)
+        except json.JSONDecodeError:
+            result = result.replace("'", '"').replace("True", "true").replace("False", "false").replace("None", "null")
+            try:
+                insights = json.loads(result)
+            except json.JSONDecodeError:
+                logger.debug(f"Could not parse insights JSON for user {user_id}")
+                return
+        
+        if insights.get("business_type"):
+            lead_manager.add_tag(user_id, insights["business_type"])
+        if insights.get("budget"):
+            lead_manager.add_tag(user_id, f"budget:{insights['budget']}")
+        if insights.get("needs"):
+            for need in insights["needs"][:3]:
+                lead_manager.add_tag(user_id, need[:30])
+        if insights.get("ready_to_buy"):
+            lead_manager.update_lead(user_id, priority=LeadPriority.HOT)
+            lead_manager.add_tag(user_id, "ready_to_buy")
+        
+        logger.info(f"Extracted insights for user {user_id}: {insights}")
+    except Exception as e:
+        logger.debug(f"Insight extraction failed for user {user_id}: {e}")
+
+
 def auto_tag_lead(user_id: int, message_text: str) -> None:
     try:
         lead = lead_manager.get_lead(user_id)
@@ -440,75 +589,59 @@ async def message_handler(update: Update, context: ContextTypes.DEFAULT_TYPE) ->
             messages_for_ai = [context_msg, response_ack] + messages_for_ai
 
         try:
-            result = await ai_client.generate_response_with_tools(
+            async def _tool_executor(tool_name, tool_args):
+                return await execute_tool_call(
+                    tool_name, tool_args,
+                    user.id, user.username, user.first_name
+                )
+            
+            agentic_result = await ai_client.agentic_loop(
                 messages=messages_for_ai,
-                thinking_level=thinking_level
+                tool_executor=_tool_executor,
+                thinking_level=thinking_level,
+                max_steps=4
             )
-
-            if result["tool_calls"]:
-                tool_results = []
-                special_actions = []
-                for tc in result["tool_calls"]:
-                    tool_result = await execute_tool_call(
-                        tc["name"], tc["args"],
-                        user.id, user.username, user.first_name
-                    )
-                    if tool_result.startswith("[PORTFOLIO:"):
-                        special_actions.append(("portfolio", tool_result))
-                    elif tool_result == "[PRICING]":
-                        special_actions.append(("pricing", None))
-                    elif tool_result == "[PAYMENT]":
-                        special_actions.append(("payment", None))
-                    else:
-                        tool_results.append(tool_result)
-
-                if special_actions:
-                    for action_type, action_data in special_actions:
-                        if action_type == "portfolio":
-                            from src.keyboards import get_portfolio_keyboard
-                            from src.knowledge_base import PORTFOLIO_MESSAGE
-                            await update.message.reply_text(
-                                PORTFOLIO_MESSAGE, parse_mode="Markdown",
-                                reply_markup=get_portfolio_keyboard()
-                            )
-                        elif action_type == "pricing":
-                            await update.message.reply_text(
-                                get_price_main_text(), parse_mode="Markdown",
-                                reply_markup=get_price_main_keyboard()
-                            )
-                        elif action_type == "payment":
-                            from src.payments import get_payment_keyboard
-                            await update.message.reply_text(
-                                "💳 Выберите способ оплаты:",
-                                reply_markup=get_payment_keyboard()
-                            )
-
-                if tool_results:
-                    tool_context = "\n".join(tool_results)
-                    session.add_message("assistant", f"[Результат инструмента: {tool_context}]", config.max_history_length)
-
-                    narration = await ai_client.generate_response(
-                        messages=session.get_history(),
-                        thinking_level="medium"
-                    )
-                    response = narration
-                elif not special_actions:
-                    response = "Готово!"
-                else:
-                    typing_task.cancel()
-                    try:
-                        await typing_task
-                    except asyncio.CancelledError:
-                        pass
-                    session.add_message("assistant", "Показал запрошенную информацию", config.max_history_length)
-                    lead_manager.save_message(user.id, "assistant", "Показал запрошенную информацию")
-                    logger.info(f"User {user.id}: processed message #{session.message_count} (tool action)")
-                    auto_tag_lead(user.id, user_message)
-                    return
+            
+            if agentic_result["special_actions"]:
+                for action_type, action_data in agentic_result["special_actions"]:
+                    if action_type == "portfolio":
+                        from src.keyboards import get_portfolio_keyboard
+                        from src.knowledge_base import PORTFOLIO_MESSAGE
+                        await update.message.reply_text(
+                            PORTFOLIO_MESSAGE, parse_mode="Markdown",
+                            reply_markup=get_portfolio_keyboard()
+                        )
+                    elif action_type == "pricing":
+                        await update.message.reply_text(
+                            get_price_main_text(), parse_mode="Markdown",
+                            reply_markup=get_price_main_keyboard()
+                        )
+                    elif action_type == "payment":
+                        from src.payments import get_payment_keyboard
+                        await update.message.reply_text(
+                            "💳 Выберите способ оплаты:",
+                            reply_markup=get_payment_keyboard()
+                        )
+            
+            if agentic_result["text"]:
+                response = agentic_result["text"]
+            elif agentic_result["special_actions"]:
+                typing_task.cancel()
+                try:
+                    await typing_task
+                except asyncio.CancelledError:
+                    pass
+                session.add_message("assistant", "Показал запрошенную информацию", config.max_history_length)
+                lead_manager.save_message(user.id, "assistant", "Показал запрошенную информацию")
+                logger.info(f"User {user.id}: processed message #{session.message_count} (agentic, {len(agentic_result['all_tool_results'])} tools)")
+                auto_tag_lead(user.id, user_message)
+                auto_score_lead(user.id, user_message)
+                return
             else:
-                response = result["text"]
+                response = None
+                
         except Exception as e:
-            logger.warning(f"Tool calling failed, falling back to streaming: {e}")
+            logger.warning(f"Agentic loop failed, falling back to streaming: {e}")
 
             from src.bot_api import send_message_draft
             last_draft_len = 0
@@ -563,6 +696,14 @@ async def message_handler(update: Update, context: ContextTypes.DEFAULT_TYPE) ->
         logger.info(f"User {user.id}: processed message #{session.message_count}")
 
         auto_tag_lead(user.id, user_message)
+        auto_score_lead(user.id, user_message)
+        
+        asyncio.create_task(
+            extract_insights_if_needed(user.id, session)
+        )
+        asyncio.create_task(
+            summarize_if_needed(user.id, session)
+        )
 
     except Exception as e:
         typing_task.cancel()

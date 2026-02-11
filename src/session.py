@@ -21,6 +21,10 @@ class Message:
     timestamp: float = field(default_factory=time.time)
 
 
+SUMMARIZATION_THRESHOLD = 20
+KEEP_RECENT = 10
+
+
 @dataclass
 class UserSession:
     user_id: int
@@ -31,6 +35,8 @@ class UserSession:
     last_activity: float = field(default_factory=time.time)
     message_count: int = 0
     _loaded_from_db: bool = False
+    _summary: Optional[str] = None
+    _needs_summarization: bool = False
     
     def add_message(self, role: str, content: str, max_history: int = 30) -> None:
         if role == "user":
@@ -45,6 +51,8 @@ class UserSession:
             })
         
         if len(self.messages) > max_history:
+            if len(self.messages) >= SUMMARIZATION_THRESHOLD and not self._needs_summarization:
+                self._needs_summarization = True
             self.messages = self.messages[-max_history:]
         
         self.last_activity = time.time()
@@ -53,10 +61,28 @@ class UserSession:
         _save_message_to_db(self.user_id, role, content)
     
     def get_history(self) -> List[Dict]:
-        return self.messages.copy()
+        result = []
+        if self._summary:
+            result.append({
+                "role": "user",
+                "parts": [{"text": f"[РЕЗЮМЕ ПРЕДЫДУЩЕГО ДИАЛОГА]\n{self._summary}"}]
+            })
+            result.append({
+                "role": "model",
+                "parts": [{"text": "Понял контекст из предыдущего диалога, продолжаю."}]
+            })
+        result.extend(self.messages)
+        return result
+    
+    def set_summary(self, summary: str) -> None:
+        self._summary = summary
+        self._needs_summarization = False
+        _save_summary_to_db(self.user_id, summary)
     
     def clear_history(self) -> None:
         self.messages = []
+        self._summary = None
+        self._needs_summarization = False
         self.last_activity = time.time()
         _clear_history_db(self.user_id)
 
@@ -82,6 +108,37 @@ def _clear_history_db(user_id: int):
         execute_query("DELETE FROM conversation_history WHERE telegram_id = %s", (user_id,))
     except Exception as e:
         logger.debug(f"Failed to clear history from DB: {e}")
+
+
+def _save_summary_to_db(user_id: int, summary: str):
+    if not DATABASE_URL:
+        return
+    try:
+        from src.database import execute_query
+        execute_query(
+            """INSERT INTO conversation_summaries (telegram_id, summary)
+               VALUES (%s, %s)
+               ON CONFLICT (telegram_id) DO UPDATE SET summary = %s, updated_at = NOW()""",
+            (user_id, summary, summary)
+        )
+    except Exception as e:
+        logger.debug(f"Failed to save summary to DB: {e}")
+
+
+def _load_summary_from_db(user_id: int) -> Optional[str]:
+    if not DATABASE_URL:
+        return None
+    try:
+        from src.database import execute_one
+        row = execute_one(
+            "SELECT summary FROM conversation_summaries WHERE telegram_id = %s",
+            (user_id,), dict_cursor=True
+        )
+        if row:
+            return row["summary"]
+    except Exception as e:
+        logger.debug(f"Failed to load summary from DB: {e}")
+    return None
 
 
 def _load_history_from_db(user_id: int, limit: int = 20) -> List[Dict]:
@@ -133,7 +190,14 @@ def _init_conversation_table():
             DELETE FROM conversation_history 
             WHERE created_at < NOW() - INTERVAL '7 days'
         """)
-        logger.info("Conversation history table initialized")
+        execute_query("""
+            CREATE TABLE IF NOT EXISTS conversation_summaries (
+                telegram_id BIGINT PRIMARY KEY,
+                summary TEXT NOT NULL,
+                updated_at TIMESTAMP DEFAULT NOW()
+            )
+        """)
+        logger.info("Conversation history + summaries tables initialized")
     except Exception as e:
         logger.warning(f"Failed to init conversation_history table: {e}")
 
@@ -156,13 +220,15 @@ class SessionManager:
             return session
         
         db_messages = _load_history_from_db(user_id)
+        db_summary = _load_summary_from_db(user_id)
         
         session = UserSession(
             user_id=user_id,
             username=username,
             first_name=first_name,
             messages=db_messages,
-            _loaded_from_db=bool(db_messages)
+            _loaded_from_db=bool(db_messages),
+            _summary=db_summary
         )
         self._sessions[user_id] = session
         
