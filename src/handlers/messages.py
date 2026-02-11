@@ -230,6 +230,17 @@ def auto_tag_lead(user_id: int, message_text: str) -> None:
 async def message_handler(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
     user = update.effective_user
     user_message = update.message.text
+
+    from src.rate_limiter import rate_limiter
+    allowed, rate_msg = rate_limiter.check_rate_limit(user.id)
+    if not allowed:
+        await update.message.reply_text(rate_msg)
+        return
+
+    from src.monitoring import monitor
+    import time as _time
+    _msg_start = _time.time()
+    monitor.track_message()
     
     if user_message and len(user_message) > 4000:
         await update.message.reply_text(
@@ -419,8 +430,35 @@ async def message_handler(update: Update, context: ContextTypes.DEFAULT_TYPE) ->
     follow_up_manager.cancel_follow_ups(user.id)
     follow_up_manager.schedule_follow_up(user.id)
     
+    from src.multilang import detect_and_remember_language, get_prompt_suffix, get_user_language
+    user_lang = detect_and_remember_language(user.id, user_message)
+
+    from src.conversation_qa import qa_manager
+    handoff_trigger = qa_manager.check_handoff_triggers(user.id, user_message)
+    if handoff_trigger:
+        trigger_type, trigger_reason = handoff_trigger
+        qa_manager.create_handoff_request(
+            user_id=user.id,
+            reason=trigger_reason,
+            trigger_type=trigger_type,
+            context_summary=user_message[:500]
+        )
+        await qa_manager.notify_manager_handoff(
+            context.bot, user.id, trigger_reason, trigger_type,
+            user_name=f"{user.first_name} (@{user.username or 'нет'})"
+        )
+        if trigger_type == "explicit_request":
+            from src.multilang import get_string
+            await update.message.reply_text(get_string("handoff_request", user_lang))
+    
     from src.context_builder import build_full_context, get_dynamic_buttons
     client_context = build_full_context(user.id, user_message, user.username, user.first_name)
+
+    lang_suffix = get_prompt_suffix(user_lang)
+    if lang_suffix and client_context:
+        client_context += lang_suffix
+    elif lang_suffix:
+        client_context = lang_suffix
     
     typing_task = asyncio.create_task(
         send_typing_action(update, duration=60.0)
@@ -583,6 +621,19 @@ async def message_handler(update: Update, context: ContextTypes.DEFAULT_TYPE) ->
         except Exception:
             pass
 
+        try:
+            qa_manager.score_conversation(
+                user_id=user.id,
+                user_message=user_message,
+                ai_response=response,
+                message_count=session.message_count,
+                session_messages=len(session.messages)
+            )
+        except Exception:
+            pass
+
+        monitor.track_request("message_handler", _time.time() - _msg_start, success=True)
+
         asyncio.create_task(
             extract_insights_if_needed(user.id, session)
         )
@@ -594,6 +645,7 @@ async def message_handler(update: Update, context: ContextTypes.DEFAULT_TYPE) ->
         typing_task.cancel()
         error_type = type(e).__name__
         logger.error(f"Error handling message from user {user.id}: {error_type}: {e}")
+        monitor.track_request("message_handler", _time.time() - _msg_start, success=False, error=str(e))
         await update.message.reply_text(
             ERROR_MESSAGE,
             reply_markup=get_main_menu_keyboard()

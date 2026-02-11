@@ -609,6 +609,155 @@ async def ab_detail_handler(update: Update, context: ContextTypes.DEFAULT_TYPE) 
 
 
 @admin_required
+async def health_handler(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
+    log_admin_action(update.effective_user.id, "health")
+    try:
+        from src.monitoring import monitor
+        text = monitor.format_health_message()
+        
+        from src.rate_limiter import rate_limiter, circuit_breaker
+        rl_stats = rate_limiter.get_stats()
+        cb_status = circuit_breaker.get_status()
+        
+        text += f"\n<b>Rate Limiter:</b>\n"
+        text += f"  Активных: {rl_stats['active_users']} | Заблокированных: {rl_stats['blocked_users']}\n"
+        
+        if cb_status:
+            text += f"\n<b>Circuit Breakers:</b>\n"
+            for svc, st in cb_status.items():
+                icon = "🟢" if st['state'] == 'closed' else "🔴"
+                text += f"  {icon} {svc}: {st['state']} ({st['failures']} failures)\n"
+        
+        await update.message.reply_text(text, parse_mode="HTML")
+    except Exception as e:
+        await update.message.reply_text(f"Ошибка: {e}")
+
+
+@admin_required
+async def qa_handler(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
+    log_admin_action(update.effective_user.id, "qa_stats")
+    try:
+        from src.conversation_qa import qa_manager
+        stats = qa_manager.get_qa_stats(days=7)
+        pending = qa_manager.get_pending_handoffs()
+        
+        text = "🏆 <b>Качество диалогов (7 дней)</b>\n\n"
+        if stats:
+            text += f"📊 Оценено: {stats.get('total_scored', 0)}\n"
+            text += f"⭐ Средний балл: {stats.get('avg_score', 0)}\n"
+            text += f"✅ Высокое качество: {stats.get('high_quality_pct', 0)}%\n"
+            text += f"❌ Низкое качество: {stats.get('low_quality_pct', 0)}%\n"
+            text += f"🔔 Эскалаций: {stats.get('handoffs', 0)}\n"
+        
+        if pending:
+            text += f"\n<b>Ожидают менеджера ({len(pending)}):</b>\n"
+            for h in pending[:5]:
+                text += f"  • ID {h['user_id']}: {h['reason']} ({h['trigger_type']})\n"
+        
+        await update.message.reply_text(text, parse_mode="HTML")
+    except Exception as e:
+        await update.message.reply_text(f"Ошибка: {e}")
+
+
+@admin_required
+async def advanced_stats_handler(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
+    log_admin_action(update.effective_user.id, "advanced_stats")
+    try:
+        from src.advanced_analytics import advanced_analytics
+        args = context.args
+        days = int(args[0]) if args else 30
+        text = advanced_analytics.format_advanced_stats(days)
+        await update.message.reply_text(text, parse_mode="HTML")
+    except Exception as e:
+        await update.message.reply_text(f"Ошибка: {e}")
+
+
+@admin_required
+async def export_csv_handler(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
+    log_admin_action(update.effective_user.id, "export_csv")
+    try:
+        from src.crm_export import crm_exporter
+        args = context.args
+        days = int(args[0]) if args else 30
+        
+        csv_data = crm_exporter.export_leads_csv(days)
+        if not csv_data:
+            await update.message.reply_text("Нет данных для экспорта.")
+            return
+        
+        import io
+        file_obj = io.BytesIO(csv_data.encode('utf-8-sig'))
+        file_obj.name = f"leads_{days}d.csv"
+        
+        await update.message.reply_document(
+            document=file_obj,
+            caption=f"📊 Экспорт лидов за {days} дней"
+        )
+    except Exception as e:
+        await update.message.reply_text(f"Ошибка экспорта: {e}")
+
+
+@admin_required
+async def export_analytics_handler(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
+    log_admin_action(update.effective_user.id, "export_analytics")
+    try:
+        from src.crm_export import crm_exporter
+        args = context.args
+        days = int(args[0]) if args else 30
+        
+        json_data = crm_exporter.export_analytics_json(days)
+        if not json_data:
+            await update.message.reply_text("Нет данных для экспорта.")
+            return
+        
+        import io
+        file_obj = io.BytesIO(json_data.encode('utf-8'))
+        file_obj.name = f"analytics_{days}d.json"
+        
+        await update.message.reply_document(
+            document=file_obj,
+            caption=f"📊 Аналитика за {days} дней (JSON)"
+        )
+    except Exception as e:
+        await update.message.reply_text(f"Ошибка экспорта: {e}")
+
+
+@admin_required
+async def webhook_handler(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
+    log_admin_action(update.effective_user.id, "webhook")
+    args = context.args
+    
+    if not args or len(args) < 2:
+        await update.message.reply_text(
+            "Использование:\n"
+            "/webhook add <event_type> <url>\n"
+            "/webhook remove <id>\n\n"
+            "Типы событий: new_lead, payment"
+        )
+        return
+    
+    from src.crm_export import crm_exporter
+    action = args[0]
+    
+    if action == "add" and len(args) >= 3:
+        event_type = args[1]
+        url = args[2]
+        if crm_exporter.add_webhook(event_type, url):
+            await update.message.reply_text(f"✅ Webhook добавлен: {event_type} → {url}")
+        else:
+            await update.message.reply_text("❌ Ошибка добавления")
+    elif action == "remove" and len(args) >= 2:
+        try:
+            wh_id = int(args[1])
+            crm_exporter.remove_webhook(wh_id)
+            await update.message.reply_text(f"✅ Webhook #{wh_id} удалён")
+        except ValueError:
+            await update.message.reply_text("❌ Неверный ID")
+    else:
+        await update.message.reply_text("Неверный формат. Используйте /webhook для справки.")
+
+
+@admin_required
 async def feedback_insights_handler(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
     log_admin_action(update.effective_user.id, "feedback_insights")
     try:

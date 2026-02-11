@@ -147,7 +147,7 @@ class FeedbackLoop:
                             COUNT(*) AS total,
                             COUNT(outcome_type) AS with_outcome
                         FROM response_outcomes
-                        WHERE created_at >= NOW() - INTERVAL '%s days'
+                        WHERE created_at >= NOW() - %s * INTERVAL '1 day'
                     """, (days,))
                     row = cur.fetchone()
                     total_responses = row[0] if row else 0
@@ -158,7 +158,7 @@ class FeedbackLoop:
                         SELECT outcome_type, COUNT(*) AS cnt
                         FROM response_outcomes
                         WHERE outcome_type IS NOT NULL
-                          AND created_at >= NOW() - INTERVAL '%s days'
+                          AND created_at >= NOW() - %s * INTERVAL '1 day'
                         GROUP BY outcome_type
                     """, (days,))
                     by_outcome = {r[0]: r[1] for r in cur.fetchall()}
@@ -170,7 +170,7 @@ class FeedbackLoop:
                             COUNT(outcome_type) AS converted
                         FROM response_outcomes
                         WHERE funnel_stage IS NOT NULL
-                          AND created_at >= NOW() - INTERVAL '%s days'
+                          AND created_at >= NOW() - %s * INTERVAL '1 day'
                         GROUP BY funnel_stage
                     """, (days,))
                     by_stage = {r[0]: {"total": r[1], "converted": r[2]} for r in cur.fetchall()}
@@ -182,7 +182,7 @@ class FeedbackLoop:
                             COUNT(outcome_type) AS converted
                         FROM response_outcomes
                         WHERE response_variant IS NOT NULL
-                          AND created_at >= NOW() - INTERVAL '%s days'
+                          AND created_at >= NOW() - %s * INTERVAL '1 day'
                         GROUP BY response_variant
                     """, (days,))
                     by_variant = {r[0]: {"total": r[1], "converted": r[2]} for r in cur.fetchall()}
@@ -281,7 +281,7 @@ class FeedbackLoop:
                 with conn.cursor() as cur:
                     cur.execute("""
                         DELETE FROM response_outcomes
-                        WHERE created_at < NOW() - INTERVAL '%s days'
+                        WHERE created_at < NOW() - %s * INTERVAL '1 day'
                     """, (days,))
                     deleted = cur.rowcount
                     logger.info(f"Cleaned up {deleted} old response outcomes (older than {days} days)")

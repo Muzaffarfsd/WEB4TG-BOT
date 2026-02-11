@@ -8,6 +8,18 @@ The WEB4TG Studio AI Agent Bot serves as an AI-powered support agent for WEB4TG 
 - **Развёртывание**: Бот работает ТОЛЬКО на Railway, НЕ запускать на Replit
 
 ## Recent Changes (February 2026)
+- **Enterprise Features (Feb 11, session 3)**:
+  - NEW: `src/monitoring.py` — Performance monitoring, health checks, metrics DB, manager alerts (30-min cooldown)
+  - NEW: `src/rate_limiter.py` — Token bucket rate limiting (12/min), circuit breaker (5 failures → 60s open), exponential backoff
+  - NEW: `src/multilang.py` — Auto-detect language (RU/EN/UZ/KZ), localized UI strings, AI prompt suffixes
+  - NEW: `src/conversation_qa.py` — Dialog quality scoring 0-1, handoff triggers (frustration/explicit/complex/high-value/low-quality)
+  - NEW: `src/advanced_analytics.py` — Cohort retention, conversion attribution, revenue tracking, daily funnel, LTV/ARPU
+  - NEW: `src/crm_export.py` — CSV/JSON lead export, analytics export, webhooks (new_lead/payment events)
+  - INTEGRATION: Rate limiter + monitoring in message_handler, QA scoring after each AI response
+  - INTEGRATION: Multilang auto-detect + prompt suffix injection in context builder
+  - ADMIN: 6 new commands: /health, /qa, /analytics, /export_csv, /export_analytics, /webhook
+  - BACKGROUND: Health check (10 min), metrics save (15 min), rate limiter cleanup (1 hr)
+  - DB: `language` column added to `client_profiles`, new tables: bot_metrics, bot_alerts, conversation_quality, handoff_requests, revenue_events, attribution_events, crm_webhooks, crm_export_log
 - **Deep Security & Performance Audit (Feb 11, session 2)**:
   - CRITICAL: `media.py` — fixed wrong import of `execute_tool_call` (was from messages.py, now tool_handlers.py)
   - SECURITY: `broadcast.py` — added `ALLOWED_BROADCAST_COLUMNS` whitelist for SQL injection protection
@@ -28,7 +40,7 @@ The WEB4TG Studio AI Agent Bot serves as an AI-powered support agent for WEB4TG 
 - **Propensity Scoring**: All 14 tools tracked, smart social context injection
 
 ## System Architecture
-The bot is developed in Python (13,656 lines, 40 files), leveraging Telegram Bot API 9.4 for advanced features. It employs a modular handler architecture for maintainability. Key architectural decisions include a unified PostgreSQL database connection pool (1-15 connections), TTL caching for frequently accessed data, and robust analytics for funnel tracking and A/B testing.
+The bot is developed in Python (~15,500 lines, 46 files), leveraging Telegram Bot API 9.4 for advanced features. It employs a modular handler architecture for maintainability. Key architectural decisions include a unified PostgreSQL database connection pool (1-15 connections), TTL caching for frequently accessed data, and robust analytics for funnel tracking and A/B testing.
 
 ### Project Structure
 ```
@@ -64,6 +76,12 @@ src/
 ├── bot_api.py                  # Telegram Bot API helpers
 ├── cache.py                    # TTL caching
 ├── security.py                 # Admin access control
+├── monitoring.py               # Health checks, metrics, alerts
+├── rate_limiter.py             # Token bucket, circuit breaker
+├── multilang.py                # Auto-detect language (RU/EN/UZ/KZ)
+├── conversation_qa.py          # Dialog quality scoring, handoff
+├── advanced_analytics.py       # Cohorts, attribution, LTV
+├── crm_export.py               # CSV/JSON export, webhooks
 ├── utils.py                    # Utilities
 ├── handlers/
 │   ├── __init__.py             # Handler exports
@@ -113,6 +131,12 @@ src/
 - `/ab_results` — A/B testing summary with significance
 - `/ab_detail <test>` — Detailed A/B test stats
 - `/feedback` — Learning insights and conversion analytics
+- `/health` — System health: uptime, service status, error rate, AI latency, rate limiter, circuit breakers
+- `/qa` — Dialog quality scores, pending handoff requests
+- `/analytics [days]` — Advanced analytics: revenue, cohorts, attribution, daily funnel
+- `/export_csv [days]` — Export leads to CSV file
+- `/export_analytics [days]` — Export full analytics to JSON
+- `/webhook add|remove` — Manage CRM webhooks for events
 
 ## External Dependencies
 - **Telegram Bot API**: Version 9.4 (via `python-telegram-bot` 22.6) for core bot functionalities.

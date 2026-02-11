@@ -49,6 +49,12 @@ from src.handlers.admin import (
     ab_results_handler,
     ab_detail_handler,
     feedback_insights_handler,
+    health_handler,
+    qa_handler,
+    advanced_stats_handler,
+    export_csv_handler,
+    export_analytics_handler,
+    webhook_handler,
 )
 
 from src.handlers.messages import (
@@ -108,6 +114,12 @@ __all__ = [
     'ab_results_handler',
     'ab_detail_handler',
     'feedback_insights_handler',
+    'health_handler',
+    'qa_handler',
+    'advanced_stats_handler',
+    'export_csv_handler',
+    'export_analytics_handler',
+    'webhook_handler',
     'message_handler',
     'error_handler',
     'send_typing_action',

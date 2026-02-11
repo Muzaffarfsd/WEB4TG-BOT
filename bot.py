@@ -23,6 +23,8 @@ from src.handlers import (
     get_emoji_id_handler, sticker_emoji_handler,
     propensity_dashboard_handler, ab_results_handler,
     ab_detail_handler, feedback_insights_handler,
+    health_handler, qa_handler, advanced_stats_handler,
+    export_csv_handler, export_analytics_handler, webhook_handler,
 )
 
 logging.basicConfig(
@@ -95,6 +97,30 @@ async def post_init(application) -> None:
             logger.info("Daily digest scheduled at 09:00 Asia/Bishkek")
         except Exception as e:
             logger.warning(f"Failed to schedule daily digest: {e}")
+
+        from src.monitoring import periodic_health_check, periodic_metrics_save
+        application.job_queue.run_repeating(
+            periodic_health_check,
+            interval=600,
+            first=120
+        )
+        logger.info("Health check job scheduled (every 10 min)")
+
+        application.job_queue.run_repeating(
+            periodic_metrics_save,
+            interval=900,
+            first=300
+        )
+        logger.info("Metrics save job scheduled (every 15 min)")
+
+        from src.rate_limiter import rate_limiter
+        async def cleanup_rate_limiter(context):
+            rate_limiter.cleanup()
+        application.job_queue.run_repeating(
+            cleanup_rate_limiter,
+            interval=3600,
+            first=1800
+        )
     else:
         logger.warning("JobQueue not available, background jobs disabled")
 
@@ -243,6 +269,12 @@ def main() -> None:
     application.add_handler(CommandHandler("ab_results", ab_results_handler))
     application.add_handler(CommandHandler("ab_detail", ab_detail_handler))
     application.add_handler(CommandHandler("feedback", feedback_insights_handler))
+    application.add_handler(CommandHandler("health", health_handler))
+    application.add_handler(CommandHandler("qa", qa_handler))
+    application.add_handler(CommandHandler("analytics", advanced_stats_handler))
+    application.add_handler(CommandHandler("export_csv", export_csv_handler))
+    application.add_handler(CommandHandler("export_analytics", export_analytics_handler))
+    application.add_handler(CommandHandler("webhook", webhook_handler))
     
     application.add_handler(PreCheckoutQueryHandler(pre_checkout_handler))
     application.add_handler(InlineQueryHandler(inline_query_handler))
@@ -264,7 +296,7 @@ def main() -> None:
     logger.info("WEB4TG Studio AI Agent starting...")
     logger.info(f"Model: {config.model_name}")
     logger.info(f"Bot API: {get_api_version()}")
-    logger.info(f"Features: Inline, Calculator, Leads, Streaming, FAQ, Promo, Testimonials, DailyDigest, PaymentReminders")
+    logger.info(f"Features: Inline, Calculator, Leads, Streaming, FAQ, Promo, Testimonials, DailyDigest, PaymentReminders, Monitoring, RateLimiter, MultiLang, QA, AdvancedAnalytics, CRM")
     
     application.run_polling(allowed_updates=Update.ALL_TYPES)
 

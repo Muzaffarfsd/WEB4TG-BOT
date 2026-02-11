@@ -108,7 +108,7 @@ class Analytics:
                     cur.execute("""
                         SELECT event_name, COUNT(DISTINCT user_id) as users
                         FROM funnel_events
-                        WHERE created_at > NOW() - INTERVAL '%s days'
+                        WHERE created_at > NOW() - %s * INTERVAL '1 day'
                         GROUP BY event_name
                         ORDER BY users DESC
                     """, (days,))
@@ -128,13 +128,13 @@ class Analytics:
                 with conn.cursor() as cur:
                     cur.execute("""
                         SELECT COUNT(DISTINCT user_id) FROM funnel_events
-                        WHERE event_name = %s AND created_at > NOW() - INTERVAL '%s days'
+                        WHERE event_name = %s AND created_at > NOW() - %s * INTERVAL '1 day'
                     """, (from_event.value, days))
                     from_count = cur.fetchone()[0] or 0
                     
                     cur.execute("""
                         SELECT COUNT(DISTINCT user_id) FROM funnel_events
-                        WHERE event_name = %s AND created_at > NOW() - INTERVAL '%s days'
+                        WHERE event_name = %s AND created_at > NOW() - %s * INTERVAL '1 day'
                     """, (to_event.value, days))
                     to_count = cur.fetchone()[0] or 0
                     
@@ -158,7 +158,7 @@ class Analytics:
                                COUNT(*) as events,
                                COUNT(DISTINCT user_id) as users
                         FROM funnel_events
-                        WHERE created_at > NOW() - INTERVAL '%s days'
+                        WHERE created_at > NOW() - %s * INTERVAL '1 day'
                         GROUP BY DATE(created_at)
                         ORDER BY day DESC
                     """, (days,))
