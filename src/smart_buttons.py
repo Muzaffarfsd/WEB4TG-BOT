@@ -58,6 +58,20 @@ def get_context_buttons(
     detected_intents: Optional[List[str]] = None,
     propensity_score: int = 0,
 ) -> Optional[InlineKeyboardMarkup]:
+    try:
+        return _build_context_buttons(user_id, ai_response, funnel_stage, detected_intents, propensity_score)
+    except Exception as e:
+        logger.error(f"Smart buttons error for user {user_id}: {e}")
+        return None
+
+
+def _build_context_buttons(
+    user_id: int,
+    ai_response: str,
+    funnel_stage: str,
+    detected_intents: Optional[List[str]],
+    propensity_score: int,
+) -> Optional[InlineKeyboardMarkup]:
     buttons = []
 
     if detected_intents:

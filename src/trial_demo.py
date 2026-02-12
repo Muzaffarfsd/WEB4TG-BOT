@@ -39,6 +39,14 @@ DEMO_APPS = [
 
 
 def get_demo_menu() -> Tuple[str, InlineKeyboardMarkup]:
+    try:
+        return _build_demo_menu()
+    except Exception as e:
+        logger.error(f"Demo menu error: {e}")
+        return "Ошибка загрузки демо. Попробуйте позже.", InlineKeyboardMarkup([])
+
+
+def _build_demo_menu() -> Tuple[str, InlineKeyboardMarkup]:
     text = (
         "🎮 <b>Попробуйте наши демо-приложения!</b>\n\n"
         "Протестируйте работающие Mini Apps прямо сейчас. "

@@ -92,6 +92,14 @@ FEATURE_NAMES = {
 
 
 def get_comparison_view() -> Tuple[str, InlineKeyboardMarkup]:
+    try:
+        return _build_comparison_view()
+    except Exception as e:
+        logger.error(f"Package comparison error: {e}")
+        return "Ошибка загрузки пакетов. Попробуйте позже.", InlineKeyboardMarkup([])
+
+
+def _build_comparison_view() -> Tuple[str, InlineKeyboardMarkup]:
     text = "📦 <b>СРАВНЕНИЕ ПАКЕТОВ</b>\n\n"
 
     for pkg_id, pkg in PACKAGES.items():
