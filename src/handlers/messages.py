@@ -721,24 +721,6 @@ async def message_handler(update: Update, context: ContextTypes.DEFAULT_TYPE) ->
         if ai_buttons:
             keyboard_rows = [[InlineKeyboardButton(text, callback_data=cb)] for text, cb in ai_buttons]
             reply_markup = InlineKeyboardMarkup(keyboard_rows)
-        else:
-            try:
-                from src.smart_buttons import get_context_buttons, detect_response_intents
-                from src.context_builder import detect_funnel_stage as _detect_stage
-                _stage = _detect_stage(user.id, user_message, session.message_count)
-                _intents = detect_response_intents(response)
-                _p_score = 0
-                try:
-                    from src.propensity import propensity_scorer
-                    _p_data = propensity_scorer.get_score(user.id)
-                    _p_score = _p_data.get("score", 0) if isinstance(_p_data, dict) else int(_p_data or 0)
-                except Exception:
-                    pass
-                smart_kb = get_context_buttons(user.id, response, _stage, _intents, _p_score)
-                if smart_kb:
-                    reply_markup = smart_kb
-            except Exception as sb_err:
-                logger.warning(f"Smart buttons error: {sb_err}")
 
         proactive_voice_sent = False
         try:
