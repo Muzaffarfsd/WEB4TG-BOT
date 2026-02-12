@@ -424,8 +424,8 @@ async def message_handler(update: Update, context: ContextTypes.DEFAULT_TYPE) ->
     try:
         from src.propensity import propensity_scorer
         propensity_scorer.record_interaction(user.id, 'message')
-    except Exception:
-        pass
+    except Exception as e:
+        logger.debug(f"Propensity tracking skipped: {e}")
     
     if 'prefers_voice' not in context.user_data:
         try:
@@ -434,8 +434,8 @@ async def message_handler(update: Update, context: ContextTypes.DEFAULT_TYPE) ->
             if profile and profile.get("prefers_voice") == "true":
                 context.user_data['prefers_voice'] = True
                 context.user_data['voice_message_count'] = 1
-        except Exception:
-            pass
+        except Exception as e:
+            logger.debug(f"Voice preference check skipped: {e}")
 
     from src.followup import follow_up_manager
     follow_up_manager.cancel_follow_ups(user.id)
@@ -558,8 +558,8 @@ async def message_handler(update: Update, context: ContextTypes.DEFAULT_TYPE) ->
                         )
                         last_draft_len = len(partial_text)
                         draft_count += 1
-                    except Exception:
-                        pass
+                    except Exception as e:
+                        logger.debug(f"Stream chunk callback error: {e}")
 
             response = await ai_client.generate_response_stream(
                 messages=messages_for_ai,
@@ -570,8 +570,8 @@ async def message_handler(update: Update, context: ContextTypes.DEFAULT_TYPE) ->
             if draft_count > 0:
                 try:
                     await send_message_draft(context.bot, update.effective_chat.id, "")
-                except Exception:
-                    pass
+                except Exception as e:
+                    logger.debug(f"Draft clear error: {e}")
 
         if not response:
             response = "Извините, не удалось сформировать ответ. Попробуйте переформулировать вопрос."
@@ -639,14 +639,14 @@ async def message_handler(update: Update, context: ContextTypes.DEFAULT_TYPE) ->
             try:
                 from src.propensity import propensity_scorer
                 p_score = propensity_scorer.get_score(user.id)
-            except Exception:
-                pass
+            except Exception as e:
+                logger.debug(f"Propensity score retrieval skipped: {e}")
             from src.ab_testing import ab_testing
             variant = None
             try:
                 variant = ab_testing.get_variant(user.id, "response_style")
-            except Exception:
-                pass
+            except Exception as e:
+                logger.debug(f"A/B variant retrieval skipped: {e}")
             feedback_loop.log_response(
                 user_id=user.id,
                 message_text=user_message[:500],
@@ -655,8 +655,8 @@ async def message_handler(update: Update, context: ContextTypes.DEFAULT_TYPE) ->
                 funnel_stage=stage,
                 propensity_score=p_score
             )
-        except Exception:
-            pass
+        except Exception as e:
+            logger.debug(f"Feedback loop logging skipped: {e}")
 
         try:
             qa_manager.score_conversation(
@@ -666,8 +666,8 @@ async def message_handler(update: Update, context: ContextTypes.DEFAULT_TYPE) ->
                 message_count=session.message_count,
                 session_messages=len(session.messages)
             )
-        except Exception:
-            pass
+        except Exception as e:
+            logger.debug(f"QA scoring skipped: {e}")
 
         monitor.track_request("message_handler", _time.time() - _msg_start, success=True)
 

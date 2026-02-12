@@ -217,8 +217,10 @@ def _init_conversation_table():
         try:
             execute_query("ALTER TABLE client_profiles ADD COLUMN IF NOT EXISTS language VARCHAR(5)")
             execute_query("ALTER TABLE client_profiles ADD COLUMN IF NOT EXISTS prefers_voice VARCHAR(5)")
-        except Exception:
-            pass
+            execute_query("ALTER TABLE client_profiles ADD COLUMN IF NOT EXISTS business_name VARCHAR(100)")
+            execute_query("ALTER TABLE client_profiles ADD COLUMN IF NOT EXISTS city VARCHAR(50)")
+        except Exception as e:
+            logger.debug(f"Profile column migration skipped: {e}")
         logger.info("Conversation history + summaries + client_profiles tables initialized")
     except Exception as e:
         logger.warning(f"Failed to init conversation_history table: {e}")
@@ -227,7 +229,7 @@ def _init_conversation_table():
 ALLOWED_PROFILE_COLUMNS = {
     "industry", "budget_range", "timeline", "needs",
     "objections", "preferred_style", "timezone_offset", "last_response_speed",
-    "language", "prefers_voice"
+    "language", "prefers_voice", "business_name", "city"
 }
 
 

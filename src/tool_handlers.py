@@ -8,16 +8,16 @@ def _track_propensity(user_id: int, event_type: str) -> None:
     try:
         from src.propensity import propensity_scorer
         propensity_scorer.record_interaction(user_id, event_type)
-    except Exception:
-        pass
+    except Exception as e:
+        logger.debug(f"Propensity tracking skipped: {e}")
 
 
 def _track_outcome(user_id: int, outcome_type: str) -> None:
     try:
         from src.feedback_loop import feedback_loop
         feedback_loop.record_outcome(user_id, outcome_type)
-    except Exception:
-        pass
+    except Exception as e:
+        logger.debug(f"Outcome tracking skipped: {e}")
 
 
 async def execute_tool_call(tool_name: str, args: dict, user_id: int, username: str, first_name: str) -> str:
@@ -226,8 +226,8 @@ async def execute_tool_call(tool_name: str, args: dict, user_id: int, username: 
             if progress and progress.total_coins > 0:
                 discount = progress.get_discount_percent()
                 discounts.append(f"🪙 Накоплено {progress.total_coins} монет → скидка {discount}%")
-        except Exception:
-            pass
+        except Exception as e:
+            logger.debug(f"Tasks tracker check failed: {e}")
         try:
             from src.loyalty import loyalty_system as ls
             if ls.is_returning_customer(user_id):
@@ -235,15 +235,15 @@ async def execute_tool_call(tool_name: str, args: dict, user_id: int, username: 
             reviews = ls.get_user_reviews(user_id)
             if reviews:
                 discounts.append(f"⭐ Оставлено {len(reviews)} отзывов → бонусы начислены")
-        except Exception:
-            pass
+        except Exception as e:
+            logger.debug(f"Loyalty check failed: {e}")
         try:
             from src.referrals import referral_system
             referrals = referral_system.get_referrals_list(user_id)
             if referrals:
                 discounts.append(f"👥 {len(referrals)} рефералов → реферальные бонусы")
-        except Exception:
-            pass
+        except Exception as e:
+            logger.debug(f"Referral check failed: {e}")
         _track_propensity(user_id, 'tool_discount')
 
         if discounts:
@@ -292,5 +292,40 @@ async def execute_tool_call(tool_name: str, args: dict, user_id: int, username: 
         except Exception as e:
             logger.debug(f"Social links unavailable: {e}")
         return "📱 Наши соцсети:\n📸 Instagram: https://instagram.com/web4tg\n🎵 TikTok: https://tiktok.com/@web4tg\n🎬 YouTube: https://youtube.com/@WEB4TG"
+
+    elif tool_name == "search_knowledge_base":
+        query = args.get("query", "")
+        limit = args.get("limit", 3)
+        if not query:
+            return "Укажите поисковый запрос"
+        try:
+            from src.rag import get_relevant_knowledge
+            result = get_relevant_knowledge(query, limit=limit)
+            if result:
+                return result
+            return f"По запросу '{query}' ничего не найдено в базе знаний"
+        except Exception as e:
+            logger.warning(f"RAG search failed: {e}")
+            return "База знаний временно недоступна"
+
+    elif tool_name == "remember_client_info":
+        try:
+            from src.session import save_client_profile
+            profile_data = {}
+            for field in ["industry", "budget_range", "timeline", "needs", "objections", "business_name", "city"]:
+                val = args.get(field)
+                if val:
+                    profile_data[field] = str(val)[:200]
+            if not profile_data:
+                return "Нет данных для сохранения"
+            save_client_profile(user_id, **profile_data)
+            if profile_data.get("industry"):
+                lead_manager.add_tag(user_id, profile_data["industry"])
+            saved_fields = ", ".join(profile_data.keys())
+            logger.info(f"Client profile updated for {user_id}: {saved_fields}")
+            return f"Сохранено: {saved_fields}. Информация будет использована для персонализации."
+        except Exception as e:
+            logger.warning(f"Failed to save client profile: {e}")
+            return "Не удалось сохранить профиль клиента"
 
     return "Инструмент не найден"

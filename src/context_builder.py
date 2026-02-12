@@ -204,29 +204,6 @@ MOMENTUM_STRATEGIES = {
 }
 
 
-DYNAMIC_BUTTONS_BY_STAGE = {
-    "awareness": [
-        ("Хочу узнать цены", "smart_prices"),
-        ("Покажите примеры", "smart_portfolio"),
-    ],
-    "interest": [
-        ("Рассчитать мой проект", "smart_calc"),
-        ("Покажите примеры", "smart_portfolio"),
-    ],
-    "consideration": [
-        ("Посчитать окупаемость", "smart_roi"),
-        ("Какие есть скидки?", "smart_discount"),
-    ],
-    "decision": [
-        ("Хочу оставить заявку", "smart_lead"),
-        ("Давайте составим ТЗ", "smart_brief"),
-    ],
-    "action": [
-        ("Как оплатить?", "smart_payment"),
-        ("Хочу оставить заявку", "smart_lead"),
-    ]
-}
-
 
 VALID_BUTTON_ACTIONS = {
     'smart_prices', 'smart_portfolio', 'smart_faq', 'smart_calc',
@@ -680,6 +657,10 @@ def build_client_context(user_id: int, username: str = None, first_name: str = N
                 profile_parts.append(f"Потребности: {profile['needs']}")
             if profile.get("objections"):
                 profile_parts.append(f"Возражения: {profile['objections']}")
+            if profile.get("business_name"):
+                profile_parts.append(f"Бизнес: {profile['business_name']}")
+            if profile.get("city"):
+                profile_parts.append(f"Город: {profile['city']}")
             if profile_parts:
                 context_parts.append("[ДОЛГОСРОЧНЫЙ ПРОФИЛЬ]\n" + "\n".join(profile_parts))
     except Exception as e:
@@ -810,13 +791,6 @@ def build_full_context(user_id: int, user_message: str, username: str = None, fi
         return "\n".join(parts)
     return None
 
-
-def get_dynamic_buttons(user_id: int, user_message: str, message_count: int = 0, ai_response: str = "") -> list:
-    if not should_show_buttons(user_message, ai_response, message_count):
-        return []
-    stage = detect_funnel_stage(user_id, user_message, message_count)
-    buttons = DYNAMIC_BUTTONS_BY_STAGE.get(stage, DYNAMIC_BUTTONS_BY_STAGE["awareness"])
-    return buttons[:2]
 
 
 def is_returning_user(user_id: int) -> bool:

@@ -30,7 +30,8 @@ class AIClient:
         self,
         messages: List[Dict],
         thinking_level: str = "medium",
-        on_chunk=None
+        on_chunk=None,
+        max_retries: int = 2
     ) -> str:
         if thinking_level == "high":
             model = config.thinking_model_name
@@ -48,71 +49,94 @@ class AIClient:
                 temperature=config.temperature
             )
 
-        try:
-            import queue
-            chunk_queue = queue.Queue()
+        for attempt in range(max_retries + 1):
+            try:
+                import queue
+                chunk_queue = queue.Queue()
+                stream_error = [None]
 
-            def _stream_in_thread():
-                full = ""
-                try:
-                    stream = self._client.models.generate_content_stream(
-                        model=model,
-                        contents=messages,
-                        config=gen_config
-                    )
-                    for chunk in stream:
-                        if chunk.text:
-                            full += chunk.text
-                            chunk_queue.put(full)
-                except Exception:
-                    pass
-                finally:
-                    chunk_queue.put(None)
-                return full
+                def _stream_in_thread():
+                    full = ""
+                    try:
+                        stream = self._client.models.generate_content_stream(
+                            model=model,
+                            contents=messages,
+                            config=gen_config
+                        )
+                        for chunk in stream:
+                            if chunk.text:
+                                full += chunk.text
+                                chunk_queue.put(full)
+                    except Exception as e:
+                        stream_error[0] = e
+                        logger.warning(f"Stream error (attempt {attempt+1}/{max_retries+1}): {type(e).__name__}: {e}")
+                    finally:
+                        chunk_queue.put(None)
+                    return full
 
-            stream_task = asyncio.get_event_loop().run_in_executor(None, _stream_in_thread)
+                stream_task = asyncio.get_event_loop().run_in_executor(None, _stream_in_thread)
 
-            full_text = ""
-            while True:
-                try:
-                    partial = await asyncio.to_thread(chunk_queue.get, timeout=0.3)
-                    if partial is None:
-                        break
-                    full_text = partial
-                    if on_chunk:
-                        try:
-                            await on_chunk(full_text)
-                        except Exception:
-                            pass
-                except Exception:
-                    if stream_task.done():
-                        while not chunk_queue.empty():
-                            item = chunk_queue.get_nowait()
-                            if item is None:
-                                break
-                            full_text = item
-                            if on_chunk:
-                                try:
-                                    await on_chunk(full_text)
-                                except Exception:
-                                    pass
-                        break
+                full_text = ""
+                while True:
+                    try:
+                        partial = await asyncio.to_thread(chunk_queue.get, timeout=0.3)
+                        if partial is None:
+                            break
+                        full_text = partial
+                        if on_chunk:
+                            try:
+                                await on_chunk(full_text)
+                            except Exception:
+                                pass
+                    except Exception:
+                        if stream_task.done():
+                            while not chunk_queue.empty():
+                                item = chunk_queue.get_nowait()
+                                if item is None:
+                                    break
+                                full_text = item
+                                if on_chunk:
+                                    try:
+                                        await on_chunk(full_text)
+                                    except Exception:
+                                        pass
+                            break
 
-            result = await stream_task
-            if result:
-                full_text = result
+                result = await stream_task
+                if result:
+                    full_text = result
 
-            if full_text:
-                return full_text
-            return "Извините, не удалось сформировать ответ. Попробуйте переформулировать вопрос."
-        except Exception as e:
-            error_type = type(e).__name__
-            error_msg = str(e)
-            if is_rate_limit_error(e):
-                logger.warning(f"Gemini stream rate limit: {error_type}: {error_msg}")
-                return "Сейчас высокая нагрузка, попробуйте через минуту 🙏"
-            logger.error(f"Gemini stream failed: {error_type}: {error_msg}")
-            return await self.generate_response(messages, thinking_level)
+                if stream_error[0] and not full_text:
+                    if is_rate_limit_error(stream_error[0]) and attempt < max_retries:
+                        delay = 0.5 * (2 ** attempt)
+                        logger.info(f"Stream rate limited, retrying in {delay}s (attempt {attempt+1}/{max_retries+1})")
+                        await asyncio.sleep(delay)
+                        continue
+                    elif attempt < max_retries:
+                        delay = 0.5 * (2 ** attempt)
+                        logger.info(f"Stream failed, retrying in {delay}s (attempt {attempt+1}/{max_retries+1})")
+                        await asyncio.sleep(delay)
+                        continue
+
+                if full_text:
+                    return full_text
+
+            except Exception as e:
+                error_type = type(e).__name__
+                error_msg = str(e)
+                if is_rate_limit_error(e):
+                    if attempt < max_retries:
+                        delay = 0.5 * (2 ** attempt)
+                        logger.warning(f"Gemini stream rate limit (attempt {attempt+1}), retrying in {delay}s")
+                        await asyncio.sleep(delay)
+                        continue
+                    logger.warning(f"Gemini stream rate limit exhausted: {error_type}: {error_msg}")
+                    return "Сейчас высокая нагрузка, попробуйте через минуту 🙏"
+                logger.error(f"Gemini stream failed: {error_type}: {error_msg}")
+                return await self.generate_response(messages, thinking_level)
+
+        logger.warning("Stream retries exhausted, falling back to regular response")
+        return await self.generate_response(messages, thinking_level)
 
     async def generate_response(
         self,
@@ -509,6 +533,61 @@ TOOL_DECLARATIONS = [
                 "include_tasks": {
                     "type": "boolean",
                     "description": "Показать задания за монеты (подписка = монеты)"
+                }
+            }
+        }
+    },
+    {
+        "name": "search_knowledge_base",
+        "description": "Поиск в базе знаний WEB4TG Studio. Вызывай когда нужно найти точную информацию о технологиях, процессах, гарантиях, условиях работы или деталях, которых нет в прайсе. Полезно для ответов на нестандартные вопросы.",
+        "parameters": {
+            "type": "object",
+            "properties": {
+                "query": {
+                    "type": "string",
+                    "description": "Поисковый запрос — что именно нужно найти в базе знаний"
+                },
+                "limit": {
+                    "type": "integer",
+                    "description": "Количество результатов (по умолчанию 3)"
+                }
+            },
+            "required": ["query"]
+        }
+    },
+    {
+        "name": "remember_client_info",
+        "description": "Сохранить важную информацию о клиенте для персонализации будущих ответов. Вызывай когда клиент рассказывает о своём бизнесе, бюджете, сроках, потребностях или возражениях. Это позволяет помнить контекст между сессиями.",
+        "parameters": {
+            "type": "object",
+            "properties": {
+                "industry": {
+                    "type": "string",
+                    "description": "Отрасль бизнеса: shop, restaurant, beauty, fitness, medical, education, delivery, services, other"
+                },
+                "budget_range": {
+                    "type": "string",
+                    "description": "Примерный бюджет клиента, например '150-200к' или 'до 300к'"
+                },
+                "timeline": {
+                    "type": "string",
+                    "description": "Желаемые сроки, например 'срочно', '2 недели', 'к лету'"
+                },
+                "needs": {
+                    "type": "string",
+                    "description": "Ключевые потребности клиента (что хочет реализовать)"
+                },
+                "objections": {
+                    "type": "string",
+                    "description": "Основные возражения или сомнения клиента"
+                },
+                "business_name": {
+                    "type": "string",
+                    "description": "Название бизнеса клиента, если озвучено"
+                },
+                "city": {
+                    "type": "string",
+                    "description": "Город клиента, если озвучен"
                 }
             }
         }

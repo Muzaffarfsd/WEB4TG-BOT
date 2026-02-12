@@ -15,7 +15,7 @@ The bot is developed in Python, utilizing Telegram Bot API 9.4. It features a mo
 - Button styles (constructive/green, destructive/red) are applied through `styled_button_api_kwargs()`.
 
 **Technical Implementations & Feature Specifications:**
-- **AI Integration**: Powered by Gemini 3 Pro Preview for intelligent responses, real-time streaming, and function calling (14 tools).
+- **AI Integration**: Powered by Gemini 3 Pro Preview for intelligent responses, real-time streaming with retry, and function calling (16 tools including RAG search and client memory).
 - **Interactive Tools**: Includes a cost calculator, portfolio examples, and an extensive FAQ system.
 - **Lead Management**: Automates lead capture, manager notifications, AI-based auto-tagging, and priority setting.
 - **Gamification & Loyalty**: Implements a system for earning coins through tasks, a tiered referral program, and a loyalty program with discounts.
