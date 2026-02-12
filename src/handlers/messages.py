@@ -2,6 +2,7 @@ import asyncio
 import logging
 from telegram import Update, InlineKeyboardMarkup, InlineKeyboardButton
 from telegram.ext import ContextTypes
+from telegram.constants import ChatAction
 
 from src.session import session_manager
 from src.ai_client import ai_client
@@ -426,6 +427,16 @@ async def message_handler(update: Update, context: ContextTypes.DEFAULT_TYPE) ->
     except Exception:
         pass
     
+    if 'prefers_voice' not in context.user_data:
+        try:
+            from src.session import get_client_profile
+            profile = get_client_profile(user.id)
+            if profile and profile.get("prefers_voice") == "true":
+                context.user_data['prefers_voice'] = True
+                context.user_data['voice_message_count'] = 1
+        except Exception:
+            pass
+
     from src.followup import follow_up_manager
     follow_up_manager.cancel_follow_ups(user.id)
     follow_up_manager.schedule_follow_up(user.id)
@@ -579,17 +590,40 @@ async def message_handler(update: Update, context: ContextTypes.DEFAULT_TYPE) ->
             keyboard_rows = [[InlineKeyboardButton(text, callback_data=cb)] for text, cb in dynamic_btns[:3]]
             reply_markup = InlineKeyboardMarkup(keyboard_rows)
 
-        if len(response) > 4096:
-            chunks = [response[i:i+4096] for i in range(0, len(response), 4096)]
-            for i, chunk in enumerate(chunks):
-                if i == len(chunks) - 1:
-                    await update.message.reply_text(chunk, reply_markup=reply_markup)
-                else:
-                    await update.message.reply_text(chunk)
-        else:
-            await update.message.reply_text(response, reply_markup=reply_markup)
+        proactive_voice_sent = False
+        try:
+            from src.handlers.media import should_send_proactive_voice, generate_voice_response, _make_text_summary
+            if should_send_proactive_voice(user.id, user_message, context.user_data):
+                try:
+                    await update.effective_chat.send_action(ChatAction.RECORD_VOICE)
+                    voice_audio = await generate_voice_response(response)
+                    await update.message.reply_voice(voice=voice_audio)
+                    proactive_voice_sent = True
+                    lead_manager.log_event("proactive_voice_sent", user.id, {
+                        "trigger": "sales_moment",
+                        "message_preview": user_message[:100]
+                    })
+                    text_summary = _make_text_summary(response)
+                    summary_msg = f"👆 Голосовое сообщение\n\n{text_summary}"
+                    await update.message.reply_text(summary_msg, reply_markup=reply_markup)
+                except Exception as voice_err:
+                    logger.warning(f"Proactive voice failed for user {user.id}: {voice_err}")
+                    proactive_voice_sent = False
+        except ImportError:
+            pass
 
-        logger.info(f"User {user.id}: processed message #{session.message_count} (stage buttons attached)")
+        if not proactive_voice_sent:
+            if len(response) > 4096:
+                chunks = [response[i:i+4096] for i in range(0, len(response), 4096)]
+                for i, chunk in enumerate(chunks):
+                    if i == len(chunks) - 1:
+                        await update.message.reply_text(chunk, reply_markup=reply_markup)
+                    else:
+                        await update.message.reply_text(chunk)
+            else:
+                await update.message.reply_text(response, reply_markup=reply_markup)
+
+        logger.info(f"User {user.id}: processed message #{session.message_count} (voice={'proactive' if proactive_voice_sent else 'text'})")
 
         auto_tag_lead(user.id, user_message)
         auto_score_lead(user.id, user_message)

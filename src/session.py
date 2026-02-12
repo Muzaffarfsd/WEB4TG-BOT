@@ -209,12 +209,14 @@ def _init_conversation_table():
                 timezone_offset INTEGER,
                 last_response_speed REAL,
                 language VARCHAR(5),
+                prefers_voice VARCHAR(5),
                 updated_at TIMESTAMP DEFAULT NOW(),
                 created_at TIMESTAMP DEFAULT NOW()
             )
         """)
         try:
             execute_query("ALTER TABLE client_profiles ADD COLUMN IF NOT EXISTS language VARCHAR(5)")
+            execute_query("ALTER TABLE client_profiles ADD COLUMN IF NOT EXISTS prefers_voice VARCHAR(5)")
         except Exception:
             pass
         logger.info("Conversation history + summaries + client_profiles tables initialized")
@@ -225,7 +227,7 @@ def _init_conversation_table():
 ALLOWED_PROFILE_COLUMNS = {
     "industry", "budget_range", "timeline", "needs",
     "objections", "preferred_style", "timezone_offset", "last_response_speed",
-    "language"
+    "language", "prefers_voice"
 }
 
 

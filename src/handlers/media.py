@@ -86,18 +86,23 @@ VOICE_CONTEXT_INSTRUCTION = """
 
 ГЛАВНОЕ — ты живой консультант Алекс, а не текстовый бот. Вот как ты говоришь:
 
+ДЛИНА ОТВЕТА (КРИТИЧЕСКИ ВАЖНО):
+- СТРОГО 300-500 символов (20-30 секунд). Это МАКСИМУМ.
+- Одна ключевая мысль на ответ. Не пытайся уместить всё.
+- Если тема сложная — ответь на главное и скажи "Могу подробнее рассказать, если интересно".
+- Лучше короткий живой ответ, чем длинная лекция.
+
 СТИЛЬ РЕЧИ:
-- Максимум 500-700 символов (30-40 секунд). Коротко и по делу.
 - Никакого markdown, emoji, списков с тире или звёздочками.
 - Говори как в жизни: "Ну смотрите, тут вот какая история..." а не "Вот перечень преимуществ:"
 - Перечисляй через речь: "во-первых... во-вторых..." или "и каталог, и корзина, и оплата"
 - Числа — словами: "сто пятьдесят тысяч", "около двухсот тысяч"
 - Аббревиатуры раскрывай: "возврат инвестиций" вместо "ROI"
 
-ПРИЁМЫ ЖИВОГО ЧЕЛОВЕКА (используй 2-3 за ответ):
+ПРИЁМЫ ЖИВОГО ЧЕЛОВЕКА (используй 1-2 за ответ):
 - Думай вслух: "Хм, давайте прикинем...", "Вот что я бы предложил..."
-- Переходы: "Кстати,", "И знаете что —", "А вот тут самое интересное"
-- Эмпатия: "Да, понимаю,", "Логичный вопрос,", "Хороший вопрос, кстати"
+- Переходы: "Кстати,", "И знаете что —"
+- Эмпатия: "Да, понимаю,", "Логичный вопрос,"
 - Паузы через "..." и " — " для естественного дыхания
 - Чередуй длинные и короткие фразы: "Магазин за сто пятьдесят. Семь-десять дней. Готово."
 
@@ -106,6 +111,7 @@ VOICE_CONTEXT_INSTRUCTION = """
 - Списков (1. 2. 3.) — это текстовый формат, не устный
 - Формальных оборотов: "В рамках нашего сотрудничества..."
 - Повторения одних и тех же слов-филлеров
+- Длинных монологов больше 500 символов
 """
 
 
@@ -233,32 +239,157 @@ async def generate_voice_response(text: str, use_cache: bool = False, voice_prof
 
 
 async def _transcribe_voice(voice_bytes: bytes) -> str:
+    result = await _transcribe_voice_with_emotion(voice_bytes)
+    return result.get("text", "")
+
+
+async def _transcribe_voice_with_emotion(voice_bytes: bytes) -> dict:
     from google import genai
     from google.genai import types
+    import json as _json
 
     client = genai.Client(api_key=config.gemini_api_key)
 
     audio_part = types.Part.from_bytes(data=bytes(voice_bytes), mime_type="audio/ogg")
     text_part = types.Part(text=(
-        "Расшифруй это голосовое сообщение дословно на языке оригинала. "
-        "Верни ТОЛЬКО текст того, что сказал человек. "
-        "Без комментариев, без пояснений, без кавычек. "
-        "Если не можешь разобрать — верни пустую строку."
+        "Проанализируй это голосовое сообщение. Верни JSON:\n"
+        '{"text": "дословная расшифровка на языке оригинала", '
+        '"emotion": "одно слово: confident/hesitant/frustrated/excited/neutral/friendly/rushed/calm", '
+        '"energy": "low/medium/high"}\n'
+        "Если не можешь разобрать текст — верни пустой text.\n"
+        "Верни ТОЛЬКО JSON, без комментариев и markdown."
     ))
 
-    response = await asyncio.to_thread(
-        client.models.generate_content,
-        model=config.model_name,
-        contents=[audio_part, text_part],
-        config=types.GenerateContentConfig(
-            max_output_tokens=500,
-            temperature=0.1
+    try:
+        response = await asyncio.to_thread(
+            client.models.generate_content,
+            model=config.model_name,
+            contents=[audio_part, text_part],
+            config=types.GenerateContentConfig(
+                max_output_tokens=600,
+                temperature=0.1
+            )
         )
-    )
 
-    if response.text:
-        return response.text.strip()
-    return ""
+        if response.text:
+            raw = response.text.strip()
+            if raw.startswith("```"):
+                raw = raw.split("\n", 1)[-1].rsplit("```", 1)[0].strip()
+            try:
+                parsed = _json.loads(raw)
+                return {
+                    "text": parsed.get("text", "").strip(),
+                    "emotion": parsed.get("emotion", "neutral"),
+                    "energy": parsed.get("energy", "medium")
+                }
+            except _json.JSONDecodeError:
+                json_match = re.search(r'\{[^}]+\}', raw)
+                if json_match:
+                    try:
+                        parsed = _json.loads(json_match.group())
+                        return {
+                            "text": parsed.get("text", "").strip(),
+                            "emotion": parsed.get("emotion", "neutral"),
+                            "energy": parsed.get("energy", "medium")
+                        }
+                    except _json.JSONDecodeError:
+                        pass
+                clean_text = raw.strip().strip('"').strip("'")
+                if len(clean_text) > 5 and not clean_text.startswith("{"):
+                    return {"text": clean_text, "emotion": "neutral", "energy": "medium"}
+                return {"text": "", "emotion": "neutral", "energy": "medium"}
+    except Exception as e:
+        logger.error(f"Voice transcription error: {e}")
+
+    return {"text": "", "emotion": "neutral", "energy": "medium"}
+
+
+EMOTION_TO_VOICE_STYLE = {
+    "confident": "Клиент звучит уверенно — говори на его уровне, факты и конкретика.",
+    "hesitant": "Клиент звучит нерешительно — будь мягче, убирай давление, предлагай маленькие шаги.",
+    "frustrated": "Клиент звучит раздражённо — прояви эмпатию, признай проблему, предложи решение.",
+    "excited": "Клиент звучит воодушевлённо — поддержи энтузиазм, усиль эмоцию, двигай к действию.",
+    "neutral": "",
+    "friendly": "Клиент звучит дружелюбно — зеркаль тёплый тон, будь открытым.",
+    "rushed": "Клиент торопится — будь максимально кратким, только суть.",
+    "calm": "Клиент спокоен — отвечай размеренно, без суеты."
+}
+
+
+VOICE_SALES_TRIGGERS = {
+    "price_discussion": ["цена", "стоимость", "сколько стоит", "бюджет", "дорого", "дешевле", "скидк"],
+    "objection": ["не уверен", "подумаю", "дорого", "потом", "не знаю", "сомневаюсь", "может быть"],
+    "decision": ["готов", "хочу заказать", "давайте", "начинаем", "оплата", "договор", "когда начнём"],
+    "closing": ["оплатить", "реквизит", "счёт", "предоплат", "договор подпис"],
+}
+
+
+PROACTIVE_VOICE_COOLDOWN = 600
+PROACTIVE_VOICE_MAX_PER_SESSION = 3
+
+
+def should_send_proactive_voice(user_id: int, message_text: str, context_user_data: dict) -> bool:
+    import time as _time
+
+    if not config.elevenlabs_api_key:
+        return False
+    if not context_user_data.get('prefers_voice'):
+        return False
+    if context_user_data.get('voice_message_count', 0) < 1:
+        return False
+
+    proactive_count = context_user_data.get('proactive_voice_count', 0)
+    if proactive_count >= PROACTIVE_VOICE_MAX_PER_SESSION:
+        return False
+
+    last_voice_ts = context_user_data.get('last_proactive_voice_ts', 0)
+    if _time.time() - last_voice_ts < PROACTIVE_VOICE_COOLDOWN:
+        return False
+
+    triggered = False
+    lower = message_text.lower()
+    for trigger_words in VOICE_SALES_TRIGGERS.values():
+        if any(w in lower for w in trigger_words):
+            triggered = True
+            break
+
+    if not triggered:
+        try:
+            from src.context_builder import detect_funnel_stage
+            stage = detect_funnel_stage(user_id, message_text, 0)
+            if stage in ("decision", "action"):
+                triggered = True
+        except Exception:
+            pass
+
+    if not triggered:
+        try:
+            from src.propensity import propensity_scorer
+            score = propensity_scorer.get_score(user_id)
+            if score and score >= 60:
+                triggered = True
+        except Exception:
+            pass
+
+    if triggered:
+        context_user_data['last_proactive_voice_ts'] = _time.time()
+        context_user_data['proactive_voice_count'] = proactive_count + 1
+
+    return triggered
+
+
+def _make_text_summary(full_text: str, max_len: int = 300) -> str:
+    clean = full_text.replace("**", "").replace("*", "").replace("#", "").replace("`", "")
+    clean = re.sub(r'[\U0001F600-\U0001F64F\U0001F300-\U0001F5FF\U0001F680-\U0001F6FF\U0001F1E0-\U0001F1FF\U00002702-\U000027B0\U000024C2-\U0001F251\U0001f926-\U0001f937\U00010000-\U0010ffff\u2600-\u2B55\u200d\u23cf\u23e9\u231a\ufe0f\u3030\u2066\u2069]+', '', clean)
+    if len(clean) <= max_len:
+        return clean.strip()
+    cut = clean[:max_len].rfind('.')
+    if cut > max_len * 0.5:
+        return clean[:cut + 1].strip()
+    cut = clean[:max_len].rfind(' ')
+    if cut > 0:
+        return clean[:cut].strip() + "..."
+    return clean[:max_len].strip() + "..."
 
 
 async def voice_handler(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
@@ -273,7 +404,10 @@ async def voice_handler(update: Update, context: ContextTypes.DEFAULT_TYPE) -> N
         file = await context.bot.get_file(voice.file_id)
         voice_bytes = await file.download_as_bytearray()
 
-        transcription = await _transcribe_voice(voice_bytes)
+        voice_analysis = await _transcribe_voice_with_emotion(voice_bytes)
+        transcription = voice_analysis.get("text", "")
+        client_emotion = voice_analysis.get("emotion", "neutral")
+        client_energy = voice_analysis.get("energy", "medium")
 
         if not transcription:
             typing_task.cancel()
@@ -282,7 +416,7 @@ async def voice_handler(update: Update, context: ContextTypes.DEFAULT_TYPE) -> N
             )
             return
 
-        logger.info(f"User {user.id} voice transcribed ({len(transcription)} chars): {transcription[:100]}...")
+        logger.info(f"User {user.id} voice transcribed ({len(transcription)} chars, emotion={client_emotion}, energy={client_energy}): {transcription[:100]}...")
 
         session = session_manager.get_session(
             user_id=user.id,
@@ -294,12 +428,20 @@ async def voice_handler(update: Update, context: ContextTypes.DEFAULT_TYPE) -> N
         lead_manager.save_message(user.id, "user", f"[Голосовое] {transcription}")
         lead_manager.log_event("voice_message", user.id, {
             "duration": voice.duration if voice.duration else 0,
-            "length": len(transcription)
+            "length": len(transcription),
+            "emotion": client_emotion,
+            "energy": client_energy
         })
         lead_manager.update_activity(user.id)
         
         context.user_data['prefers_voice'] = True
         context.user_data['voice_message_count'] = context.user_data.get('voice_message_count', 0) + 1
+
+        try:
+            from src.session import save_client_profile
+            save_client_profile(user.id, prefers_voice="true")
+        except Exception:
+            pass
 
         from src.followup import follow_up_manager
         follow_up_manager.cancel_follow_ups(user.id)
@@ -307,6 +449,14 @@ async def voice_handler(update: Update, context: ContextTypes.DEFAULT_TYPE) -> N
 
         from src.context_builder import build_full_context, get_dynamic_buttons
         client_context = build_full_context(user.id, transcription, user.username, user.first_name)
+
+        emotion_hint = EMOTION_TO_VOICE_STYLE.get(client_emotion, "")
+        if emotion_hint:
+            emotion_context = f"\n[ЭМОЦИЯ КЛИЕНТА] {emotion_hint} Энергия: {client_energy}."
+            if client_context:
+                client_context += emotion_context
+            else:
+                client_context = emotion_context
 
         from src.ai_client import ai_client
 
@@ -463,7 +613,14 @@ async def voice_handler(update: Update, context: ContextTypes.DEFAULT_TYPE) -> N
             keyboard_rows = [[InlineKeyboardButton(text, callback_data=cb)] for text, cb in dynamic_btns[:3]]
             reply_markup = InlineKeyboardMarkup(keyboard_rows)
 
-        if not voice_sent:
+        text_summary = _make_text_summary(response_text)
+        if voice_sent:
+            summary_with_note = f"👆 Голосовое сообщение\n\n{text_summary}"
+            if reply_markup:
+                await update.message.reply_text(summary_with_note, reply_markup=reply_markup)
+            else:
+                await update.message.reply_text(summary_with_note)
+        else:
             if len(response_text) > 4096:
                 chunks = [response_text[i:i+4096] for i in range(0, len(response_text), 4096)]
                 for i, chunk in enumerate(chunks):
@@ -473,13 +630,8 @@ async def voice_handler(update: Update, context: ContextTypes.DEFAULT_TYPE) -> N
                         await update.message.reply_text(chunk)
             else:
                 await update.message.reply_text(response_text, reply_markup=reply_markup)
-        elif reply_markup:
-            await update.message.reply_text(
-                "Ответил голосовым. Если нужны детали:",
-                reply_markup=reply_markup
-            )
 
-        logger.info(f"User {user.id}: voice processed (agentic, voice_reply={'yes' if voice_sent else 'no'}, voice_msg#{context.user_data.get('voice_message_count', 0)})")
+        logger.info(f"User {user.id}: voice processed (emotion={client_emotion}, voice_reply={'yes' if voice_sent else 'no'}, voice_msg#{context.user_data.get('voice_message_count', 0)})")
 
         _run_voice_post_processing(user.id, transcription, session)
 

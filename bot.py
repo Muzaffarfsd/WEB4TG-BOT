@@ -160,6 +160,35 @@ async def process_payment_reminders(context: ContextTypes.DEFAULT_TYPE) -> None:
         logger.error(f"Payment reminder processing error: {e}")
 
 
+def _user_prefers_voice(user_id: int) -> bool:
+    try:
+        from src.session import get_client_profile
+        profile = get_client_profile(user_id)
+        if profile and profile.get("prefers_voice") == "true":
+            return True
+    except Exception:
+        pass
+    return False
+
+
+async def _send_voice_follow_up(bot, user_id: int, message: str) -> bool:
+    try:
+        from src.config import config
+        if not config.elevenlabs_api_key:
+            return False
+        from src.handlers.media import generate_voice_response, _make_text_summary
+        from telegram.constants import ChatAction
+        await bot.send_chat_action(chat_id=user_id, action=ChatAction.RECORD_VOICE)
+        voice_audio = await generate_voice_response(message)
+        await bot.send_voice(chat_id=user_id, voice=voice_audio)
+        text_summary = _make_text_summary(message)
+        await bot.send_message(chat_id=user_id, text=f"👆 Голосовое сообщение\n\n{text_summary}")
+        return True
+    except Exception as e:
+        logger.warning(f"Voice follow-up failed for {user_id}: {e}")
+        return False
+
+
 async def process_follow_ups(context: ContextTypes.DEFAULT_TYPE) -> None:
     from src.followup import follow_up_manager
 
@@ -170,18 +199,31 @@ async def process_follow_ups(context: ContextTypes.DEFAULT_TYPE) -> None:
                 message = await follow_up_manager.generate_follow_up_message(
                     fu['user_id'], fu['follow_up_number']
                 )
-                await context.bot.send_message(
-                    chat_id=fu['user_id'],
-                    text=message
-                )
+
+                voice_sent = False
+                if _user_prefers_voice(fu['user_id']):
+                    voice_sent = await _send_voice_follow_up(
+                        context.bot, fu['user_id'], message
+                    )
+
+                if not voice_sent:
+                    await context.bot.send_message(
+                        chat_id=fu['user_id'],
+                        text=message
+                    )
+
                 follow_up_manager.mark_sent(fu['id'], message)
 
                 from src.leads import lead_manager
                 lead_manager.save_message(fu['user_id'], "assistant", message)
+                if voice_sent:
+                    lead_manager.log_event("voice_followup_sent", fu['user_id'], {
+                        "followup_number": fu['follow_up_number']
+                    })
 
                 follow_up_manager.schedule_follow_up(fu['user_id'])
 
-                logger.info(f"Sent follow-up #{fu['follow_up_number']} to user {fu['user_id']}")
+                logger.info(f"Sent follow-up #{fu['follow_up_number']} to user {fu['user_id']} (voice={voice_sent})")
             except Forbidden:
                 follow_up_manager.cancel_for_blocked_user(fu['user_id'])
                 from src.broadcast import broadcast_manager
