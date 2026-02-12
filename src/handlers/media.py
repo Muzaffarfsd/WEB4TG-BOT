@@ -243,14 +243,106 @@ async def _transcribe_voice(voice_bytes: bytes) -> str:
     return result.get("text", "")
 
 
+async def _convert_ogg_to_wav(ogg_bytes: bytes) -> bytes:
+    import tempfile
+    import os
+    from io import BytesIO
+
+    try:
+        from pydub import AudioSegment
+        audio = AudioSegment.from_ogg(BytesIO(ogg_bytes))
+        audio = audio.set_frame_rate(16000).set_channels(1)
+        wav_buffer = BytesIO()
+        audio.export(wav_buffer, format="wav")
+        wav_data = wav_buffer.getvalue()
+        logger.info(f"Converted OGG ({len(ogg_bytes)} bytes) to WAV ({len(wav_data)} bytes) via pydub")
+        return wav_data
+    except Exception as e:
+        logger.warning(f"pydub conversion failed: {e}")
+
+    ogg_path = None
+    wav_path = None
+    try:
+        import subprocess
+        with tempfile.NamedTemporaryFile(suffix='.ogg', delete=False) as ogg_file:
+            ogg_file.write(ogg_bytes)
+            ogg_path = ogg_file.name
+        wav_path = ogg_path.replace('.ogg', '.wav')
+        result = subprocess.run(
+            ['ffmpeg', '-y', '-i', ogg_path, '-ar', '16000', '-ac', '1', '-f', 'wav', wav_path],
+            capture_output=True, timeout=15
+        )
+        if result.returncode == 0:
+            with open(wav_path, 'rb') as f:
+                wav_data = f.read()
+            logger.info(f"Converted OGG ({len(ogg_bytes)} bytes) to WAV ({len(wav_data)} bytes) via ffmpeg")
+            return wav_data
+        else:
+            logger.warning(f"ffmpeg conversion failed: {result.stderr[:200]}")
+    except FileNotFoundError:
+        logger.warning("ffmpeg not found")
+    except Exception as e:
+        logger.warning(f"ffmpeg conversion error: {e}")
+    finally:
+        for p in [ogg_path, wav_path]:
+            if p:
+                try:
+                    os.unlink(p)
+                except Exception:
+                    pass
+    return b""
+
+
+def _parse_emotion_json(raw: str) -> dict:
+    import json as _json
+
+    if raw.startswith("```"):
+        raw = raw.split("\n", 1)[-1].rsplit("```", 1)[0].strip()
+
+    try:
+        parsed = _json.loads(raw)
+        return {
+            "text": parsed.get("text", "").strip(),
+            "emotion": parsed.get("emotion", "neutral"),
+            "energy": parsed.get("energy", "medium")
+        }
+    except _json.JSONDecodeError:
+        pass
+
+    json_match = re.search(r'\{[^}]*"text"\s*:\s*"[^"]*"[^}]*\}', raw)
+    if not json_match:
+        json_match = re.search(r'\{[^}]+\}', raw)
+    if json_match:
+        try:
+            parsed = _json.loads(json_match.group())
+            return {
+                "text": parsed.get("text", "").strip(),
+                "emotion": parsed.get("emotion", "neutral"),
+                "energy": parsed.get("energy", "medium")
+            }
+        except _json.JSONDecodeError:
+            pass
+
+    clean_text = raw.strip().strip('"').strip("'")
+    if len(clean_text) > 5 and not clean_text.startswith("{"):
+        return {"text": clean_text, "emotion": "neutral", "energy": "medium"}
+    return {"text": "", "emotion": "neutral", "energy": "medium"}
+
+
 async def _transcribe_voice_with_emotion(voice_bytes: bytes) -> dict:
     from google import genai
     from google.genai import types
-    import json as _json
 
     client = genai.Client(api_key=config.gemini_api_key)
 
-    audio_part = types.Part.from_bytes(data=bytes(voice_bytes), mime_type="audio/ogg")
+    wav_bytes = await _convert_ogg_to_wav(voice_bytes)
+    if wav_bytes:
+        audio_part = types.Part.from_bytes(data=wav_bytes, mime_type="audio/wav")
+        logger.info("Using WAV format for transcription")
+    else:
+        audio_part = types.Part.from_bytes(data=bytes(voice_bytes), mime_type="audio/ogg")
+        logger.info("Using raw OGG format for transcription")
+
     text_part = types.Part(text=(
         "Проанализируй это голосовое сообщение. Верни JSON:\n"
         '{"text": "дословная расшифровка на языке оригинала", '
@@ -260,46 +352,34 @@ async def _transcribe_voice_with_emotion(voice_bytes: bytes) -> dict:
         "Верни ТОЛЬКО JSON, без комментариев и markdown."
     ))
 
-    try:
-        response = await asyncio.to_thread(
-            client.models.generate_content,
-            model=config.model_name,
-            contents=[audio_part, text_part],
-            config=types.GenerateContentConfig(
-                max_output_tokens=600,
-                temperature=0.1
+    for attempt in range(2):
+        try:
+            response = await asyncio.to_thread(
+                client.models.generate_content,
+                model=config.model_name,
+                contents=[audio_part, text_part],
+                config=types.GenerateContentConfig(
+                    max_output_tokens=600,
+                    temperature=0.1
+                )
             )
-        )
 
-        if response.text:
-            raw = response.text.strip()
-            if raw.startswith("```"):
-                raw = raw.split("\n", 1)[-1].rsplit("```", 1)[0].strip()
-            try:
-                parsed = _json.loads(raw)
-                return {
-                    "text": parsed.get("text", "").strip(),
-                    "emotion": parsed.get("emotion", "neutral"),
-                    "energy": parsed.get("energy", "medium")
-                }
-            except _json.JSONDecodeError:
-                json_match = re.search(r'\{[^}]+\}', raw)
-                if json_match:
-                    try:
-                        parsed = _json.loads(json_match.group())
-                        return {
-                            "text": parsed.get("text", "").strip(),
-                            "emotion": parsed.get("emotion", "neutral"),
-                            "energy": parsed.get("energy", "medium")
-                        }
-                    except _json.JSONDecodeError:
-                        pass
-                clean_text = raw.strip().strip('"').strip("'")
-                if len(clean_text) > 5 and not clean_text.startswith("{"):
-                    return {"text": clean_text, "emotion": "neutral", "energy": "medium"}
-                return {"text": "", "emotion": "neutral", "energy": "medium"}
-    except Exception as e:
-        logger.error(f"Voice transcription error: {e}")
+            logger.info(f"Transcription attempt {attempt+1}: response.text={response.text[:200] if response.text else 'None'}")
+
+            if response.text:
+                result = _parse_emotion_json(response.text.strip())
+                if result["text"]:
+                    return result
+                logger.warning(f"Transcription attempt {attempt+1}: parsed text is empty, raw={response.text[:200]}")
+            else:
+                logger.warning(f"Transcription attempt {attempt+1}: response.text is None, candidates={getattr(response, 'candidates', 'N/A')}")
+
+            if attempt == 0 and not wav_bytes:
+                audio_part = types.Part.from_bytes(data=bytes(voice_bytes), mime_type="audio/mpeg")
+                logger.info("Retrying with audio/mpeg mime type")
+
+        except Exception as e:
+            logger.error(f"Voice transcription error (attempt {attempt+1}): {e}", exc_info=True)
 
     return {"text": "", "emotion": "neutral", "energy": "medium"}
 
