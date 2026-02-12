@@ -1,7 +1,14 @@
-"""PDF Commercial Proposal (KP) Generator — Ultra Premium 2026.
+"""PDF Commercial Proposal (KP) Generator — World-Class 2026 Design.
 
-Uses ReportLab for world-class PDF design with gradients, shadows,
-rounded cards, modern typography, and Gemini AI personalization.
+Multi-page premium layout inspired by Behance/Dribbble 2025-2026 trends:
+- Full cover page with bold typography
+- Generous white space (25mm+ margins)
+- Future Dusk color palette (deep indigo/navy)
+- Max 3 accent colors
+- Feature cards in 2-column grid
+- Dramatic price presentation
+- Clean horizontal timeline
+- ReportLab canvas with gradients, shadows, rounded cards
 """
 
 import io
@@ -9,12 +16,12 @@ import os
 import logging
 import time
 from datetime import datetime
-from typing import Dict, Optional, List, Tuple
+from typing import Dict, Optional
 
 from reportlab.pdfgen import canvas
 from reportlab.lib.pagesizes import A4
-from reportlab.lib.colors import HexColor, Color, white, black
-from reportlab.lib.units import mm, cm
+from reportlab.lib.colors import HexColor, Color, white
+from reportlab.lib.units import mm
 from reportlab.pdfbase import pdfmetrics
 from reportlab.pdfbase.ttfonts import TTFont
 
@@ -31,30 +38,36 @@ try:
 except Exception:
     FONT = "Helvetica"
     FONTB = "Helvetica-Bold"
-    logger.warning("DejaVu fonts not available")
+    logger.warning("DejaVu fonts not available, using Helvetica")
 
-C_DARK = HexColor("#0f172a")
-C_PRIMARY = HexColor("#3b82f6")
-C_PRIMARY_DEEP = HexColor("#1e40af")
-C_ACCENT = HexColor("#6366f1")
-C_SUCCESS = HexColor("#10b981")
-C_SUCCESS_LIGHT = HexColor("#d1fae5")
-C_WARN = HexColor("#f59e0b")
-C_RED = HexColor("#ef4444")
-C_RED_LIGHT = HexColor("#fef2f2")
+C_BG = HexColor("#fafbfd")
+C_DARK = HexColor("#0c1222")
+C_NAVY = HexColor("#1a1f3a")
+C_INDIGO = HexColor("#4f46e5")
+C_INDIGO_LIGHT = HexColor("#818cf8")
+C_INDIGO_PALE = HexColor("#eef2ff")
+C_EMERALD = HexColor("#059669")
+C_EMERALD_PALE = HexColor("#ecfdf5")
+C_AMBER = HexColor("#d97706")
+C_AMBER_PALE = HexColor("#fffbeb")
+C_ROSE = HexColor("#e11d48")
+C_ROSE_PALE = HexColor("#fff1f2")
 C_SLATE50 = HexColor("#f8fafc")
 C_SLATE100 = HexColor("#f1f5f9")
 C_SLATE200 = HexColor("#e2e8f0")
 C_SLATE300 = HexColor("#cbd5e1")
 C_SLATE400 = HexColor("#94a3b8")
 C_SLATE500 = HexColor("#64748b")
+C_SLATE600 = HexColor("#475569")
 C_SLATE700 = HexColor("#334155")
 C_SLATE800 = HexColor("#1e293b")
 C_SLATE900 = HexColor("#0f172a")
 C_WHITE = white
-C_INDIGO50 = HexColor("#eef2ff")
-C_INDIGO100 = HexColor("#e0e7ff")
-C_BLUE50 = HexColor("#eff6ff")
+
+LM = 28 * mm
+RM = 28 * mm
+CW = W - LM - RM
+BOTTOM = 30 * mm
 
 PACKAGE_MAPPING = {
     "fast_cheap": "starter",
@@ -68,14 +81,14 @@ PACKAGE_DATA = {
         "name": "Стартер",
         "price": 150000,
         "timeline": "7\u201310 дней",
-        "subtitle": "Быстрый запуск вашего бизнеса в Telegram",
+        "subtitle": "Быстрый запуск в Telegram",
         "features": [
-            ("Каталог товаров/услуг", "Витрина с категориями и фильтрами"),
+            ("Каталог товаров", "Категории, фильтры, поиск"),
             ("Корзина покупок", "Полноценная корзина с подсчётом"),
-            ("Онлайн-оплата", "Telegram Stars + банковские карты"),
-            ("Авторизация Telegram", "Вход в один клик"),
+            ("Онлайн-оплата", "Telegram Stars + карты"),
+            ("Авторизация", "Вход через Telegram"),
         ],
-        "not_included": ["Push-уведомления", "Программа лояльности", "AI чат-бот", "Аналитика"],
+        "not_included": ["Push-уведомления", "Лояльность", "AI чат-бот", "Аналитика"],
         "support": "30 дней",
         "updates": "3 мес.",
         "guarantee": "6 мес.",
@@ -84,15 +97,15 @@ PACKAGE_DATA = {
         "name": "Бизнес",
         "price": 250000,
         "timeline": "14\u201321 день",
-        "subtitle": "Полноценное приложение для роста бизнеса",
+        "subtitle": "Полный комплект для роста",
         "features": [
-            ("Каталог товаров/услуг", "Витрина с категориями, фильтрами, поиском"),
-            ("Корзина и оформление", "Checkout с историей заказов"),
-            ("Мультиплатёжная система", "Telegram Stars, карты, СБП"),
-            ("Авторизация Telegram", "Вход в один клик + профиль"),
-            ("Push-уведомления", "Статусы заказов, акции"),
+            ("Каталог товаров", "Категории, фильтры, поиск"),
+            ("Корзина и оформление", "Checkout + история заказов"),
+            ("Мультиплатёжная система", "Stars, карты, СБП"),
+            ("Авторизация Telegram", "Вход + профиль клиента"),
+            ("Push-уведомления", "Статусы, акции, триггеры"),
             ("Программа лояльности", "Бонусы, кэшбек, скидки"),
-            ("Аналитика", "Метрики продаж и конверсии"),
+            ("Аналитика продаж", "Метрики, конверсии, отчёты"),
             ("Кастомный UI/UX", "Дизайн под ваш бренд"),
         ],
         "not_included": ["AI чат-бот", "CRM-система"],
@@ -104,19 +117,19 @@ PACKAGE_DATA = {
         "name": "Премиум",
         "price": 400000,
         "timeline": "21\u201330 дней",
-        "subtitle": "Максимальные возможности без компромиссов",
+        "subtitle": "Без компромиссов",
         "features": [
-            ("Каталог товаров/услуг", "Продвинутая витрина с рекомендациями"),
-            ("Корзина и оформление", "Checkout с историей и повторами"),
-            ("Полная платёжная система", "Все способы + рассрочка"),
-            ("Авторизация Telegram", "Вход + профиль + предпочтения"),
-            ("Push-уведомления", "Умные триггерные уведомления"),
-            ("Программа лояльности", "Многоуровневая с геймификацией"),
-            ("Бизнес-аналитика", "Дашборд с прогнозами и когортами"),
-            ("Премиум UI/UX", "2 дизайн-концепции на выбор"),
-            ("AI чат-бот", "Умный помощник 24/7"),
-            ("CRM-система", "Управление клиентами и заказами"),
-            ("Персональный менеджер", "Выделенный менеджер проекта"),
+            ("Продвинутый каталог", "Рекомендации, фильтры, A/B"),
+            ("Умная корзина", "Повторные заказы, шаблоны"),
+            ("Все виды оплаты", "Карты, СБП, рассрочка"),
+            ("Авторизация+", "Профиль + предпочтения"),
+            ("Смарт-уведомления", "Триггерные сценарии"),
+            ("Программа лояльности", "Многоуровневая + геймификация"),
+            ("Бизнес-аналитика", "Дашборд с прогнозами"),
+            ("Премиум UI/UX", "2 концепции на выбор"),
+            ("AI чат-бот 24/7", "Умный помощник"),
+            ("CRM-система", "Клиенты + заказы + статусы"),
+            ("Персональный менеджер", "Выделенный PM"),
         ],
         "not_included": [],
         "support": "12 мес.",
@@ -156,24 +169,24 @@ DESIGN_NAMES = {
 
 TIMELINE_PHASES = {
     "starter": [
-        ("Аналитика", "1\u20132 дня"),
-        ("Дизайн", "2\u20133 дня"),
-        ("Разработка", "3\u20134 дня"),
-        ("Запуск", "1 день"),
+        ("Аналитика", "1\u20132 дня", "Исследование и ТЗ"),
+        ("Дизайн", "2\u20133 дня", "UI/UX прототип"),
+        ("Разработка", "3\u20134 дня", "Код + тесты"),
+        ("Запуск", "1 день", "Деплой + QA"),
     ],
     "business": [
-        ("Аналитика", "2\u20133 дня"),
-        ("Дизайн", "3\u20135 дней"),
-        ("Frontend", "5\u20137 дней"),
-        ("Backend", "3\u20134 дня"),
-        ("Запуск", "1\u20132 дня"),
+        ("Аналитика", "2\u20133 дня", "Исследование, ТЗ, CJM"),
+        ("Дизайн", "3\u20135 дней", "UI/UX + прототип"),
+        ("Frontend", "5\u20137 дней", "Интерфейс"),
+        ("Backend", "3\u20134 дня", "Серверная часть"),
+        ("Запуск", "1\u20132 дня", "Деплой + мониторинг"),
     ],
     "premium": [
-        ("Стратегия", "3\u20135 дней"),
-        ("Дизайн", "5\u20137 дней"),
-        ("Frontend", "7\u201310 дней"),
-        ("Backend+AI", "5\u20137 дней"),
-        ("Запуск", "1\u20132 дня"),
+        ("Стратегия", "3\u20135 дней", "Аналитика + CJM"),
+        ("Дизайн", "5\u20137 дней", "2 концепции UI/UX"),
+        ("Frontend", "7\u201310 дней", "Интерфейс + анимации"),
+        ("Backend+AI", "5\u20137 дней", "API + ML + интеграции"),
+        ("Запуск", "1\u20132 дня", "QA + деплой + SLA"),
     ],
 }
 
@@ -199,479 +212,561 @@ def _get_ai_kp_prompt(brief_data: Dict, package_key: str, client_name: str) -> s
         f"- Стиль дизайна: {design}\n"
         f"- Пакет: «{pkg['name']}» за {_fp(pkg['price'])} руб.\n\n"
         f"Разделы:\n"
-        f"1. ВЫЗОВ (2-3 предложения): бизнес-проблема клиента.\n"
+        f"1. ВЫЗОВ (2-3 предложения): бизнес-проблема клиента, потерянная выручка.\n"
         f"2. РЕШЕНИЕ (3-4 предложения): как WEB4TG Studio решит задачу.\n"
-        f"3. РЕЗУЛЬТАТ (2-3 предложения): измеримые результаты через 1-3 месяца.\n"
-        f"4. ПРЕИМУЩЕСТВО (2 предложения): почему WEB4TG Studio.\n\n"
+        f"3. РЕЗУЛЬТАТ (2-3 предложения): измеримые результаты через 1-3 месяца с цифрами.\n"
+        f"4. ПРЕИМУЩЕСТВО (2 предложения): почему WEB4TG Studio лучший выбор.\n\n"
         f"Правила:\n"
         f"- Русский язык, деловой стиль\n"
-        f"- Без заголовков и нумерации — только текст\n"
-        f"- Каждый раздел = один абзац через пустую строку\n"
-        f"- Объём: 500-700 символов\n"
+        f"- Без заголовков и нумерации — только текст абзацами\n"
+        f"- Каждый раздел = один абзац, разделённый пустой строкой\n"
+        f"- Объём: 500-700 символов суммарно\n"
         f"- Обращение на «вы»\n"
     )
 
 
-def _shadow(c, x, y, w, h, r=6):
-    c.saveState()
-    c.setFillColor(Color(0, 0, 0, alpha=0.04))
-    c.roundRect(x + 1.5, y - 1.5, w, h, r, stroke=0, fill=1)
-    c.restoreState()
-
-
-def _grad_rect(c, x, y, w, h, c1, c2, r=0):
-    c.saveState()
-    c.clipPath(c.beginPath().roundRect(x, y, w, h, r) if r else c.beginPath().rect(x, y, w, h))
-    c.linearGradient(x, y, x + w, y + h, [c1, c2])
-    c.restoreState()
-
-
-def _card(c, x, y, w, h, fill=C_WHITE, r=6, shadow=True):
-    if shadow:
-        _shadow(c, x, y, w, h, r)
-    c.saveState()
-    c.setFillColor(fill)
-    c.setStrokeColor(C_SLATE200)
-    c.setLineWidth(0.3)
-    c.roundRect(x, y, w, h, r, stroke=1, fill=1)
-    c.restoreState()
-
-
-def _text(c, x, y, txt, font=None, size=10, color=C_SLATE700):
+def _t(c, x, y, txt, font=None, size=10, color=C_SLATE700):
     c.setFont(font or FONT, size)
     c.setFillColor(color)
     c.drawString(x, y, txt)
 
 
-def _text_r(c, x, y, txt, font=None, size=10, color=C_SLATE700):
+def _tr(c, x, y, txt, font=None, size=10, color=C_SLATE700):
     c.setFont(font or FONT, size)
     c.setFillColor(color)
     c.drawRightString(x, y, txt)
 
 
-def _text_c(c, x, y, txt, font=None, size=10, color=C_SLATE700):
+def _tc(c, x, y, txt, font=None, size=10, color=C_SLATE700):
     c.setFont(font or FONT, size)
     c.setFillColor(color)
     c.drawCentredString(x, y, txt)
 
 
-def _wrap_text(c, x, y, text, max_w, font=None, size=9.5, color=C_SLATE700, leading=14):
-    c.setFont(font or FONT, size)
+def _wrap(c, x, y, text, max_w, font=None, size=9.5, color=C_SLATE600, leading=14.5):
+    f = font or FONT
+    c.setFont(f, size)
     c.setFillColor(color)
     words = text.split()
     lines = []
-    current = ""
-    for word in words:
-        test = f"{current} {word}".strip()
-        if c.stringWidth(test, font or FONT, size) > max_w:
-            lines.append(current)
-            current = word
+    cur = ""
+    for w in words:
+        test = f"{cur} {w}".strip()
+        if c.stringWidth(test, f, size) > max_w:
+            if cur:
+                lines.append(cur)
+            cur = w
         else:
-            current = test
-    if current:
-        lines.append(current)
+            cur = test
+    if cur:
+        lines.append(cur)
     for i, line in enumerate(lines):
         c.drawString(x, y - i * leading, line)
     return len(lines) * leading
 
 
-LM = 20 * mm
-RM = 20 * mm
-CW = W - LM - RM
+def _text_height(c, text, max_w, font=None, size=9.5, leading=14.5):
+    f = font or FONT
+    words = text.split()
+    lines = 1
+    cur = ""
+    for w in words:
+        test = f"{cur} {w}".strip()
+        if c.stringWidth(test, f, size) > max_w:
+            lines += 1
+            cur = w
+        else:
+            cur = test
+    return lines * leading
 
 
-def _draw_header(c):
+def _shadow(c, x, y, w, h, r=8):
     c.saveState()
-    c.setFillColor(C_PRIMARY)
-    c.rect(0, H - 3, W, 3, stroke=0, fill=1)
+    c.setFillColor(Color(0.06, 0.09, 0.16, alpha=0.06))
+    c.roundRect(x + 2, y - 2, w, h, r, stroke=0, fill=1)
     c.restoreState()
 
-    _text(c, LM, H - 18, "WEB4TG STUDIO", FONTB, 11, C_PRIMARY_DEEP)
-    _text_r(c, W - RM, H - 18, "web4tg.com  |  t.me/web4_tg", FONT, 7, C_SLATE400)
+
+def _card(c, x, y, w, h, fill=C_WHITE, r=8, shadow=True, border=True):
+    if shadow:
+        _shadow(c, x, y, w, h, r)
+    c.saveState()
+    c.setFillColor(fill)
+    if border:
+        c.setStrokeColor(C_SLATE200)
+        c.setLineWidth(0.4)
+        c.roundRect(x, y, w, h, r, stroke=1, fill=1)
+    else:
+        c.roundRect(x, y, w, h, r, stroke=0, fill=1)
+    c.restoreState()
 
 
-def _draw_footer(c, page_num, total=""):
+def _gradient_rect(c, x, y, w, h, c1, c2, r=0):
+    c.saveState()
+    if r > 0:
+        p = c.beginPath()
+        p.roundRect(x, y, w, h, r)
+        c.clipPath(p, stroke=0)
+    c.linearGradient(x, y, x, y + h, [c1, c2])
+    c.restoreState()
+
+
+def _accent_line(c, x, y, w, color=C_INDIGO, thickness=2.5):
+    c.saveState()
+    c.setStrokeColor(color)
+    c.setLineWidth(thickness)
+    c.setLineCap(1)
+    c.line(x, y, x + w, y)
+    c.restoreState()
+
+
+def _page_footer(c, page_num):
     c.saveState()
     c.setStrokeColor(C_SLATE200)
     c.setLineWidth(0.3)
-    c.line(LM, 18, W - RM, 18)
+    c.line(LM, 22, W - RM, 22)
     c.restoreState()
-    _text_c(c, W / 2, 8, f"WEB4TG Studio  \u00b7  Коммерческое предложение  \u00b7  {page_num}", FONT, 6, C_SLATE400)
+    _tc(c, W / 2, 10, f"WEB4TG Studio  \u00b7  \u00a9 {datetime.now().year}", FONT, 6.5, C_SLATE400)
+    _tr(c, W - RM, 10, str(page_num), FONT, 6.5, C_SLATE400)
 
 
-def _draw_hero(c, y, project_type, pkg_name, timeline, kp_num, date_str, client_name):
-    hero_h = 62 * mm
-    hero_y = y - hero_h
+def _new_page(c, page_num):
+    c.showPage()
+    return H - 36
+
+
+def _draw_cover(c, project_type, pkg_name, timeline, kp_num, date_str, client_name):
+    _gradient_rect(c, 0, 0, W, H, C_DARK, C_NAVY)
 
     c.saveState()
-    p = c.beginPath()
-    p.roundRect(LM, hero_y, CW, hero_h, 8)
-    c.clipPath(p, stroke=0)
-    c.linearGradient(LM, hero_y, LM, hero_y + hero_h, [HexColor("#1e3a5f"), C_DARK])
+    c.setFillColor(Color(1, 1, 1, alpha=0.015))
+    c.circle(W - 60, H - 80, 200, stroke=0, fill=1)
+    c.circle(40, 120, 120, stroke=0, fill=1)
     c.restoreState()
 
     c.saveState()
-    c.setFillColor(Color(1, 1, 1, alpha=0.03))
-    c.circle(W - RM - 30, hero_y + hero_h - 10, 80, stroke=0, fill=1)
-    c.circle(LM + 20, hero_y + 10, 40, stroke=0, fill=1)
+    c.setFillColor(Color(1, 1, 1, alpha=0.02))
+    c.rect(LM, H - 12 * mm, 60, 3, stroke=0, fill=1)
     c.restoreState()
 
-    top = hero_y + hero_h
-    _text(c, LM + 14, top - 16, f"№ КП-{kp_num:05d}  |  {date_str}", FONT, 7.5, C_SLATE400)
+    _t(c, LM, H - 18 * mm, "WEB4TG", FONTB, 13, C_WHITE)
+    _t(c, LM + c.stringWidth("WEB4TG", FONTB, 13) + 4, H - 18 * mm, "STUDIO", FONT, 13, C_SLATE400)
 
-    _text(c, LM + 14, top - 36, "КОММЕРЧЕСКОЕ", FONTB, 22, C_WHITE)
-    _text(c, LM + 14, top - 55, "ПРЕДЛОЖЕНИЕ", FONTB, 22, C_WHITE)
+    _tr(c, W - RM, H - 18 * mm, "web4tg.com", FONT, 9, C_SLATE500)
 
-    _text(c, LM + 14, top - 72, f"{project_type}  \u00b7  Пакет «{pkg_name}»  \u00b7  {timeline}", FONT, 8.5, C_SLATE300)
+    y_title = H * 0.58
+    _accent_line(c, LM, y_title + 20, 50, C_INDIGO_LIGHT, 3)
+
+    _t(c, LM, y_title - 5, "КОММЕРЧЕСКОЕ", FONTB, 36, C_WHITE)
+    _t(c, LM, y_title - 48, "ПРЕДЛОЖЕНИЕ", FONTB, 36, C_WHITE)
+
+    _t(c, LM, y_title - 80, project_type, FONT, 14, C_INDIGO_LIGHT)
+
+    c.saveState()
+    c.setStrokeColor(Color(1, 1, 1, alpha=0.08))
+    c.setLineWidth(0.5)
+    c.line(LM, y_title - 95, LM + CW, y_title - 95)
+    c.restoreState()
+
+    meta_y = y_title - 120
+    _t(c, LM, meta_y, f"Пакет «{pkg_name}»", FONT, 11, C_SLATE300)
+    _tc(c, W / 2, meta_y, f"\u00b7   {timeline}   \u00b7", FONT, 11, C_SLATE400)
+    _tr(c, W - RM, meta_y, f"№ {kp_num:05d}", FONT, 11, C_SLATE400)
 
     if client_name:
-        badge_y = hero_y + 10
-        bw = c.stringWidth(f"  Для: {client_name}  ", FONT, 8) + 16
-        c.saveState()
-        c.setFillColor(Color(1, 1, 1, alpha=0.1))
-        c.roundRect(LM + 14, badge_y, bw, 18, 4, stroke=0, fill=1)
-        c.restoreState()
-        _text(c, LM + 22, badge_y + 5, f"Для: {client_name}", FONT, 8.5, C_WHITE)
+        _t(c, LM, meta_y - 30, "Подготовлено для", FONT, 9, C_SLATE500)
+        _t(c, LM, meta_y - 48, client_name, FONTB, 16, C_WHITE)
 
-    return hero_y - 6
+    _t(c, LM, 40, date_str, FONT, 9, C_SLATE500)
+    _tr(c, W - RM, 40, "t.me/web4_tg", FONT, 9, C_SLATE500)
 
 
-def _draw_stats(c, y):
-    stats = [("50+", "проектов"), ("3 года", "на рынке"), ("98%", "довольных"), ("24/7", "поддержка")]
-    card_h = 18 * mm
-    _card(c, LM, y - card_h, CW, card_h, C_SLATE50, 6, shadow=True)
+def _draw_stats_bar(c, y):
+    stats = [
+        ("50+", "реализованных\nпроектов"),
+        ("3 года", "на рынке\nTelegram Mini Apps"),
+        ("98%", "клиентов\nрекомендуют нас"),
+        ("24/7", "техническая\nподдержка"),
+    ]
+    card_h = 22 * mm
+    _card(c, LM, y - card_h, CW, card_h, C_SLATE50, r=10, shadow=True, border=False)
 
     n = len(stats)
-    col = CW / n
+    col_w = CW / n
     for i, (val, label) in enumerate(stats):
-        cx = LM + col * i + col / 2
-        _text_c(c, cx, y - card_h + 30, val, FONTB, 14, C_PRIMARY_DEEP)
-        _text_c(c, cx, y - card_h + 16, label, FONT, 7.5, C_SLATE500)
+        cx = LM + col_w * i + col_w / 2
+        _tc(c, cx, y - card_h + 48, val, FONTB, 18, C_INDIGO)
+
+        label_lines = label.split("\n")
+        for j, line in enumerate(label_lines):
+            _tc(c, cx, y - card_h + 32 - j * 11, line, FONT, 7.5, C_SLATE500)
 
         if i < n - 1:
-            sx = LM + col * (i + 1)
+            sx = LM + col_w * (i + 1)
             c.saveState()
             c.setStrokeColor(C_SLATE200)
             c.setLineWidth(0.3)
-            c.line(sx, y - card_h + 8, sx, y - 8)
+            c.line(sx, y - card_h + 14, sx, y - 10)
             c.restoreState()
 
-    return y - card_h - 8
+    return y - card_h - 10
 
 
-def _draw_section_header(c, y, num, title):
-    pill_w = 28
-    pill_h = 16
-    c.saveState()
-    c.setFillColor(C_PRIMARY)
-    c.roundRect(LM, y - pill_h + 3, pill_w, pill_h, 4, stroke=0, fill=1)
-    c.restoreState()
-    _text_c(c, LM + pill_w / 2, y - pill_h + 7, num, FONTB, 8, C_WHITE)
-    _text(c, LM + pill_w + 6, y - pill_h + 6, title, FONTB, 11, C_SLATE800)
-    return y - pill_h - 8
+def _draw_section_title(c, y, label, title):
+    _accent_line(c, LM, y, 40, C_INDIGO, 2.5)
+    _t(c, LM, y - 16, label, FONTB, 8, C_INDIGO)
+    _t(c, LM, y - 34, title, FONTB, 16, C_SLATE900)
+    return y - 50
 
 
-def _draw_ai_blocks(c, y, ai_text):
-    labels_colors = [
-        ("ВЫЗОВ", C_RED, C_RED_LIGHT),
-        ("РЕШЕНИЕ", C_PRIMARY, C_BLUE50),
-        ("РЕЗУЛЬТАТ", C_SUCCESS, C_SUCCESS_LIGHT),
-        ("ПРЕИМУЩЕСТВО", C_WARN, C_INDIGO50),
+def _draw_ai_section(c, y, ai_text):
+    blocks = [
+        ("ВЫЗОВ", C_ROSE, C_ROSE_PALE),
+        ("РЕШЕНИЕ", C_INDIGO, C_INDIGO_PALE),
+        ("РЕЗУЛЬТАТ", C_EMERALD, C_EMERALD_PALE),
+        ("ПРЕИМУЩЕСТВО", C_AMBER, C_AMBER_PALE),
     ]
     paragraphs = [p.strip() for p in ai_text.split("\n") if p.strip()]
 
     for i, para in enumerate(paragraphs[:4]):
-        if y < 60:
+        if y < BOTTOM + 40:
             c.showPage()
-            _draw_header(c)
-            y = H - 35
+            y = H - 36
 
-        label, accent, bg = labels_colors[i] if i < len(labels_colors) else ("", C_SLATE500, C_SLATE50)
+        label, accent, bg = blocks[i] if i < len(blocks) else ("", C_SLATE500, C_SLATE50)
 
-        c.setFont(FONT, 9)
-        text_h = _estimate_text_height(c, para, CW - 28, 9, 13)
-        card_h = text_h + 26
+        c.setFont(FONT, 9.5)
+        th = _text_height(c, para, CW - 36, FONT, 9.5, 14.5)
+        card_h = th + 32
 
-        _card(c, LM, y - card_h, CW, card_h, bg, 5, shadow=False)
+        _card(c, LM, y - card_h, CW, card_h, bg, r=10, shadow=False, border=False)
 
         c.saveState()
         c.setFillColor(accent)
-        c.roundRect(LM, y - card_h, 3, card_h, 1.5, stroke=0, fill=1)
+        c.roundRect(LM, y - card_h, 4, card_h, 2, stroke=0, fill=1)
         c.restoreState()
 
-        _text(c, LM + 12, y - 14, label, FONTB, 7.5, accent)
+        pill_w = c.stringWidth(label, FONTB, 7) + 16
+        c.saveState()
+        c.setFillColor(accent)
+        c.roundRect(LM + 16, y - 18, pill_w, 14, 3, stroke=0, fill=1)
+        c.restoreState()
+        _tc(c, LM + 16 + pill_w / 2, y - 15, label, FONTB, 7, C_WHITE)
 
-        _wrap_text(c, LM + 12, y - 26, para, CW - 28, FONT, 9, C_SLATE700, 13)
+        _wrap(c, LM + 16, y - 30, para, CW - 36, FONT, 9.5, C_SLATE700, 14.5)
 
-        y -= card_h + 4
+        y -= card_h + 6
 
     return y
 
 
-def _estimate_text_height(c, text, max_w, size, leading):
-    words = text.split()
-    lines = 1
-    current = ""
-    for word in words:
-        test = f"{current} {word}".strip()
-        if c.stringWidth(test, FONT, size) > max_w:
-            lines += 1
-            current = word
-        else:
-            current = test
-    return lines * leading
+def _draw_features_grid(c, y, features, not_included, pkg_name, pkg_subtitle):
+    col_gap = 10
+    col_w = (CW - col_gap) / 2
 
-
-def _draw_features(c, y, features, not_included):
-    for name, desc in features:
-        if y < 50:
+    for idx in range(0, len(features), 2):
+        if y < BOTTOM + 40:
             c.showPage()
-            _draw_header(c)
-            y = H - 35
+            y = H - 36
 
-        row_h = 22
-        _card(c, LM, y - row_h, CW, row_h, C_WHITE, 4, shadow=False)
+        row_h = 54
+        for j in range(2):
+            if idx + j >= len(features):
+                break
+            name, desc = features[idx + j]
+            fx = LM + j * (col_w + col_gap)
 
-        c.saveState()
-        c.setFillColor(C_SUCCESS)
-        c.roundRect(LM + 8, y - row_h + 5, 12, 12, 3, stroke=0, fill=1)
-        c.restoreState()
-        _text_c(c, LM + 14, y - row_h + 8, "\u2713", FONTB, 8, C_WHITE)
+            _card(c, fx, y - row_h, col_w, row_h, C_WHITE, r=8, shadow=True, border=True)
 
-        _text(c, LM + 26, y - row_h + 7, name, FONTB, 9, C_SLATE800)
-        _text_r(c, W - RM - 8, y - row_h + 7, desc, FONT, 7.5, C_SLATE500)
+            c.saveState()
+            c.setFillColor(C_EMERALD)
+            c.circle(fx + 18, y - 16, 8, stroke=0, fill=1)
+            c.restoreState()
+            _tc(c, fx + 18, y - 20, "\u2713", FONTB, 9, C_WHITE)
 
-        y -= row_h + 2
+            _t(c, fx + 32, y - 19, name, FONTB, 9.5, C_SLATE800)
+            _t(c, fx + 14, y - 38, desc, FONT, 8, C_SLATE500)
 
-    for name in not_included:
-        if y < 50:
+        y -= row_h + 6
+
+    if not_included:
+        if y < BOTTOM + 30:
             c.showPage()
-            _draw_header(c)
-            y = H - 35
+            y = H - 36
+        for idx in range(0, len(not_included), 2):
+            row_h = 36
+            for j in range(2):
+                if idx + j >= len(not_included):
+                    break
+                name = not_included[idx + j]
+                fx = LM + j * (col_w + col_gap)
 
-        row_h = 20
-        c.saveState()
-        c.setStrokeColor(C_SLATE200)
-        c.setLineWidth(0.3)
-        c.setDash(2, 2)
-        c.roundRect(LM, y - row_h, CW, row_h, 4, stroke=1, fill=0)
-        c.restoreState()
+                c.saveState()
+                c.setStrokeColor(C_SLATE200)
+                c.setLineWidth(0.4)
+                c.setDash(3, 3)
+                c.roundRect(fx, y - row_h, col_w, row_h, 8, stroke=1, fill=0)
+                c.restoreState()
 
-        c.saveState()
-        c.setStrokeColor(C_SLATE300)
-        c.setLineWidth(0.5)
-        c.roundRect(LM + 8, y - row_h + 4, 12, 12, 3, stroke=1, fill=0)
-        c.restoreState()
+                c.saveState()
+                c.setStrokeColor(C_SLATE300)
+                c.setLineWidth(0.5)
+                c.circle(fx + 18, y - row_h / 2, 8, stroke=1, fill=0)
+                c.restoreState()
 
-        _text(c, LM + 26, y - row_h + 6, name, FONT, 8.5, C_SLATE400)
-        _text_r(c, W - RM - 8, y - row_h + 6, "в старших пакетах", FONT, 7, C_SLATE400)
+                _t(c, fx + 32, y - row_h / 2 - 4, name, FONT, 9, C_SLATE400)
 
-        y -= row_h + 2
+            y -= row_h + 6
 
     return y
 
 
 def _draw_guarantees(c, y, guarantee, support, updates):
-    items = [
-        ("\u2605  Гарантия", guarantee),
-        ("\u2605  Поддержка", f"бесплатно {support}"),
-        ("\u2605  Обновления", f"бесплатно {updates}"),
-    ]
-    card_h = 20 * mm
-    _card(c, LM, y - card_h, CW, card_h, C_INDIGO50, 5, shadow=False)
-
-    col = CW / 3
-    for i, (title, val) in enumerate(items):
-        cx = LM + col * i + 10
-        _text(c, cx, y - card_h + 36, title, FONTB, 8, C_WARN)
-        _text(c, cx, y - card_h + 22, val, FONT, 8, C_SLATE700)
-
-        if i < 2:
-            sx = LM + col * (i + 1)
-            c.saveState()
-            c.setStrokeColor(C_SLATE200)
-            c.setLineWidth(0.3)
-            c.line(sx, y - card_h + 12, sx, y - 8)
-            c.restoreState()
-
-    return y - card_h - 6
-
-
-def _draw_price(c, y, price, discount_pct, pkg_name):
-    card_h = 34 * mm if discount_pct else 28 * mm
-
-    if y - card_h < 40:
+    if y < BOTTOM + 30:
         c.showPage()
-        _draw_header(c)
-        y = H - 35
+        y = H - 36
+
+    items = [
+        ("\u2605", "Гарантия", guarantee, C_AMBER),
+        ("\u2605", "Поддержка", f"бесплатно {support}", C_EMERALD),
+        ("\u2605", "Обновления", f"бесплатно {updates}", C_INDIGO),
+    ]
+    col_gap = 10
+    col_w = (CW - col_gap * 2) / 3
+    row_h = 60
+
+    for i, (icon, title, val, color) in enumerate(items):
+        fx = LM + i * (col_w + col_gap)
+        _card(c, fx, y - row_h, col_w, row_h, C_WHITE, r=8, shadow=True, border=True)
+
+        c.saveState()
+        c.setFillColor(color)
+        c.roundRect(fx + 12, y - 22, 22, 16, 4, stroke=0, fill=1)
+        c.restoreState()
+        _tc(c, fx + 23, y - 18, icon, FONT, 9, C_WHITE)
+
+        _t(c, fx + 40, y - 18, title, FONTB, 9, C_SLATE800)
+        _t(c, fx + 14, y - 42, val, FONT, 8.5, C_SLATE600)
+
+    return y - row_h - 10
+
+
+def _draw_price_block(c, y, price, discount_pct, pkg_name):
+    if discount_pct > 0:
+        card_h = 48 * mm
+    else:
+        card_h = 38 * mm
+
+    if y - card_h < BOTTOM:
+        c.showPage()
+        y = H - 36
+
+    _gradient_rect(c, LM, y - card_h, CW, card_h, C_DARK, C_NAVY, r=12)
 
     c.saveState()
-    p = c.beginPath()
-    p.roundRect(LM, y - card_h, CW, card_h, 8)
-    c.clipPath(p, stroke=0)
-    c.linearGradient(LM, y - card_h, W - RM, y, [C_DARK, HexColor("#1a2744")])
+    c.setFillColor(Color(1, 1, 1, alpha=0.02))
+    c.circle(W - RM - 20, y - card_h + 30, 80, stroke=0, fill=1)
     c.restoreState()
 
-    c.saveState()
-    c.setFillColor(Color(1, 1, 1, alpha=0.03))
-    c.circle(W - RM, y - card_h + 20, 60, stroke=0, fill=1)
-    c.restoreState()
+    top = y - 14
 
-    top = y
-    _text(c, LM + 16, top - 18, f"Пакет «{pkg_name}»", FONT, 8, C_SLATE400)
+    _t(c, LM + 24, top, f"Пакет «{pkg_name}»", FONT, 10, C_SLATE400)
 
     if discount_pct > 0:
         final = int(price * (100 - discount_pct) / 100)
         savings = price - final
 
-        _text(c, LM + 16, top - 36, f"Базовая цена:  {_fp(price)} руб.", FONT, 9, C_SLATE400)
+        _t(c, LM + 24, top - 24, f"Стандартная цена: {_fp(price)} \u20bd", FONT, 10, C_SLATE500)
 
-        bw = 90
         c.saveState()
-        c.setFillColor(C_SUCCESS)
-        c.roundRect(LM + 16, top - 58, bw, 16, 4, stroke=0, fill=1)
+        c.setStrokeColor(Color(1, 1, 1, alpha=0.15))
+        c.setLineWidth(1)
+        line_w = c.stringWidth(f"{_fp(price)} \u20bd", FONT, 10)
+        start_x = LM + 24 + c.stringWidth("Стандартная цена: ", FONT, 10)
+        c.line(start_x, top - 20, start_x + line_w, top - 20)
         c.restoreState()
-        _text_c(c, LM + 16 + bw / 2, top - 54, f"VIP скидка \u2212{discount_pct}%", FONTB, 8, C_WHITE)
 
-        _text(c, LM + 16 + bw + 10, top - 54, f"\u2212{_fp(savings)} руб.", FONTB, 9, C_SUCCESS)
+        pill_w = 100
+        c.saveState()
+        c.setFillColor(C_EMERALD)
+        c.roundRect(LM + 24, top - 52, pill_w, 20, 5, stroke=0, fill=1)
+        c.restoreState()
+        _tc(c, LM + 24 + pill_w / 2, top - 46, f"VIP скидка \u2212{discount_pct}%", FONTB, 9, C_WHITE)
 
-        _text(c, LM + 16, top - 80, f"{_fp(final)} руб.", FONTB, 26, C_WHITE)
+        _t(c, LM + 24 + pill_w + 12, top - 46, f"Экономия: {_fp(savings)} \u20bd", FONT, 9, C_EMERALD)
 
-        _text(c, LM + 16, top - card_h + 10, "Скидка по VIP-статусу применена автоматически", FONT, 7, C_SLATE400)
+        _t(c, LM + 24, top - 82, f"{_fp(final)}", FONTB, 38, C_WHITE)
+        _t(c, LM + 24 + c.stringWidth(f"{_fp(final)}", FONTB, 38) + 6, top - 82, "\u20bd", FONTB, 28, C_SLATE400)
+
+        _t(c, LM + 24, top - card_h + 30, "Скидка по вашему VIP-статусу применена автоматически", FONT, 7.5, C_SLATE500)
     else:
-        _text(c, LM + 16, top - 48, f"{_fp(price)} руб.", FONTB, 28, C_WHITE)
-        _text(c, LM + 16, top - 64, "Фиксированная стоимость  \u00b7  Без скрытых платежей", FONT, 8, C_SLATE400)
+        _t(c, LM + 24, top - 40, f"{_fp(price)}", FONTB, 42, C_WHITE)
+        _t(c, LM + 24 + c.stringWidth(f"{_fp(price)}", FONTB, 42) + 6, top - 40, "\u20bd", FONTB, 30, C_SLATE400)
 
-    return y - card_h - 6
+        _t(c, LM + 24, top - 62, "Фиксированная стоимость  \u00b7  Без скрытых платежей", FONT, 9, C_SLATE500)
+
+    return y - card_h - 10
 
 
-def _draw_timeline(c, y, phases, total):
+def _draw_timeline(c, y, phases, total_timeline):
     n = len(phases)
-    col = (CW - 20) / n
-    dot_r = 12
 
-    if y - 60 < 40:
+    needed = 90
+    if y - needed < BOTTOM:
         c.showPage()
-        _draw_header(c)
-        y = H - 35
+        y = H - 36
 
-    line_y = y - 20
-    c.saveState()
-    c.setStrokeColor(C_SLATE200)
-    c.setLineWidth(1.5)
-    c.line(LM + col / 2, line_y, LM + col * (n - 1) + col / 2, line_y)
-    c.restoreState()
+    bar_y = y - 24
+    bar_h = 6
 
-    for i, (name, duration) in enumerate(phases):
-        cx = LM + 10 + col * i + col / 2
-
-        c.saveState()
-        gradient_colors = [C_PRIMARY, C_ACCENT] if i < n - 1 else [C_SUCCESS, HexColor("#059669")]
-        c.setFillColor(gradient_colors[0])
-        c.circle(cx, line_y, dot_r, stroke=0, fill=1)
-        c.restoreState()
-
-        _text_c(c, cx, line_y - 3.5, str(i + 1), FONTB, 9, C_WHITE)
-
-        _text_c(c, cx, line_y - dot_r - 12, name, FONTB, 7.5, C_SLATE800)
-        _text_c(c, cx, line_y - dot_r - 24, duration, FONT, 7, C_PRIMARY)
-
-    y = line_y - dot_r - 34
-
-    pill_w = 80
     c.saveState()
     c.setFillColor(C_SLATE100)
-    c.roundRect(W / 2 - pill_w / 2, y - 12, pill_w, 16, 4, stroke=0, fill=1)
+    c.roundRect(LM, bar_y - bar_h / 2, CW, bar_h, 3, stroke=0, fill=1)
     c.restoreState()
-    _text_c(c, W / 2, y - 8, f"Итого: {total}", FONTB, 8, C_PRIMARY)
 
-    return y - 20
+    filled_w = CW * 0.85
+    _gradient_rect(c, LM, bar_y - bar_h / 2, filled_w, bar_h, C_INDIGO, C_INDIGO_LIGHT, r=3)
+
+    col_w = CW / n
+    for i, phase_data in enumerate(phases):
+        name = phase_data[0]
+        duration = phase_data[1]
+        detail = phase_data[2] if len(phase_data) > 2 else ""
+
+        cx = LM + col_w * i + col_w / 2
+        dot_r = 10
+
+        is_last = i == n - 1
+        color = C_EMERALD if is_last else C_INDIGO
+
+        c.saveState()
+        c.setFillColor(C_WHITE)
+        c.circle(cx, bar_y, dot_r + 3, stroke=0, fill=1)
+        c.restoreState()
+
+        c.saveState()
+        c.setFillColor(color)
+        c.circle(cx, bar_y, dot_r, stroke=0, fill=1)
+        c.restoreState()
+        _tc(c, cx, bar_y - 3.5, str(i + 1), FONTB, 9, C_WHITE)
+
+        _tc(c, cx, bar_y - dot_r - 16, name, FONTB, 8, C_SLATE800)
+        _tc(c, cx, bar_y - dot_r - 28, duration, FONT, 7.5, color)
+        if detail:
+            _tc(c, cx, bar_y - dot_r - 40, detail, FONT, 6.5, C_SLATE400)
+
+    y = bar_y - dot_r - 52
+
+    pill_w = c.stringWidth(f"  Итого: {total_timeline}  ", FONTB, 9) + 24
+    c.saveState()
+    c.setFillColor(C_INDIGO_PALE)
+    c.roundRect(W / 2 - pill_w / 2, y - 8, pill_w, 20, 5, stroke=0, fill=1)
+    c.restoreState()
+    _tc(c, W / 2, y - 2, f"Итого: {total_timeline}", FONTB, 9, C_INDIGO)
+
+    return y - 18
 
 
 def _draw_payment(c, y, price, discount_pct):
     final = int(price * (100 - discount_pct) / 100) if discount_pct else price
     prepay = int(final * 0.35)
     remainder = final - prepay
-    card_h = 24 * mm
-    card_w = (CW - 8) / 2
 
-    if y - card_h < 40:
+    col_gap = 12
+    col_w = (CW - col_gap) / 2
+    card_h = 70
+
+    if y - card_h < BOTTOM:
         c.showPage()
-        _draw_header(c)
-        y = H - 35
+        y = H - 36
 
-    _card(c, LM, y - card_h, card_w, card_h, C_WHITE, 5, shadow=True)
-    _text(c, LM + 12, y - 16, "Этап 1: Предоплата", FONTB, 8.5, C_PRIMARY)
-    _text(c, LM + 12, y - 34, f"{_fp(prepay)} руб.", FONTB, 16, C_SLATE900)
-    _text(c, LM + 12, y - 50, "35% — до начала работ", FONT, 7.5, C_SLATE500)
+    _card(c, LM, y - card_h, col_w, card_h, C_WHITE, r=10, shadow=True, border=True)
+    c.saveState()
+    c.setFillColor(C_INDIGO)
+    c.roundRect(LM + 14, y - 22, 8, 8, 2, stroke=0, fill=1)
+    c.restoreState()
+    _t(c, LM + 28, y - 22, "Этап 1", FONTB, 8, C_INDIGO)
+    _t(c, LM + 14, y - 40, f"{_fp(prepay)} \u20bd", FONTB, 18, C_SLATE900)
+    _t(c, LM + 14, y - 56, "35%  \u00b7  Предоплата", FONT, 8, C_SLATE500)
 
-    x2 = LM + card_w + 8
-    _card(c, x2, y - card_h, card_w, card_h, C_WHITE, 5, shadow=True)
-    _text(c, x2 + 12, y - 16, "Этап 2: После сдачи", FONTB, 8.5, C_SUCCESS)
-    _text(c, x2 + 12, y - 34, f"{_fp(remainder)} руб.", FONTB, 16, C_SLATE900)
-    _text(c, x2 + 12, y - 50, "65% — после приёмки", FONT, 7.5, C_SLATE500)
+    x2 = LM + col_w + col_gap
+    _card(c, x2, y - card_h, col_w, card_h, C_WHITE, r=10, shadow=True, border=True)
+    c.saveState()
+    c.setFillColor(C_EMERALD)
+    c.roundRect(x2 + 14, y - 22, 8, 8, 2, stroke=0, fill=1)
+    c.restoreState()
+    _t(c, x2 + 28, y - 22, "Этап 2", FONTB, 8, C_EMERALD)
+    _t(c, x2 + 14, y - 40, f"{_fp(remainder)} \u20bd", FONTB, 18, C_SLATE900)
+    _t(c, x2 + 14, y - 56, "65%  \u00b7  После приёмки", FONT, 8, C_SLATE500)
 
-    y -= card_h + 6
-    _text_c(c, W / 2, y, "Банковский перевод  \u00b7  Карта  \u00b7  СБП  \u00b7  Telegram Stars", FONT, 7.5, C_SLATE400)
-    return y - 10
+    y -= card_h + 8
+    _tc(c, W / 2, y, "Банковский перевод  \u00b7  Карта  \u00b7  СБП  \u00b7  Telegram Stars", FONT, 7.5, C_SLATE400)
+    return y - 14
 
 
 def _draw_steps(c, y):
     steps = [
         ("Согласование", "Утверждаем ТЗ и подписываем договор"),
-        ("Предоплата", "Оплата 35% и старт работы"),
+        ("Предоплата", "Оплата 35% — старт работы"),
         ("Демо", "Промежуточная демонстрация прогресса"),
         ("Сдача", "Финальная приёмка и оплата остатка"),
-        ("Запуск", "Деплой, мониторинг и поддержка"),
+        ("Запуск", "Деплой + поддержка"),
     ]
+
+    if y - len(steps) * 26 < BOTTOM:
+        c.showPage()
+        y = H - 36
+
     for i, (title, desc) in enumerate(steps):
-        if y < 40:
-            c.showPage()
-            _draw_header(c)
-            y = H - 35
+        is_last = i == len(steps) - 1
+        color = C_EMERALD if is_last else C_INDIGO
 
         c.saveState()
-        clr = C_SUCCESS if i == len(steps) - 1 else C_PRIMARY
-        c.setFillColor(clr)
-        c.roundRect(LM, y - 14, 16, 16, 4, stroke=0, fill=1)
+        c.setFillColor(color)
+        c.circle(LM + 10, y - 4, 10, stroke=0, fill=1)
         c.restoreState()
-        _text_c(c, LM + 8, y - 10, str(i + 1), FONTB, 8, C_WHITE)
+        _tc(c, LM + 10, y - 8, str(i + 1), FONTB, 8, C_WHITE)
 
-        _text(c, LM + 22, y - 10, title, FONTB, 9, C_SLATE800)
-        _text(c, LM + 90, y - 10, desc, FONT, 8, C_SLATE500)
+        _t(c, LM + 26, y - 5, title, FONTB, 9.5, C_SLATE800)
 
-        if i < len(steps) - 1:
+        desc_x = LM + 120
+        _t(c, desc_x, y - 5, desc, FONT, 8.5, C_SLATE500)
+
+        if not is_last:
             c.saveState()
             c.setStrokeColor(C_SLATE200)
-            c.setLineWidth(0.5)
-            c.setDash(1, 2)
-            c.line(LM + 8, y - 14, LM + 8, y - 22)
+            c.setLineWidth(0.6)
+            c.setDash(2, 3)
+            c.line(LM + 10, y - 14, LM + 10, y - 24)
             c.restoreState()
 
-        y -= 22
+        y -= 28
 
     return y
 
 
 def _draw_cta(c, y):
-    if y < 50:
+    if y - 32 * mm < BOTTOM - 10:
         c.showPage()
-        _draw_header(c)
-        y = H - 35
+        y = H - 36
 
-    cta_h = 28 * mm
+    cta_h = 32 * mm
+    _gradient_rect(c, LM, y - cta_h, CW, cta_h, C_INDIGO, HexColor("#7c3aed"), r=12)
+
     c.saveState()
-    p = c.beginPath()
-    p.roundRect(LM, y - cta_h, CW, cta_h, 8)
-    c.clipPath(p, stroke=0)
-    c.linearGradient(LM, y - cta_h, W - RM, y, [C_PRIMARY_DEEP, C_ACCENT])
+    c.setFillColor(Color(1, 1, 1, alpha=0.04))
+    c.circle(W - RM - 20, y - cta_h + 20, 60, stroke=0, fill=1)
     c.restoreState()
 
-    _text(c, LM + 16, y - 18, "Готовы обсудить проект?", FONTB, 14, C_WHITE)
-    _text(c, LM + 16, y - 34, "Ответим в течение 30 минут в рабочее время", FONT, 8.5, HexColor("#c7d2fe"))
-    _text(c, LM + 16, y - 52, "Telegram: @web4_tg   \u00b7   web4tg.com", FONTB, 9, C_WHITE)
+    mid = y - cta_h / 2
+    _t(c, LM + 24, mid + 14, "Готовы обсудить проект?", FONTB, 16, C_WHITE)
+    _t(c, LM + 24, mid - 6, "Ответим в течение 30 минут в рабочее время", FONT, 9, HexColor("#c7d2fe"))
 
-    return y - cta_h - 6
+    _t(c, LM + 24, mid - 30, "Telegram: @web4_tg", FONTB, 10, C_WHITE)
+    _tc(c, W / 2, mid - 30, "\u00b7", FONT, 10, HexColor("#a5b4fc"))
+    _tr(c, W - RM - 24, mid - 30, "web4tg.com", FONTB, 10, C_WHITE)
+
+    return y - cta_h - 8
 
 
 def _determine_package(brief_answers: Dict) -> str:
@@ -694,48 +789,83 @@ def build_kp_pdf(
     c.setTitle("Коммерческое предложение — WEB4TG Studio")
     c.setAuthor("WEB4TG Studio")
 
-    page = 1
     kp_num = kp_number or int(time.time()) % 100000
     date_str = datetime.now().strftime("%d.%m.%Y")
+    page = 1
 
-    _draw_header(c)
-    y = H - 28
+    _draw_cover(c, project_type, pkg["name"], pkg["timeline"], kp_num, date_str, client_name)
+    c.showPage()
+    page += 1
 
-    y = _draw_hero(c, y, project_type, pkg["name"], pkg["timeline"], kp_num, date_str, client_name)
-    y = _draw_stats(c, y)
+    y = H - 24
 
-    y = _draw_section_header(c, y, "01", "О проекте")
+    y = _draw_stats_bar(c, y)
+    y -= 4
+    y = _draw_section_title(c, y, "01  \u00b7  О ПРОЕКТЕ", "Анализ и решение")
+
     if ai_text:
-        y = _draw_ai_blocks(c, y, ai_text)
+        y = _draw_ai_section(c, y, ai_text)
     else:
-        h = _wrap_text(c, LM + 4, y, (
+        h = _wrap(c, LM, y, (
             f"Разработка Telegram Mini App типа «{project_type}» "
-            f"с полным комплексом функций для успешного запуска и роста вашего бизнеса."
-        ), CW - 8, FONT, 9.5, C_SLATE700, 13)
-        y -= h + 6
+            f"с полным комплексом функций для успешного запуска вашего бизнеса."
+        ), CW, FONT, 10, C_SLATE600, 15)
+        y -= h + 10
 
-    y = _draw_section_header(c, y, "02", f"Пакет «{pkg['name']}» — {pkg['subtitle']}")
-    y = _draw_features(c, y, pkg["features"], pkg["not_included"])
+    if y < BOTTOM + 120:
+        c.showPage()
+        page += 1
+        y = H - 24
+
+    y -= 6
+    y = _draw_section_title(c, y, "02  \u00b7  РЕШЕНИЕ", f"Пакет «{pkg['name']}» — {pkg['subtitle']}")
+    y = _draw_features_grid(c, y, pkg["features"], pkg["not_included"], pkg["name"], pkg["subtitle"])
     y = _draw_guarantees(c, y, pkg["guarantee"], pkg["support"], pkg["updates"])
 
-    y = _draw_section_header(c, y, "03", "Стоимость")
-    y = _draw_price(c, y, pkg["price"], discount_pct, pkg["name"])
+    _page_footer(c, page)
 
-    y = _draw_section_header(c, y, "04", "Сроки реализации")
+    if y < BOTTOM + 200:
+        c.showPage()
+        page += 1
+        y = H - 24
+
+    y -= 4
+    y = _draw_section_title(c, y, "03  \u00b7  ИНВЕСТИЦИИ", "Стоимость проекта")
+    y = _draw_price_block(c, y, pkg["price"], discount_pct, pkg["name"])
+
+    y -= 4
+    y = _draw_section_title(c, y, "04  \u00b7  СРОКИ", "Этапы реализации")
     phases = TIMELINE_PHASES.get(pkg_key, TIMELINE_PHASES["business"])
     y = _draw_timeline(c, y, phases, pkg["timeline"])
 
-    y = _draw_section_header(c, y, "05", "Порядок оплаты")
+    steps_needed = 50 + 28 * 5 + 32 * mm + 40
+    payment_needed = 70 + 60 + 50
+
+    if y < BOTTOM + payment_needed + steps_needed:
+        _page_footer(c, page)
+        c.showPage()
+        page += 1
+        y = H - 24
+
+    y -= 4
+    y = _draw_section_title(c, y, "05  \u00b7  ОПЛАТА", "Порядок расчётов")
     y = _draw_payment(c, y, pkg["price"], discount_pct)
 
-    y = _draw_section_header(c, y, "06", "Следующие шаги")
+    if y < BOTTOM + steps_needed:
+        _page_footer(c, page)
+        c.showPage()
+        page += 1
+        y = H - 24
+
+    y -= 4
+    y = _draw_section_title(c, y, "06  \u00b7  СТАРТ", "Следующие шаги")
     y = _draw_steps(c, y)
 
     _draw_cta(c, y)
 
-    total_pages = c.getPageNumber()
-    c.save()
+    _page_footer(c, page)
 
+    c.save()
     buf.seek(0)
     return buf.read()
 
