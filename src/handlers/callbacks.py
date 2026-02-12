@@ -1128,121 +1128,12 @@ async def callback_handler(update: Update, context: ContextTypes.DEFAULT_TYPE) -
         else:
             await query.edit_message_text("Информация не найдена", reply_markup=get_back_keyboard())
 
-    elif data == "smart_prices":
-        from src.pricing import get_price_main_text, get_price_main_keyboard
-        await query.message.reply_text(
-            get_price_main_text(), parse_mode="Markdown",
-            reply_markup=get_price_main_keyboard()
-        )
-
-    elif data == "smart_portfolio":
-        await query.message.reply_text(
-            PORTFOLIO_MESSAGE, parse_mode="Markdown",
-            reply_markup=get_portfolio_keyboard()
-        )
-
-    elif data == "smart_faq":
-        await query.message.reply_text(
-            "❓ Выберите вопрос:",
-            reply_markup=get_faq_keyboard()
-        )
-
-    elif data == "smart_calc":
-        await query.message.reply_text(
-            "🧮 Выберите функции для расчёта:",
-            reply_markup=get_calculator_keyboard()
-        )
-
-    elif data == "smart_compare":
-        from src.pricing import get_price_main_text, get_price_main_keyboard
-        await query.message.reply_text(
-            get_price_main_text(), parse_mode="Markdown",
-            reply_markup=get_price_main_keyboard()
-        )
-
-    elif data == "smart_roi":
-        await query.message.reply_text(
-            "Давайте прикинем, как быстро окупится ваш проект. "
-            "Расскажите — какая у вас сфера, примерный средний чек и сколько клиентов в месяц? "
-            "Я посчитаю всё конкретно под вас."
-        )
-
-    elif data == "smart_discount":
-        from src.tasks_tracker import tasks_tracker as tt_smart
-        progress = tt_smart.get_user_progress(user_id)
-        discount = progress.get_discount_percent()
-        coins = progress.total_coins
-        if discount > 0:
-            text = (
-                f"У вас уже есть скидка {discount}% и {coins} монет на счету. "
-                f"Можно ещё увеличить — до 25%. Попробуйте /bonus, там несложные задания."
-            )
-        else:
-            text = (
-                "Сейчас у вас скидок пока нет, но это легко исправить. "
-                "Напишите /bonus — там задания, за которые начисляются монеты. "
-                "Скидка растёт до 25%."
-            )
-        await query.message.reply_text(text)
-
-    elif data == "smart_consult":
-        await query.message.reply_text(
-            "📞 Отлично! Напишите удобное время для созвона — "
-            "менеджер свяжется с вами. Или просто расскажите о проекте здесь, "
-            "и я помогу подготовить всю информацию."
-        )
-        lead_manager.create_lead(user_id=user_id, username=query.from_user.username, first_name=query.from_user.first_name)
-        lead_manager.add_tag(user_id, "consult_request")
-
-    elif data == "smart_brief":
-        await query.message.reply_text(
-            "Отлично, давайте соберём ТЗ. Расскажите своими словами — "
-            "что за бизнес, что хотите от приложения, есть ли макеты или референсы? "
-            "Я помогу всё структурировать."
-        )
-
-    elif data == "smart_lead":
-        lead_manager.create_lead(user_id=user_id, username=query.from_user.username, first_name=query.from_user.first_name)
-        from src.leads import LeadPriority
-        lead_manager.update_lead(user_id, score=40, priority=LeadPriority.HOT)
-        await query.message.reply_text(
-            "Записал! Менеджер свяжется с вами в ближайшее время. "
-            "А пока можем продолжить — расскажите, что хотите реализовать, и я помогу подготовить детали."
-        )
-
-    elif data == "smart_payment":
-        from src.payments import get_payment_keyboard
-        await query.message.reply_text(
-            "💳 Выберите способ оплаты:",
-            reply_markup=get_payment_keyboard()
-        )
-
-    elif data == "smart_contract":
-        await query.message.reply_text(
-            "Договор подготовим после того, как согласуем ТЗ и стоимость. "
-            "Если ещё не обсудили детали — давайте начнём с описания проекта, а дальше я всё оформлю.",
-            reply_markup=get_lead_keyboard()
-        )
-
-    elif data == "smart_manager":
-        import os
-        manager_id = os.environ.get("MANAGER_CHAT_ID")
-        lead_manager.create_lead(user_id=user_id, username=query.from_user.username, first_name=query.from_user.first_name)
-        lead_manager.add_tag(user_id, "manager_request")
-        await query.message.reply_text(
-            "📞 Запрос передан менеджеру. Он свяжется с вами в ближайшее время!"
-        )
-        if manager_id:
-            try:
-                await context.bot.send_message(
-                    int(manager_id),
-                    f"🔔 Запрос от клиента\n"
-                    f"👤 {query.from_user.first_name} (@{query.from_user.username or 'нет'})\n"
-                    f"🆔 {user_id}",
-                    parse_mode="HTML"
-                )
-            except Exception:
-                pass
+    elif data.startswith("smart_"):
+        try:
+            await _handle_smart_button(query, context, data, user_id)
+        except Exception as e:
+            logger.error(f"Smart button '{data}' error for user {user_id}: {e}")
+            await query.message.reply_text("Произошла ошибка, попробуйте ещё раз.")
 
     elif data == "start_quiz":
         from src.onboarding import onboarding_manager
@@ -1586,3 +1477,111 @@ async def callback_handler(update: Update, context: ContextTypes.DEFAULT_TYPE) -
 
     else:
         logger.warning(f"Unknown callback_data: {data} from user {user_id}")
+
+
+async def _handle_smart_button(query, context, data: str, user_id: int) -> None:
+    import os
+
+    async def _safe_reply(text, parse_mode=None, reply_markup=None):
+        try:
+            await query.message.reply_text(text, parse_mode=parse_mode, reply_markup=reply_markup)
+        except Exception:
+            await query.message.reply_text(text, reply_markup=reply_markup)
+
+    if data == "smart_prices":
+        from src.pricing import get_price_main_text, get_price_main_keyboard
+        await _safe_reply(get_price_main_text(), parse_mode="Markdown", reply_markup=get_price_main_keyboard())
+
+    elif data == "smart_portfolio":
+        await _safe_reply(PORTFOLIO_MESSAGE, parse_mode="Markdown", reply_markup=get_portfolio_keyboard())
+
+    elif data == "smart_faq":
+        await query.message.reply_text("❓ Выберите вопрос:", reply_markup=get_faq_keyboard())
+
+    elif data == "smart_calc":
+        await query.message.reply_text("🧮 Выберите функции для расчёта:", reply_markup=get_calculator_keyboard())
+
+    elif data == "smart_compare":
+        from src.pricing import get_price_main_text, get_price_main_keyboard
+        await _safe_reply(get_price_main_text(), parse_mode="Markdown", reply_markup=get_price_main_keyboard())
+
+    elif data == "smart_roi":
+        await query.message.reply_text(
+            "Давайте прикинем, как быстро окупится ваш проект. "
+            "Расскажите — какая у вас сфера, примерный средний чек и сколько клиентов в месяц? "
+            "Я посчитаю всё конкретно под вас."
+        )
+
+    elif data == "smart_discount":
+        from src.tasks_tracker import tasks_tracker as tt_smart
+        progress = tt_smart.get_user_progress(user_id)
+        discount = progress.get_discount_percent()
+        coins = progress.total_coins
+        if discount > 0:
+            text = (
+                f"У вас уже есть скидка {discount}% и {coins} монет на счету. "
+                f"Можно ещё увеличить — до 25%. Попробуйте /bonus, там несложные задания."
+            )
+        else:
+            text = (
+                "Сейчас у вас скидок пока нет, но это легко исправить. "
+                "Напишите /bonus — там задания, за которые начисляются монеты. "
+                "Скидка растёт до 25%."
+            )
+        await query.message.reply_text(text)
+
+    elif data == "smart_consult":
+        await query.message.reply_text(
+            "📞 Отлично! Напишите удобное время для созвона — "
+            "менеджер свяжется с вами. Или просто расскажите о проекте здесь, "
+            "и я помогу подготовить всю информацию."
+        )
+        lead_manager.create_lead(user_id=user_id, username=query.from_user.username, first_name=query.from_user.first_name)
+        lead_manager.add_tag(user_id, "consult_request")
+
+    elif data == "smart_brief":
+        await query.message.reply_text(
+            "Отлично, давайте соберём ТЗ. Расскажите своими словами — "
+            "что за бизнес, что хотите от приложения, есть ли макеты или референсы? "
+            "Я помогу всё структурировать."
+        )
+
+    elif data == "smart_lead":
+        lead_manager.create_lead(user_id=user_id, username=query.from_user.username, first_name=query.from_user.first_name)
+        from src.leads import LeadPriority
+        lead_manager.update_lead(user_id, score=40, priority=LeadPriority.HOT)
+        await query.message.reply_text(
+            "Записал! Менеджер свяжется с вами в ближайшее время. "
+            "А пока можем продолжить — расскажите, что хотите реализовать, и я помогу подготовить детали."
+        )
+
+    elif data == "smart_payment":
+        from src.payments import get_payment_keyboard
+        await query.message.reply_text("💳 Выберите способ оплаты:", reply_markup=get_payment_keyboard())
+
+    elif data == "smart_contract":
+        await query.message.reply_text(
+            "Договор подготовим после того, как согласуем ТЗ и стоимость. "
+            "Если ещё не обсудили детали — давайте начнём с описания проекта, а дальше я всё оформлю.",
+            reply_markup=get_lead_keyboard()
+        )
+
+    elif data == "smart_manager":
+        lead_manager.create_lead(user_id=user_id, username=query.from_user.username, first_name=query.from_user.first_name)
+        lead_manager.add_tag(user_id, "manager_request")
+        await query.message.reply_text("📞 Запрос передан менеджеру. Он свяжется с вами в ближайшее время!")
+        manager_id = os.environ.get("MANAGER_CHAT_ID")
+        if manager_id:
+            try:
+                await context.bot.send_message(
+                    int(manager_id),
+                    f"🔔 Запрос от клиента\n"
+                    f"👤 {query.from_user.first_name} (@{query.from_user.username or 'нет'})\n"
+                    f"🆔 {user_id}",
+                    parse_mode="HTML"
+                )
+            except Exception:
+                pass
+
+    else:
+        logger.warning(f"Unknown smart button: {data}")
