@@ -8,6 +8,15 @@ The WEB4TG Studio AI Agent Bot serves as an AI-powered support agent for WEB4TG 
 - **Развёртывание**: Бот работает ТОЛЬКО на Railway, НЕ запускать на Replit
 
 ## Recent Changes (February 2026)
+- **Copywriting & Anthropomorphism Upgrade (Feb 12)**:
+  - ENHANCED: `knowledge_base.py` — Expanded anthropomorphism section (25+ speech patterns, human imperfections, 8 situational reactions, messenger style rules, anti-patterns)
+  - ENHANCED: `knowledge_base.py` — Upsell with ROI by 6 industries, benefit formulas (5 templates), pain points by 7 niches, urgency/scarcity triggers (5 types)
+  - ENHANCED: `context_builder.py` — SOCIAL_PROOF_TRIGGERS expanded with concrete metrics, added "timing" category
+  - ENHANCED: `context_builder.py` — INDUSTRY_CASE_STUDIES: 8 cases with investment/payback/ROI metrics, prices aligned with price list
+  - ENHANCED: `context_builder.py` — All 8 OBJECTION_STRATEGIES rewritten with numbered steps, formulas, case references
+  - ENHANCED: Static messages (welcome, help, price, portfolio, contact, clear, error) rewritten for natural human tone
+  - FIX: Voice transcription and emotion analysis switched from gemini-2.0-flash to gemini-3-pro-preview (config.model_name)
+  - FIX: Price consistency audit — all case study numbers aligned with price list
 - **Enterprise Features (Feb 11, session 3)**:
   - NEW: `src/monitoring.py` — Performance monitoring, health checks, metrics DB, manager alerts (30-min cooldown)
   - NEW: `src/rate_limiter.py` — Token bucket rate limiting (12/min), circuit breaker (5 failures → 60s open), exponential backoff
