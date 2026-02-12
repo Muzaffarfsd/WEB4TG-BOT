@@ -118,7 +118,7 @@ async def analyze_emotions_and_prepare_text(text: str) -> str:
     try:
         response = await asyncio.to_thread(
             client.models.generate_content,
-            model="gemini-2.0-flash",
+            model=config.model_name,
             contents=[VOICE_EMOTION_PROMPT + text],
             config=types.GenerateContentConfig(
                 max_output_tokens=2000,
@@ -248,7 +248,7 @@ async def _transcribe_voice(voice_bytes: bytes) -> str:
 
     response = await asyncio.to_thread(
         client.models.generate_content,
-        model="gemini-2.0-flash",
+        model=config.model_name,
         contents=[audio_part, text_part],
         config=types.GenerateContentConfig(
             max_output_tokens=500,
