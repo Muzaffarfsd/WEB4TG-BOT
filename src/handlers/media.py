@@ -349,29 +349,39 @@ async def _transcribe_voice_with_emotion(voice_bytes: bytes) -> dict:
 
     wav_bytes = await _convert_ogg_to_wav(voice_bytes)
 
-    for attempt in range(2):
-        try:
-            if attempt == 0:
-                audio_data = wav_bytes if wav_bytes else bytes(voice_bytes)
-                mime = "audio/wav" if wav_bytes else "audio/ogg"
+    strategies = []
 
-                tmp_path = None
+    if wav_bytes:
+        strategies.append(("files_api_wav", wav_bytes, "audio/wav", ".wav"))
+        strategies.append(("inline_wav", wav_bytes, "audio/wav", None))
+    strategies.append(("files_api_ogg", bytes(voice_bytes), "audio/ogg", ".ogg"))
+    strategies.append(("inline_ogg", bytes(voice_bytes), "audio/ogg", None))
+
+    for strategy_name, audio_data, mime, suffix in strategies:
+        uploaded_file = None
+        tmp_path = None
+        try:
+            if strategy_name.startswith("files_api"):
                 try:
-                    suffix = ".wav" if wav_bytes else ".ogg"
                     with tempfile.NamedTemporaryFile(suffix=suffix, delete=False) as tmp:
                         tmp.write(audio_data)
                         tmp_path = tmp.name
 
+                    upload_config = types.UploadFileConfig(mime_type=mime)
                     uploaded_file = await asyncio.to_thread(
                         client.files.upload,
-                        file=tmp_path
+                        file=tmp_path,
+                        config=upload_config
                     )
-                    logger.info(f"Uploaded audio to Files API: {uploaded_file.name} ({len(audio_data)} bytes, {mime})")
+                    logger.info(f"[{strategy_name}] Uploaded {len(audio_data)} bytes, uri={uploaded_file.uri}, mime={uploaded_file.mime_type}")
 
                     audio_part = types.Part.from_uri(
                         file_uri=uploaded_file.uri,
-                        mime_type=uploaded_file.mime_type
+                        mime_type=mime
                     )
+                except Exception as upload_err:
+                    logger.warning(f"[{strategy_name}] Upload failed: {upload_err}")
+                    continue
                 finally:
                     if tmp_path:
                         try:
@@ -379,10 +389,8 @@ async def _transcribe_voice_with_emotion(voice_bytes: bytes) -> dict:
                         except Exception:
                             pass
             else:
-                audio_data = bytes(voice_bytes)
-                mime = "audio/ogg"
                 audio_part = types.Part.from_bytes(data=audio_data, mime_type=mime)
-                logger.info(f"Attempt 2: using inline bytes with {mime}")
+                logger.info(f"[{strategy_name}] Using inline {len(audio_data)} bytes, mime={mime}")
 
             text_part = types.Part(text=prompt_text)
 
@@ -406,24 +414,31 @@ async def _transcribe_voice_with_emotion(voice_bytes: bytes) -> dict:
                     if parts:
                         resp_text = getattr(parts[0], 'text', None)
 
-            logger.info(f"Transcription attempt {attempt+1} (model={audio_model}): response={resp_text[:200] if resp_text else 'None'}")
+            logger.info(f"[{strategy_name}] model={audio_model}, response={resp_text[:300] if resp_text else 'None'}")
 
             if resp_text:
                 result = _parse_emotion_json(resp_text.strip())
                 if result["text"]:
-                    try:
-                        if attempt == 0:
+                    if uploaded_file:
+                        try:
                             await asyncio.to_thread(client.files.delete, name=uploaded_file.name)
-                    except Exception:
-                        pass
+                        except Exception:
+                            pass
                     return result
-                logger.warning(f"Transcription attempt {attempt+1}: parsed text empty, raw={resp_text[:300]}")
+                logger.warning(f"[{strategy_name}] Parsed text is empty from raw: {resp_text[:300]}")
             else:
-                logger.warning(f"Transcription attempt {attempt+1}: no text, candidates={getattr(response, 'candidates', 'N/A')}")
+                logger.warning(f"[{strategy_name}] No text in response, candidates={getattr(response, 'candidates', 'N/A')}")
 
         except Exception as e:
-            logger.error(f"Voice transcription error (attempt {attempt+1}): {e}", exc_info=True)
+            logger.error(f"[{strategy_name}] Transcription error: {e}", exc_info=True)
+        finally:
+            if uploaded_file:
+                try:
+                    await asyncio.to_thread(client.files.delete, name=uploaded_file.name)
+                except Exception:
+                    pass
 
+    logger.error(f"All transcription strategies failed for {len(voice_bytes)} bytes audio")
     return {"text": "", "emotion": "neutral", "energy": "medium"}
 
 
