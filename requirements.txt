@@ -34,3 +34,4 @@ websockets==15.0.1
 pytz
 telegram
 fpdf2
+reportlab

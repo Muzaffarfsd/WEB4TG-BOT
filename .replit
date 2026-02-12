@@ -5,7 +5,7 @@ integrations = ["python_gemini_ai_integrations:1.0.0"]
 
 [nix]
 channel = "stable-25_05"
-packages = ["cacert", "cargo", "ffmpeg-full", "glibcLocales", "libffi", "libiconv", "libxcrypt", "openssl", "pkg-config", "rustc"]
+packages = ["cacert", "cargo", "ffmpeg-full", "freetype", "glibcLocales", "libffi", "libiconv", "libxcrypt", "openssl", "pkg-config", "rustc"]
 
 [workflows]
 runButton = "Project"
