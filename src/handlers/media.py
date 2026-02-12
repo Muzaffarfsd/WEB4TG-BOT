@@ -755,10 +755,10 @@ async def voice_handler(update: Update, context: ContextTypes.DEFAULT_TYPE) -> N
             except Exception as e:
                 logger.error(f"ElevenLabs TTS error ({type(e).__name__}): {e}")
 
-        dynamic_btns = get_dynamic_buttons(user.id, transcription, session.message_count)
+        dynamic_btns = get_dynamic_buttons(user.id, transcription, session.message_count, ai_response=response_text)
         reply_markup = None
         if dynamic_btns:
-            keyboard_rows = [[InlineKeyboardButton(text, callback_data=cb)] for text, cb in dynamic_btns[:3]]
+            keyboard_rows = [[InlineKeyboardButton(text, callback_data=cb)] for text, cb in dynamic_btns]
             reply_markup = InlineKeyboardMarkup(keyboard_rows)
 
         text_summary = _make_text_summary(response_text)
@@ -896,10 +896,10 @@ async def photo_handler(update: Update, context: ContextTypes.DEFAULT_TYPE) -> N
                 session.add_message("assistant", response.text, config.max_history_length)
                 lead_manager.save_message(user.id, "assistant", response.text)
 
-                dynamic_btns = get_dynamic_buttons(user.id, user_text, session.message_count)
+                dynamic_btns = get_dynamic_buttons(user.id, user_text, session.message_count, ai_response=response.text)
                 reply_markup = None
                 if dynamic_btns:
-                    keyboard_rows = [[InlineKeyboardButton(text, callback_data=cb)] for text, cb in dynamic_btns[:3]]
+                    keyboard_rows = [[InlineKeyboardButton(text, callback_data=cb)] for text, cb in dynamic_btns]
                     reply_markup = InlineKeyboardMarkup(keyboard_rows)
 
                 await update.message.reply_text(response.text, parse_mode="Markdown", reply_markup=reply_markup)

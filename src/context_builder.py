@@ -206,31 +206,62 @@ MOMENTUM_STRATEGIES = {
 
 DYNAMIC_BUTTONS_BY_STAGE = {
     "awareness": [
-        ("💰 Узнать цены", "smart_prices"),
-        ("📂 Примеры работ", "smart_portfolio"),
-        ("❓ Частые вопросы", "smart_faq")
+        ("Хочу узнать цены", "smart_prices"),
+        ("Покажите примеры", "smart_portfolio"),
     ],
     "interest": [
-        ("🧮 Рассчитать стоимость", "smart_calc"),
-        ("📂 Посмотреть примеры", "smart_portfolio"),
-        ("📊 Сравнить тарифы", "smart_compare")
+        ("Рассчитать мой проект", "smart_calc"),
+        ("Покажите примеры", "smart_portfolio"),
     ],
     "consideration": [
-        ("📊 Рассчитать окупаемость", "smart_roi"),
-        ("🎁 Узнать про скидки", "smart_discount"),
-        ("📋 Составить ТЗ", "smart_brief")
+        ("Посчитать окупаемость", "smart_roi"),
+        ("Какие есть скидки?", "smart_discount"),
     ],
     "decision": [
-        ("📋 Составить ТЗ", "smart_brief"),
-        ("🎁 Получить спецпредложение", "smart_discount"),
-        ("✅ Оставить заявку", "smart_lead")
+        ("Хочу оставить заявку", "smart_lead"),
+        ("Давайте составим ТЗ", "smart_brief"),
     ],
     "action": [
-        ("💳 Способы оплаты", "smart_payment"),
-        ("📄 Скачать договор", "smart_contract"),
-        ("✅ Оставить заявку", "smart_lead")
+        ("Как оплатить?", "smart_payment"),
+        ("Хочу оставить заявку", "smart_lead"),
     ]
 }
+
+
+def should_show_buttons(user_message: str, ai_response: str, message_count: int) -> bool:
+    if message_count <= 1:
+        return False
+
+    msg_lower = user_message.lower().strip().rstrip('.!,')
+
+    skip_signals = [
+        'спасибо', 'понял', 'ок', 'ладно', 'хорошо', 'ясно',
+        'угу', 'ага', 'да', 'нет', 'не надо', 'потом',
+        'пока', 'до свидания', 'bye'
+    ]
+    if msg_lower in skip_signals:
+        return False
+
+    show_signals = [
+        'цен', 'стоимост', 'сколько', 'прайс', 'тариф',
+        'пример', 'портфолио', 'кейс', 'работ',
+        'заказ', 'заявк', 'начать', 'хочу', 'готов',
+        'оплат', 'договор', 'счёт', 'счет',
+        'скидк', 'акци', 'бонус',
+        'калькулятор', 'рассчитать', 'посчитать',
+        'окупаем', 'roi', 'выгод',
+    ]
+    for signal in show_signals:
+        if signal in msg_lower:
+            return True
+
+    resp_lower = ai_response.lower()
+    cta_signals = ['напишите', 'расскажите', 'оставьте заявку', 'рассчитаем', 'давайте']
+    for signal in cta_signals:
+        if signal in resp_lower:
+            return True
+
+    return message_count % 4 == 0
 
 
 def detect_emotions(text: str) -> list:
@@ -781,10 +812,12 @@ def build_full_context(user_id: int, user_message: str, username: str = None, fi
     return None
 
 
-def get_dynamic_buttons(user_id: int, user_message: str, message_count: int = 0) -> list:
+def get_dynamic_buttons(user_id: int, user_message: str, message_count: int = 0, ai_response: str = "") -> list:
+    if not should_show_buttons(user_message, ai_response, message_count):
+        return []
     stage = detect_funnel_stage(user_id, user_message, message_count)
     buttons = DYNAMIC_BUTTONS_BY_STAGE.get(stage, DYNAMIC_BUTTONS_BY_STAGE["awareness"])
-    return buttons[:3]
+    return buttons[:2]
 
 
 def is_returning_user(user_id: int) -> bool:

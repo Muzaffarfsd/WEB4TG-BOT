@@ -584,10 +584,10 @@ async def message_handler(update: Update, context: ContextTypes.DEFAULT_TYPE) ->
         except asyncio.CancelledError:
             pass
 
-        dynamic_btns = get_dynamic_buttons(user.id, user_message, session.message_count)
+        dynamic_btns = get_dynamic_buttons(user.id, user_message, session.message_count, ai_response=response)
         reply_markup = None
         if dynamic_btns:
-            keyboard_rows = [[InlineKeyboardButton(text, callback_data=cb)] for text, cb in dynamic_btns[:3]]
+            keyboard_rows = [[InlineKeyboardButton(text, callback_data=cb)] for text, cb in dynamic_btns]
             reply_markup = InlineKeyboardMarkup(keyboard_rows)
 
         proactive_voice_sent = False
