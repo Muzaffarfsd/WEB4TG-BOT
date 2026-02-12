@@ -257,6 +257,282 @@ class AdvancedAnalytics:
             logger.error(f"Daily funnel failed: {e}")
             return []
 
+    def get_dropoff_analysis(self, days: int = 30) -> Dict:
+        if not DATABASE_URL:
+            return {}
+        try:
+            with get_connection() as conn:
+                with conn.cursor() as cur:
+                    cur.execute("""
+                        WITH user_stages AS (
+                            SELECT
+                                user_id,
+                                ARRAY_AGG(DISTINCT event_name ORDER BY event_name) as stages,
+                                COUNT(*) as total_events
+                            FROM funnel_events
+                            WHERE created_at > NOW() - %s * INTERVAL '1 day'
+                            GROUP BY user_id
+                        ),
+                        stage_counts AS (
+                            SELECT
+                                unnest(ARRAY['start', 'menu_open', 'calculator_open', 'lead_submit', 'payment_view']) as stage,
+                                0 as sort_order
+                        )
+                        SELECT
+                            fe.event_name as stage,
+                            COUNT(DISTINCT fe.user_id) as users_at_stage
+                        FROM funnel_events fe
+                        WHERE fe.created_at > NOW() - %s * INTERVAL '1 day'
+                        GROUP BY fe.event_name
+                        ORDER BY users_at_stage DESC
+                    """, (days, days))
+                    rows = cur.fetchall()
+
+                    if not rows:
+                        return {}
+
+                    stages = [(r[0], r[1]) for r in rows]
+                    dropoffs = []
+                    for i in range(len(stages) - 1):
+                        current_users = stages[i][1]
+                        next_users = stages[i + 1][1]
+                        if current_users > 0:
+                            dropoff_rate = round((1 - next_users / current_users) * 100, 1)
+                            dropoffs.append({
+                                "from_stage": stages[i][0],
+                                "to_stage": stages[i + 1][0],
+                                "dropoff_rate": dropoff_rate,
+                                "users_lost": current_users - next_users
+                            })
+
+                    highest_dropoff = max(dropoffs, key=lambda x: x["dropoff_rate"]) if dropoffs else None
+
+                    cur.execute("""
+                        SELECT AVG(msg_count)
+                        FROM (
+                            SELECT user_id, COUNT(*) as msg_count
+                            FROM funnel_events
+                            WHERE created_at > NOW() - %s * INTERVAL '1 day'
+                            GROUP BY user_id
+                            HAVING COUNT(DISTINCT event_name) = 1
+                        ) as single_stage_users
+                    """, (days,))
+                    avg_row = cur.fetchone()
+                    avg_messages_before_dropoff = round(float(avg_row[0] or 1), 1) if avg_row and avg_row[0] else 1.0
+
+                    cur.execute("""
+                        SELECT event_name, COUNT(*) as cnt
+                        FROM funnel_events fe
+                        WHERE fe.created_at > NOW() - %s * INTERVAL '1 day'
+                          AND fe.user_id NOT IN (
+                              SELECT DISTINCT user_id FROM funnel_events
+                              WHERE event_name = 'lead_submit'
+                              AND created_at > NOW() - %s * INTERVAL '1 day'
+                          )
+                        GROUP BY event_name
+                        ORDER BY cnt DESC
+                        LIMIT 1
+                    """, (days, days))
+                    last_type_row = cur.fetchone()
+                    most_common_last_type = last_type_row[0] if last_type_row else "unknown"
+
+                    return {
+                        "stages": stages,
+                        "dropoffs": dropoffs,
+                        "highest_dropoff": highest_dropoff,
+                        "avg_messages_before_dropoff": avg_messages_before_dropoff,
+                        "most_common_last_type": most_common_last_type
+                    }
+        except Exception as e:
+            logger.error(f"Drop-off analysis failed: {e}")
+            return {}
+
+    def get_tool_conversion_attribution(self, days: int = 30) -> Dict:
+        if not DATABASE_URL:
+            return {}
+        try:
+            with get_connection() as conn:
+                with conn.cursor() as cur:
+                    cur.execute("""
+                        SELECT
+                            im.tool_name,
+                            COUNT(DISTINCT im.user_id) as total_users,
+                            COUNT(DISTINCT CASE WHEN fe.event_name = 'lead_submit' THEN im.user_id END) as converted_users
+                        FROM interaction_metrics im
+                        LEFT JOIN funnel_events fe ON im.user_id = fe.user_id AND fe.event_name = 'lead_submit'
+                        WHERE im.created_at > NOW() - %s * INTERVAL '1 day'
+                          AND im.tool_name IS NOT NULL
+                        GROUP BY im.tool_name
+                        ORDER BY converted_users DESC
+                        LIMIT 10
+                    """, (days,))
+                    tool_rows = cur.fetchall()
+
+                    cur.execute("""
+                        SELECT
+                            fe.event_name as stage,
+                            COUNT(DISTINCT fe.user_id) as total_users,
+                            COUNT(DISTINCT CASE WHEN fe2.event_name = 'lead_submit' THEN fe.user_id END) as converted
+                        FROM funnel_events fe
+                        LEFT JOIN funnel_events fe2 ON fe.user_id = fe2.user_id AND fe2.event_name = 'lead_submit'
+                        WHERE fe.created_at > NOW() - %s * INTERVAL '1 day'
+                        GROUP BY fe.event_name
+                        ORDER BY converted DESC
+                        LIMIT 10
+                    """, (days,))
+                    stage_rows = cur.fetchall()
+
+                    cur.execute("""
+                        SELECT AVG(ps.score)
+                        FROM propensity_scores ps
+                        JOIN funnel_events fe ON ps.user_id = fe.user_id AND fe.event_name = 'lead_submit'
+                        WHERE ps.created_at > NOW() - %s * INTERVAL '1 day'
+                    """, (days,))
+                    avg_score_row = cur.fetchone()
+                    avg_propensity = round(float(avg_score_row[0] or 0), 2) if avg_score_row and avg_score_row[0] else 0
+
+                    return {
+                        "top_converting_tools": [
+                            {"tool": r[0], "total_users": r[1], "converted": r[2],
+                             "rate": round(r[2] / r[1] * 100, 1) if r[1] > 0 else 0}
+                            for r in tool_rows
+                        ],
+                        "top_converting_stages": [
+                            {"stage": r[0], "total_users": r[1], "converted": r[2],
+                             "rate": round(r[2] / r[1] * 100, 1) if r[1] > 0 else 0}
+                            for r in stage_rows
+                        ],
+                        "avg_propensity_at_conversion": avg_propensity
+                    }
+        except Exception as e:
+            logger.error(f"Tool conversion attribution failed: {e}")
+            return {}
+
+    def predict_ltv(self, user_id: int) -> Dict:
+        if not DATABASE_URL:
+            return {"category": "low", "estimated_value": 0, "factors": {}}
+        try:
+            with get_connection() as conn:
+                with conn.cursor() as cur:
+                    lead_score = 0
+                    try:
+                        cur.execute("""
+                            SELECT score FROM leads WHERE user_id = %s ORDER BY updated_at DESC LIMIT 1
+                        """, (user_id,))
+                        row = cur.fetchone()
+                        if row:
+                            lead_score = row[0] or 0
+                    except Exception:
+                        pass
+
+                    tools_used = 0
+                    try:
+                        cur.execute("""
+                            SELECT COUNT(DISTINCT tool_name) FROM interaction_metrics
+                            WHERE user_id = %s AND tool_name IS NOT NULL
+                        """, (user_id,))
+                        row = cur.fetchone()
+                        if row:
+                            tools_used = row[0] or 0
+                    except Exception:
+                        pass
+
+                    session_count = 0
+                    try:
+                        cur.execute("""
+                            SELECT COUNT(DISTINCT DATE(created_at)) FROM funnel_events
+                            WHERE user_id = %s
+                        """, (user_id,))
+                        row = cur.fetchone()
+                        if row:
+                            session_count = row[0] or 0
+                    except Exception:
+                        pass
+
+                    score = (lead_score * 0.4) + (tools_used * 15) + (session_count * 10)
+
+                    if score > 80:
+                        category = "high"
+                        estimated_value = 300000
+                    elif score > 40:
+                        category = "medium"
+                        estimated_value = 200000
+                    else:
+                        category = "low"
+                        estimated_value = 100000
+
+                    return {
+                        "category": category,
+                        "estimated_value": estimated_value,
+                        "factors": {
+                            "lead_score": lead_score,
+                            "tools_used": tools_used,
+                            "session_count": session_count,
+                            "composite_score": round(score, 1)
+                        }
+                    }
+        except Exception as e:
+            logger.error(f"LTV prediction failed for user {user_id}: {e}")
+            return {"category": "low", "estimated_value": 0, "factors": {}}
+
+    def predict_churn_risk(self, user_id: int) -> Dict:
+        if not DATABASE_URL:
+            return {"risk": "unknown", "factors": {}}
+        try:
+            with get_connection() as conn:
+                with conn.cursor() as cur:
+                    cur.execute("""
+                        SELECT
+                            EXTRACT(DAY FROM NOW() - MAX(created_at)) as days_since_last,
+                            COUNT(*) as total_events
+                        FROM funnel_events
+                        WHERE user_id = %s
+                    """, (user_id,))
+                    row = cur.fetchone()
+
+                    if not row or row[1] == 0:
+                        return {"risk": "high", "factors": {"reason": "no_activity"}}
+
+                    days_since_last = float(row[0] or 0)
+                    total_events = row[1]
+
+                    cur.execute("""
+                        SELECT
+                            COUNT(*) FILTER (WHERE created_at > NOW() - INTERVAL '7 days') as recent,
+                            COUNT(*) FILTER (WHERE created_at BETWEEN NOW() - INTERVAL '14 days' AND NOW() - INTERVAL '7 days') as previous
+                        FROM funnel_events
+                        WHERE user_id = %s
+                    """, (user_id,))
+                    trend_row = cur.fetchone()
+                    recent = trend_row[0] if trend_row else 0
+                    previous = trend_row[1] if trend_row else 0
+
+                    if previous > 0:
+                        trend = "increasing" if recent > previous else "decreasing" if recent < previous else "stable"
+                    else:
+                        trend = "new" if recent > 0 else "inactive"
+
+                    if days_since_last > 14 or trend == "inactive":
+                        risk = "high"
+                    elif days_since_last > 7 or trend == "decreasing":
+                        risk = "medium"
+                    else:
+                        risk = "low"
+
+                    return {
+                        "risk": risk,
+                        "factors": {
+                            "days_since_last_interaction": round(days_since_last, 1),
+                            "total_events": total_events,
+                            "engagement_trend": trend,
+                            "recent_7d_events": recent,
+                            "previous_7d_events": previous
+                        }
+                    }
+        except Exception as e:
+            logger.error(f"Churn risk prediction failed for user {user_id}: {e}")
+            return {"risk": "unknown", "factors": {}}
+
     def format_advanced_stats(self, days: int = 30) -> str:
         text = f"📊 <b>Продвинутая аналитика ({days} дн.)</b>\n\n"
 

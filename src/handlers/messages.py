@@ -1,11 +1,13 @@
 import asyncio
 import logging
+import re
+import time as _time_module
 from telegram import Update, InlineKeyboardMarkup, InlineKeyboardButton
 from telegram.ext import ContextTypes
 from telegram.constants import ChatAction
 
 from src.session import session_manager
-from src.ai_client import ai_client
+from src.ai_client import ai_client, validate_response
 from src.config import config
 from src.keyboards import get_main_menu_keyboard, get_lead_keyboard, get_loyalty_menu_keyboard
 from src.leads import lead_manager, LeadPriority
@@ -19,6 +21,108 @@ from src.handlers.utils import send_typing_action, loyalty_system, MANAGER_CHAT_
 from src.keyboards import get_review_moderation_keyboard
 
 logger = logging.getLogger(__name__)
+
+
+OBJECTION_KEYWORDS = [
+    "дорого", "дороговато", "не потяну", "бюджет", "подумаю", "позже",
+    "не сейчас", "потом", "сомневаюсь", "не уверен", "гарантии", "риск",
+    "конкурент", "дешевле", "фрилансер", "сам сделаю", "бесплатно",
+    "тильда", "wix", "не сезон", "кризис", "мошенник", "обман",
+    "expensive", "cheaper", "not sure", "doubt", "later", "think about it"
+]
+
+CLOSING_KEYWORDS = [
+    "хочу заказать", "готов начать", "давайте начнём", "оформляем", "оплат",
+    "предоплат", "реквизит", "когда начнём", "договор", "подписываем",
+    "go ahead", "let's start", "готов заплатить", "оплачу", "записаться",
+    "созвон", "бриф", "ТЗ", "техническое задание"
+]
+
+FAQ_KEYWORDS = [
+    "привет", "здравствуйте", "добрый", "hello", "hi", "что вы делаете",
+    "чем занимаетесь", "расскажите о себе", "кто вы", "как дела",
+    "что такое mini app", "что умеет бот"
+]
+
+CREATIVE_KEYWORDS = [
+    "опиши", "представь", "покажи", "расскажи подробно", "нарисуй",
+    "визуализируй", "imagine", "describe", "show me", "придумай",
+    "предложи варианты", "как бы выглядел"
+]
+
+
+def detect_query_context(message_text: str) -> str:
+    text_lower = message_text.lower()
+
+    for kw in OBJECTION_KEYWORDS:
+        if kw in text_lower:
+            return "objection"
+
+    for kw in CLOSING_KEYWORDS:
+        if kw in text_lower:
+            return "closing"
+
+    for kw in FAQ_KEYWORDS:
+        if kw in text_lower:
+            return "faq"
+
+    for kw in CREATIVE_KEYWORDS:
+        if kw in text_lower:
+            return "creative"
+
+    question_marks = text_lower.count("?")
+    commas = text_lower.count(",")
+    words = len(text_lower.split())
+    if (question_marks >= 2 or commas >= 3) and words > 30:
+        return "complex"
+
+    return ""
+
+
+def get_adaptive_length_hint(session) -> str:
+    user_messages = []
+    for msg in reversed(session.messages):
+        if msg.get("role") == "user" and msg.get("parts"):
+            for part in msg["parts"]:
+                if isinstance(part, dict) and part.get("text"):
+                    text = part["text"]
+                    if not text.startswith("["):
+                        user_messages.append(text)
+                        if len(user_messages) >= 3:
+                            break
+        if len(user_messages) >= 3:
+            break
+
+    if len(user_messages) < 3:
+        return ""
+
+    if all(len(m) < 20 for m in user_messages):
+        return "[АДАПТАЦИЯ ДЛИНЫ] Клиент пишет коротко — отвечай max 2-3 предложения"
+
+    if all(len(m) > 100 for m in user_messages):
+        return "[АДАПТАЦИЯ ДЛИНЫ] Клиент пишет подробно — можешь дать развёрнутый ответ до 150 слов"
+
+    return ""
+
+
+def track_conversation_velocity(user_id: int, user_data: dict) -> dict:
+    now = _time_module.time()
+    last_ts = user_data.get("_last_message_ts")
+    velocity_info = {"timestamp": now, "delta": None}
+
+    if last_ts:
+        delta = now - last_ts
+        velocity_info["delta"] = round(delta, 2)
+
+    user_data["_last_message_ts"] = now
+
+    msg_timestamps = user_data.get("_msg_timestamps", [])
+    msg_timestamps.append(now)
+    if len(msg_timestamps) > 20:
+        msg_timestamps = msg_timestamps[-20:]
+    user_data["_msg_timestamps"] = msg_timestamps
+
+    return velocity_info
 
 
 INTEREST_TAGS = {
@@ -471,6 +575,16 @@ async def message_handler(update: Update, context: ContextTypes.DEFAULT_TYPE) ->
     elif lang_suffix:
         client_context = lang_suffix
     
+    velocity_info = track_conversation_velocity(user.id, context.user_data)
+    if velocity_info.get("delta") is not None:
+        logger.debug(f"User {user.id} response delta: {velocity_info['delta']}s")
+
+    query_context = detect_query_context(user_message)
+    if query_context:
+        logger.debug(f"User {user.id} query_context: {query_context}")
+
+    adaptive_hint = get_adaptive_length_hint(session)
+
     typing_task = asyncio.create_task(
         send_typing_action(update, duration=60.0)
     )
@@ -481,8 +595,16 @@ async def message_handler(update: Update, context: ContextTypes.DEFAULT_TYPE) ->
         response = None
 
         messages_for_ai = session.get_history()
+
+        extra_context_parts = []
         if client_context:
-            context_msg = {"role": "user", "parts": [{"text": f"[СИСТЕМНЫЙ КОНТЕКСТ — не показывай клиенту, используй для персонализации]\n{client_context}"}]}
+            extra_context_parts.append(client_context)
+        if adaptive_hint:
+            extra_context_parts.append(adaptive_hint)
+
+        if extra_context_parts:
+            full_context = "\n".join(extra_context_parts)
+            context_msg = {"role": "user", "parts": [{"text": f"[СИСТЕМНЫЙ КОНТЕКСТ — не показывай клиенту, используй для персонализации]\n{full_context}"}]}
             response_ack = {"role": "model", "parts": [{"text": "Понял контекст, учту в ответе."}]}
             messages_for_ai = [context_msg, response_ack] + messages_for_ai
 
@@ -497,7 +619,8 @@ async def message_handler(update: Update, context: ContextTypes.DEFAULT_TYPE) ->
                 messages=messages_for_ai,
                 tool_executor=_tool_executor,
                 thinking_level=thinking_level,
-                max_steps=4
+                max_steps=4,
+                query_context=query_context or None
             )
             
             if agentic_result["special_actions"]:
@@ -564,7 +687,8 @@ async def message_handler(update: Update, context: ContextTypes.DEFAULT_TYPE) ->
             response = await ai_client.generate_response_stream(
                 messages=messages_for_ai,
                 thinking_level=thinking_level,
-                on_chunk=on_stream_chunk
+                on_chunk=on_stream_chunk,
+                query_context=query_context or None
             )
 
             if draft_count > 0:
@@ -575,6 +699,11 @@ async def message_handler(update: Update, context: ContextTypes.DEFAULT_TYPE) ->
 
         if not response:
             response = "Извините, не удалось сформировать ответ. Попробуйте переформулировать вопрос."
+
+        is_valid, cleaned = validate_response(response)
+        if not is_valid:
+            logger.info(f"Response validation corrected issues for user {user.id}")
+            response = cleaned
 
         response, ai_buttons = parse_ai_buttons(response)
 

@@ -383,6 +383,57 @@ class ABTestingSystem:
 
         return "\n".join(lines)
 
+    def check_significance(self, test_name: str) -> Dict[str, Any]:
+        if not DATABASE_URL:
+            return {"significant": False, "confidence": 0.0, "winner": None, "sample_size": 0}
+        try:
+            sig = self.chi_square_significance(test_name)
+
+            sample_size = (sig.get("a_users", 0) or 0) + (sig.get("b_users", 0) or 0)
+
+            confidence = 0.0
+            if sig.get("p_value") is not None:
+                confidence = round((1 - sig["p_value"]) * 100, 1)
+
+            winner = None
+            if sig.get("significant") and sig.get("winner"):
+                winner = sig["winner"]
+
+            return {
+                "significant": sig.get("significant", False),
+                "confidence": confidence,
+                "winner": winner,
+                "sample_size": sample_size,
+                "a_rate": sig.get("a_rate", 0),
+                "b_rate": sig.get("b_rate", 0),
+                "chi2": sig.get("chi2"),
+                "p_value": sig.get("p_value")
+            }
+        except Exception as e:
+            logger.error(f"Significance check failed for {test_name}: {e}")
+            return {"significant": False, "confidence": 0.0, "winner": None, "sample_size": 0}
+
+    def get_all_test_results(self) -> Dict[str, Any]:
+        results = {}
+        try:
+            for test_name, test in WELCOME_TESTS.items():
+                sig_result = self.check_significance(test_name)
+                results[test_name] = {
+                    "description": test.description,
+                    "significant": sig_result["significant"],
+                    "confidence": sig_result["confidence"],
+                    "winner": sig_result["winner"],
+                    "sample_size": sig_result["sample_size"],
+                    "a_rate": sig_result.get("a_rate", 0),
+                    "b_rate": sig_result.get("b_rate", 0),
+                    "status": "winner_found" if sig_result["significant"] else
+                              "insufficient_data" if sig_result["sample_size"] < 60 else
+                              "no_difference"
+                }
+        except Exception as e:
+            logger.error(f"Failed to get all test results: {e}")
+        return results
+
     def format_all_tests_summary(self) -> str:
         lines = ["📊 <b>Сводка по всем A/B тестам</b>\n"]
         for test_name, test in WELCOME_TESTS.items():

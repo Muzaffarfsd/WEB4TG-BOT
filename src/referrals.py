@@ -5,7 +5,7 @@ import string
 import psycopg2
 from psycopg2.extras import RealDictCursor
 from dataclasses import dataclass
-from typing import Optional, List
+from typing import Optional, List, Dict
 from datetime import datetime
 from enum import Enum
 
@@ -337,6 +337,68 @@ class ReferralManager:
     
     def get_bot_referral_link(self, referral_code: str) -> str:
         return f"https://t.me/w4tg_bot?start=ref_{referral_code}"
+
+    def score_referral_quality(self, referrer_id: int) -> Dict:
+        if not DATABASE_URL:
+            return {"score": 0, "total_referrals": 0, "active_referrals": 0, "converted_referrals": 0}
+        try:
+            with self._get_connection() as conn:
+                with conn.cursor(cursor_factory=RealDictCursor) as cur:
+                    cur.execute("""
+                        SELECT referred_telegram_id, status
+                        FROM referrals
+                        WHERE referrer_telegram_id = %s
+                    """, (referrer_id,))
+                    referrals = cur.fetchall()
+
+                    if not referrals:
+                        return {"score": 0, "total_referrals": 0, "active_referrals": 0, "converted_referrals": 0}
+
+                    total = len(referrals)
+                    active_count = 0
+                    converted_count = 0
+
+                    for ref in referrals:
+                        ref_id = ref["referred_telegram_id"]
+
+                        try:
+                            cur.execute("""
+                                SELECT COUNT(*) as msg_count
+                                FROM funnel_events
+                                WHERE user_id = %s
+                            """, (ref_id,))
+                            msg_row = cur.fetchone()
+                            msg_count = msg_row["msg_count"] if msg_row else 0
+                            if msg_count > 5:
+                                active_count += 1
+                        except Exception:
+                            pass
+
+                        try:
+                            cur.execute("""
+                                SELECT 1 FROM leads WHERE user_id = %s LIMIT 1
+                            """, (ref_id,))
+                            if cur.fetchone():
+                                converted_count += 1
+                        except Exception:
+                            pass
+
+                    if total == 0:
+                        score = 0
+                    else:
+                        active_ratio = active_count / total
+                        converted_ratio = converted_count / total
+                        score = int(min(100, (active_ratio * 40) + (converted_ratio * 60) + min(total, 10)))
+
+                    return {
+                        "score": score,
+                        "total_referrals": total,
+                        "active_referrals": active_count,
+                        "converted_referrals": converted_count
+                    }
+        except Exception as e:
+            logger.error(f"Referral quality scoring failed for {referrer_id}: {e}")
+            return {"score": 0, "total_referrals": 0, "active_referrals": 0, "converted_referrals": 0}
 
 
 referral_manager = ReferralManager()

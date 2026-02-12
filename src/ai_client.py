@@ -1,6 +1,7 @@
 import asyncio
 import logging
-from typing import List, Dict, Optional
+import re
+from typing import List, Dict, Optional, Tuple
 from google import genai
 from google.genai import types
 from tenacity import retry, stop_after_attempt, wait_exponential, retry_if_exception
@@ -10,30 +11,272 @@ from src.knowledge_base import SYSTEM_PROMPT
 
 logger = logging.getLogger(__name__)
 
+VALID_TEMPLATE_PRICES = {150000, 170000, 180000, 200000}
+VALID_SUBSCRIPTION_PRICES = {9900, 14900, 24900}
+VALID_FEATURE_PRICE_MIN = 12000
+VALID_FEATURE_PRICE_MAX = 120000
+VALID_PREPAYMENT_PERCENT = 35
+VALID_FREE_FIXES_DAYS = 14
+VALID_TIMELINE_MIN = 7
+VALID_TIMELINE_MAX = 30
 
-def is_rate_limit_error(exception: BaseException) -> bool:
-    error_msg = str(exception)
-    return (
-        "429" in error_msg 
-        or "RATELIMIT_EXCEEDED" in error_msg
-        or "quota" in error_msg.lower() 
-        or "rate limit" in error_msg.lower()
-        or (hasattr(exception, 'status') and exception.status == 429)
-    )
+KNOWN_FEATURES = {
+    "каталог", "корзина", "авторизация", "поиск", "избранное", "отзывы",
+    "оплата", "подписки", "рассрочка", "доставка", "пвз", "экспресс",
+    "push", "чат", "видеозвонки", "лояльность", "промокоды", "реферальная",
+    "аналитика", "админ-панель", "crm", "трекинг", "бронирование", "очередь",
+    "календарь", "ai", "чат-бот", "рекомендации", "авто-ответы", "умный поиск",
+    "голосовой", "telegram бот", "whatsapp", "google maps", "sms", "email", "1c", "api",
+}
+
+PRICE_CORRECTION_MAP = {
+    "магазин": 150000, "интернет-магазин": 150000,
+    "ресторан": 180000, "доставка": 180000,
+    "фитнес": 200000, "фитнес-клуб": 200000,
+    "услуги": 170000, "сервис": 170000,
+}
+
+
+def validate_response(response_text: str) -> Tuple[bool, str]:
+    is_valid = True
+    cleaned = response_text
+
+    price_pattern = re.compile(r'(\d[\d\s]*\d)\s*(?:₽|руб|рублей)')
+    for match in price_pattern.finditer(cleaned):
+        raw_price = match.group(1).replace(" ", "").replace("\u00a0", "")
+        try:
+            price_val = int(raw_price)
+        except ValueError:
+            continue
+
+        if price_val < 1000:
+            continue
+
+        if price_val in VALID_TEMPLATE_PRICES:
+            continue
+        if price_val in VALID_SUBSCRIPTION_PRICES:
+            continue
+        if VALID_FEATURE_PRICE_MIN <= price_val <= VALID_FEATURE_PRICE_MAX:
+            if price_val % 1000 == 0:
+                continue
+
+        is_combined = False
+        if price_val % 1000 == 0:
+            for tp in VALID_TEMPLATE_PRICES:
+                remainder = price_val - tp
+                if remainder > 0 and remainder % 1000 == 0 and remainder <= 400000:
+                    is_combined = True
+                    break
+        if is_combined:
+            continue
+
+        if 100000 <= price_val <= 500000:
+            is_valid = False
+            closest = min(VALID_TEMPLATE_PRICES, key=lambda p: abs(p - price_val))
+            old_price_str = match.group(0)
+            new_price_str = f"{closest:,}".replace(",", " ") + " ₽"
+            cleaned = cleaned.replace(old_price_str, new_price_str)
+            logger.warning(f"Replaced suspicious price {price_val} with {closest}")
+
+    prepay_pattern = re.compile(r'(\d+)\s*%\s*(?:предоплат|аванс)')
+    for match in prepay_pattern.finditer(cleaned.lower()):
+        pct = int(match.group(1))
+        if pct != VALID_PREPAYMENT_PERCENT:
+            is_valid = False
+            cleaned = cleaned.replace(match.group(0), f"{VALID_PREPAYMENT_PERCENT}% предоплат")
+            logger.warning(f"Corrected prepayment from {pct}% to {VALID_PREPAYMENT_PERCENT}%")
+
+    fixes_pattern = re.compile(r'(\d+)\s*(?:дн|день|дней)\s*(?:бесплатн|правок|исправлен)')
+    for match in fixes_pattern.finditer(cleaned.lower()):
+        days = int(match.group(1))
+        if days != VALID_FREE_FIXES_DAYS:
+            is_valid = False
+            old_text = match.group(0)
+            new_text = old_text.replace(str(days), str(VALID_FREE_FIXES_DAYS))
+            cleaned = cleaned.replace(match.group(0), new_text)
+            logger.warning(f"Corrected free fixes from {days} to {VALID_FREE_FIXES_DAYS} days")
+
+    timeline_pattern = re.compile(r'за\s*(\d+)\s*(?:дн|день|дней)')
+    for match in timeline_pattern.finditer(cleaned.lower()):
+        days = int(match.group(1))
+        if days < VALID_TIMELINE_MIN or days > VALID_TIMELINE_MAX:
+            is_valid = False
+            corrected = max(VALID_TIMELINE_MIN, min(days, VALID_TIMELINE_MAX))
+            old_text = match.group(0)
+            new_text = old_text.replace(str(days), str(corrected))
+            cleaned = cleaned.replace(old_text, new_text)
+            logger.warning(f"Corrected timeline from {days} to {corrected} days")
+
+    guarantee_patterns = [
+        r'гарантируем\s+(?:100|полн)',
+        r'гарантия\s+(?:возврата|денег)',
+        r'100%\s*(?:гарантия|uptime|аптайм)',
+        r'бесплатн(?:о|ый|ая|ые)\s+(?:доработк|модул|функци)',
+    ]
+    for pat in guarantee_patterns:
+        if re.search(pat, cleaned.lower()):
+            is_valid = False
+            logger.warning(f"Unauthorized guarantee detected: {pat}")
+
+    discount_patterns = [
+        r'скидк[аеу]\s+\d+\s*%(?!\s*(?:за\s+монет|при\s+накоплен|за\s+coin))',
+        r'(?:дарим|даём|предоставляем)\s+скидк',
+        r'персональн\w*\s+скидк',
+        r'специальн\w*\s+скидк',
+    ]
+    for pat in discount_patterns:
+        if re.search(pat, cleaned.lower()):
+            context_around = cleaned.lower()
+            if "монет" not in context_around and "coin" not in context_around and "bonus" not in context_around:
+                is_valid = False
+                logger.warning(f"Unauthorized discount detected: {pat}")
+
+    return (is_valid, cleaned)
+
+
+def check_response_quality(response_text: str, user_message: str) -> str:
+    if not response_text or not response_text.strip():
+        return response_text
+
+    response_words = len(response_text.split())
+    user_words = len(user_message.split())
+
+    if user_words > 20 and response_words < 15:
+        logger.info(f"Response too short ({response_words} words) for detailed query ({user_words} words)")
+
+    fluff_phrases = [
+        "конечно", "безусловно", "разумеется", "несомненно",
+        "с удовольствием", "отличный вопрос", "хороший вопрос",
+    ]
+    fluff_count = sum(1 for phrase in fluff_phrases if phrase in response_text.lower())
+    content_sentences = [s.strip() for s in re.split(r'[.!?]', response_text) if len(s.strip()) > 20]
+
+    if fluff_count > 2 and len(content_sentences) < 2:
+        logger.info("Response appears to be mostly fluff without actionable content")
+
+    if response_words > 50:
+        cta_patterns = [
+            r'давайте', r'напишите', r'попробуйте', r'посмотрите',
+            r'расскажите', r'выбирайте', r'закажите', r'записывайтесь',
+            r'свяжитесь', r'обращайтесь', r'звоните', r'пишите',
+            r'/\w+', r'хотите\s', r'готовы\s', r'начнём',
+            r'\?', r'могу\s', r'предлагаю',
+        ]
+        has_cta = any(re.search(pat, response_text.lower()) for pat in cta_patterns)
+        if not has_cta:
+            logger.info("Long response without CTA detected")
+
+    return response_text
 
 
 class AIClient:
     def __init__(self):
         self._client = genai.Client(api_key=config.gemini_api_key)
 
+    def select_model_and_config(self, query_context: Optional[str] = None) -> Tuple[str, types.GenerateContentConfig]:
+        if not query_context:
+            return config.fast_model_name, types.GenerateContentConfig(
+                system_instruction=SYSTEM_PROMPT,
+                max_output_tokens=config.max_tokens,
+                temperature=config.temperature
+            )
+
+        ctx = query_context.lower()
+
+        if ctx in ("faq", "greeting", "simple"):
+            return config.fast_model_name, types.GenerateContentConfig(
+                system_instruction=SYSTEM_PROMPT,
+                max_output_tokens=1000,
+                temperature=0.5
+            )
+        elif ctx in ("objection", "complex", "sales"):
+            return config.thinking_model_name, types.GenerateContentConfig(
+                system_instruction=SYSTEM_PROMPT,
+                max_output_tokens=config.max_tokens,
+                temperature=0.7,
+                thinking_config=types.ThinkingConfig(thinking_budget=4096)
+            )
+        elif ctx in ("closing", "decision"):
+            return config.thinking_model_name, types.GenerateContentConfig(
+                system_instruction=SYSTEM_PROMPT,
+                max_output_tokens=config.max_tokens,
+                temperature=0.6,
+                thinking_config=types.ThinkingConfig(thinking_budget=2048)
+            )
+        elif ctx in ("creative", "upsell"):
+            return config.fast_model_name, types.GenerateContentConfig(
+                system_instruction=SYSTEM_PROMPT,
+                max_output_tokens=config.max_tokens,
+                temperature=0.8
+            )
+        else:
+            return config.fast_model_name, types.GenerateContentConfig(
+                system_instruction=SYSTEM_PROMPT,
+                max_output_tokens=config.max_tokens,
+                temperature=config.temperature
+            )
+
+    def _get_contextual_fallback(self, user_message: str) -> str:
+        msg = user_message.lower() if user_message else ""
+
+        if any(w in msg for w in ["цен", "стоимость", "сколько стоит", "прайс", "бюджет", "дорого", "price"]):
+            return (
+                "Шаблоны Mini App от 150 000 ₽ (магазин) до 200 000 ₽ (фитнес-клуб). "
+                "Доп. функции от 12 000 ₽. Предоплата 35%, 14 дней правок бесплатно. "
+                "Напишите /price для полного прайса или расскажите о проекте — посчитаю точнее)"
+            )
+        elif any(w in msg for w in ["портфолио", "примеры", "кейс", "работ", "portfolio"]):
+            return (
+                "У нас есть кейсы в e-commerce, ресторанах, фитнесе, услугах и образовании. "
+                "Напишите /portfolio чтобы посмотреть примеры работ)"
+            )
+        elif any(w in msg for w in ["срок", "когда", "быстро", "сколько дней", "время", "deadline"]):
+            return (
+                "Сроки разработки: простой проект 7-10 дней, средний 10-15, сложный 15-20 дней. "
+                "Расскажите о проекте — назову точные сроки)"
+            )
+        elif any(w in msg for w in ["оплат", "заплатить", "реквизит", "счёт", "payment"]):
+            return (
+                "Оплата в 2 этапа: 35% предоплата до начала работ, 65% после сдачи. "
+                "Напишите /payment для реквизитов)"
+            )
+        elif any(w in msg for w in ["подписк", "обслужив", "поддержк", "subscription"]):
+            return (
+                "Подписки на обслуживание: Мини 9 900₽/мес, Стандарт 14 900₽/мес, Премиум 24 900₽/мес. "
+                "Напишите /price → Подписки для деталей)"
+            )
+        elif any(w in msg for w in ["скидк", "акци", "промокод", "discount", "монет", "bonus"]):
+            return (
+                "Скидки за накопленные монеты: от 5% (500 монет) до 25% (2500+ монет). "
+                "Зарабатывайте через /referral и задания в /bonus)"
+            )
+        elif any(w in msg for w in ["привет", "здравств", "добрый", "hello", "hi"]):
+            return (
+                "Привет) Я Алекс из WEB4TG Studio — делаем Telegram Mini Apps для бизнеса. "
+                "Расскажите о вашем проекте или задайте вопрос — помогу разобраться)"
+            )
+        elif any(w in msg for w in ["консультац", "созвон", "звонок", "встреч"]):
+            return (
+                "Бесплатная консультация — отличная идея) "
+                "Напишите /consult чтобы выбрать удобное время для созвона)"
+            )
+        else:
+            return (
+                "Сейчас небольшая задержка с ответом. "
+                "Напишите ваш вопрос ещё раз через минуту, или используйте /help для навигации по командам)"
+            )
+
     async def generate_response_stream(
         self,
         messages: List[Dict],
         thinking_level: str = "medium",
         on_chunk=None,
-        max_retries: int = 2
+        max_retries: int = 2,
+        query_context: Optional[str] = None
     ) -> str:
-        if thinking_level == "high":
+        if query_context:
+            model, gen_config = self.select_model_and_config(query_context)
+        elif thinking_level == "high":
             model = config.thinking_model_name
             gen_config = types.GenerateContentConfig(
                 system_instruction=SYSTEM_PROMPT,
@@ -48,6 +291,16 @@ class AIClient:
                 max_output_tokens=config.max_tokens,
                 temperature=config.temperature
             )
+
+        user_message = ""
+        for msg in reversed(messages):
+            if msg.get("role") == "user":
+                parts = msg.get("parts", [])
+                if parts and isinstance(parts[0], dict):
+                    user_message = parts[0].get("text", "")
+                elif parts and isinstance(parts[0], str):
+                    user_message = parts[0]
+                break
 
         for attempt in range(max_retries + 1):
             try:
@@ -112,6 +365,11 @@ class AIClient:
                         logger.info(f"Stream rate limited, retrying in {delay}s (attempt {attempt+1}/{max_retries+1})")
                         await asyncio.sleep(delay)
                         continue
+                    elif "timeout" in str(stream_error[0]).lower() and attempt < max_retries:
+                        delay = 0.5 * (2 ** attempt)
+                        logger.info(f"Stream timeout, auto-retrying in {delay}s (attempt {attempt+1}/{max_retries+1})")
+                        await asyncio.sleep(delay)
+                        continue
                     elif attempt < max_retries:
                         delay = 0.5 * (2 ** attempt)
                         logger.info(f"Stream failed, retrying in {delay}s (attempt {attempt+1}/{max_retries+1})")
@@ -119,7 +377,10 @@ class AIClient:
                         continue
 
                 if full_text:
-                    return full_text
+                    is_valid, cleaned = validate_response(full_text)
+                    if not is_valid:
+                        logger.warning("Response validation found issues, using cleaned version")
+                    return check_response_quality(cleaned, user_message)
 
             except Exception as e:
                 error_type = type(e).__name__
@@ -131,21 +392,32 @@ class AIClient:
                         await asyncio.sleep(delay)
                         continue
                     logger.warning(f"Gemini stream rate limit exhausted: {error_type}: {error_msg}")
-                    return "Сейчас высокая нагрузка, попробуйте через минуту 🙏"
+                    return self._get_contextual_fallback(user_message)
+                if "timeout" in error_msg.lower():
+                    if attempt < max_retries:
+                        delay = 0.5 * (2 ** attempt)
+                        logger.warning(f"Gemini stream timeout (attempt {attempt+1}), auto-retrying in {delay}s")
+                        await asyncio.sleep(delay)
+                        continue
+                    logger.warning(f"Gemini stream timeout exhausted: {error_type}: {error_msg}")
+                    return self._get_contextual_fallback(user_message)
                 logger.error(f"Gemini stream failed: {error_type}: {error_msg}")
-                return await self.generate_response(messages, thinking_level)
+                return self._get_contextual_fallback(user_message)
 
-        logger.warning("Stream retries exhausted, falling back to regular response")
-        return await self.generate_response(messages, thinking_level)
+        logger.warning("Stream retries exhausted, providing contextual fallback")
+        return self._get_contextual_fallback(user_message)
 
     async def generate_response(
         self,
         messages: List[Dict],
         thinking_level: str = "medium",
         max_retries: int = 2,
-        retry_delay: float = 0.5
+        retry_delay: float = 0.5,
+        query_context: Optional[str] = None
     ) -> str:
-        if thinking_level == "high":
+        if query_context:
+            model, gen_config = self.select_model_and_config(query_context)
+        elif thinking_level == "high":
             model = config.thinking_model_name
             gen_config = types.GenerateContentConfig(
                 system_instruction=SYSTEM_PROMPT,
@@ -160,6 +432,16 @@ class AIClient:
                 max_output_tokens=config.max_tokens,
                 temperature=config.temperature
             )
+
+        user_message = ""
+        for msg in reversed(messages):
+            if msg.get("role") == "user":
+                parts = msg.get("parts", [])
+                if parts and isinstance(parts[0], dict):
+                    user_message = parts[0].get("text", "")
+                elif parts and isinstance(parts[0], str):
+                    user_message = parts[0]
+                break
         
         @retry(
             stop=stop_after_attempt(max_retries),
@@ -180,7 +462,10 @@ class AIClient:
             response = await _generate()
             
             if response.text:
-                return response.text
+                is_valid, cleaned = validate_response(response.text)
+                if not is_valid:
+                    logger.warning("Response validation found issues, using cleaned version")
+                return check_response_quality(cleaned, user_message)
             else:
                 logger.warning("Empty response from Gemini")
                 return "Извините, не удалось сформировать ответ. Попробуйте переформулировать вопрос."
@@ -191,13 +476,26 @@ class AIClient:
             
             if is_rate_limit_error(e):
                 logger.warning(f"Gemini rate limit hit: {error_type}: {error_msg}")
-                return "Сейчас высокая нагрузка, попробуйте через минуту 🙏"
+                return self._get_contextual_fallback(user_message)
             elif "timeout" in error_msg.lower() or "connect" in error_msg.lower():
                 logger.error(f"Gemini connection error: {error_type}: {error_msg}")
-                return "Не удалось подключиться к серверу. Попробуйте позже."
+                try:
+                    logger.info("Auto-retrying after timeout...")
+                    response = await asyncio.to_thread(
+                        self._client.models.generate_content,
+                        model=model,
+                        contents=messages,
+                        config=gen_config
+                    )
+                    if response.text:
+                        is_valid, cleaned = validate_response(response.text)
+                        return check_response_quality(cleaned, user_message)
+                except Exception:
+                    pass
+                return self._get_contextual_fallback(user_message)
             else:
                 logger.error(f"Gemini request failed: {error_type}: {error_msg}")
-                return "Произошла техническая ошибка. Попробуйте ещё раз или напишите позже."
+                return self._get_contextual_fallback(user_message)
     
     async def generate_response_with_tools(
         self,
@@ -252,7 +550,8 @@ class AIClient:
         messages: List[Dict],
         tool_executor,
         thinking_level: str = "medium",
-        max_steps: int = 4
+        max_steps: int = 4,
+        query_context: Optional[str] = None
     ) -> dict:
         """Multi-step agentic loop: AI calls tools, gets results, decides next action.
         
@@ -262,10 +561,16 @@ class AIClient:
         special_actions = []
         current_messages = list(messages)
         
+        effective_thinking = thinking_level
+        if query_context in ("objection", "complex", "sales"):
+            effective_thinking = "high"
+        elif query_context in ("faq", "greeting", "simple"):
+            effective_thinking = "low"
+
         for step in range(max_steps):
             result = await self.generate_response_with_tools(
                 messages=current_messages,
-                thinking_level=thinking_level
+                thinking_level=effective_thinking
             )
             
             if not result["tool_calls"]:
@@ -313,7 +618,8 @@ class AIClient:
         
         final_response = await self.generate_response(
             messages=current_messages,
-            thinking_level=thinking_level
+            thinking_level=effective_thinking,
+            query_context=query_context
         )
         
         return {
@@ -590,6 +896,21 @@ TOOL_DECLARATIONS = [
                     "description": "Город клиента, если озвучен"
                 }
             }
+        }
+    },
+    {
+        "name": "compare_with_competitors",
+        "description": "Сравнить разработку в WEB4TG Studio с альтернативами. Вызывай когда клиент упоминает конкурентов, фрилансеров, конструкторы или собственную разработку.",
+        "parameters": {
+            "type": "object",
+            "properties": {
+                "competitor_type": {
+                    "type": "string",
+                    "enum": ["freelancer", "agency", "constructor", "nocode", "inhouse", "general"],
+                    "description": "Тип альтернативы для сравнения"
+                }
+            },
+            "required": ["competitor_type"]
         }
     }
 ]
