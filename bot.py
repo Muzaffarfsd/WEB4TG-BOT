@@ -19,7 +19,7 @@ from src.handlers import (
     followup_handler, broadcast_handler, privacy_handler, inline_query_handler,
     faq_handler, promo_handler, testimonials_handler,
     promo_create_handler, promo_list_handler, promo_off_handler,
-    generate_daily_digest, handoff_handler,
+    generate_daily_digest, handoff_handler, mystatus_handler, brief_handler, consult_handler, crm_handler,
     get_emoji_id_handler, sticker_emoji_handler,
     propensity_dashboard_handler, ab_results_handler,
     ab_detail_handler, feedback_insights_handler,
@@ -55,6 +55,9 @@ async def post_init(application) -> None:
         BotCommand("promo", "🎟 Промокод"),
         BotCommand("referral", "👥 Реферальная программа"),
         BotCommand("bonus", "🎁 Бонусы и скидки"),
+        BotCommand("mystatus", "📊 Мой кабинет"),
+        BotCommand("brief", "📋 Составить бриф"),
+        BotCommand("consult", "📅 Записаться на консультацию"),
         BotCommand("contact", "📞 Связаться с нами"),
         BotCommand("privacy", "🔒 Конфиденциальность"),
         BotCommand("help", "❓ Помощь"),
@@ -306,6 +309,10 @@ def main() -> None:
     application.add_handler(CommandHandler("broadcast", broadcast_handler))
     application.add_handler(CommandHandler("privacy", privacy_handler))
     application.add_handler(CommandHandler("manager", handoff_handler))
+    application.add_handler(CommandHandler("mystatus", mystatus_handler))
+    application.add_handler(CommandHandler("brief", brief_handler))
+    application.add_handler(CommandHandler("consult", consult_handler))
+    application.add_handler(CommandHandler("crm", crm_handler))
     application.add_handler(CommandHandler("get_emoji_id", get_emoji_id_handler))
     application.add_handler(CommandHandler("propensity", propensity_dashboard_handler))
     application.add_handler(CommandHandler("ab_results", ab_results_handler))

@@ -17,6 +17,10 @@ from src.handlers.commands import (
     testimonials_handler,
     inline_query_handler,
     handoff_handler,
+    mystatus_handler,
+    brief_handler,
+    consult_handler,
+    crm_handler,
 )
 
 from src.handlers.callbacks import callback_handler
@@ -110,6 +114,10 @@ __all__ = [
     'promo_handler',
     'testimonials_handler',
     'handoff_handler',
+    'mystatus_handler',
+    'brief_handler',
+    'consult_handler',
+    'crm_handler',
     'propensity_dashboard_handler',
     'ab_results_handler',
     'ab_detail_handler',

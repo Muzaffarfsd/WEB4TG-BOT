@@ -1244,5 +1244,345 @@ async def callback_handler(update: Update, context: ContextTypes.DEFAULT_TYPE) -
             except Exception:
                 pass
 
+    elif data == "start_quiz":
+        from src.onboarding import onboarding_manager
+        onboarding_manager.start_quiz(user_id)
+        text, keyboard = onboarding_manager.get_step_keyboard(0)
+        await query.message.reply_text(text, parse_mode="HTML", reply_markup=keyboard)
+
+    elif data.startswith("quiz_biz_"):
+        from src.onboarding import onboarding_manager
+        answer = data.replace("quiz_biz_", "")
+        state = onboarding_manager.process_answer(user_id, answer)
+        if state:
+            text, keyboard = onboarding_manager.get_step_keyboard(state.step)
+            await query.edit_message_text(text, parse_mode="HTML", reply_markup=keyboard)
+
+    elif data.startswith("quiz_prob_"):
+        from src.onboarding import onboarding_manager
+        answer = data.replace("quiz_prob_", "")
+        state = onboarding_manager.process_answer(user_id, answer)
+        if state:
+            text, keyboard = onboarding_manager.get_step_keyboard(state.step)
+            await query.edit_message_text(text, parse_mode="HTML", reply_markup=keyboard)
+
+    elif data.startswith("quiz_bud_"):
+        from src.onboarding import onboarding_manager
+        answer = data.replace("quiz_bud_", "")
+        state = onboarding_manager.process_answer(user_id, answer)
+        if state:
+            text, keyboard = onboarding_manager.get_step_keyboard(state.step)
+            await query.edit_message_text(text, parse_mode="HTML", reply_markup=keyboard)
+
+    elif data.startswith("quiz_time_"):
+        from src.onboarding import onboarding_manager
+        answer = data.replace("quiz_time_", "")
+        state = onboarding_manager.process_answer(user_id, answer)
+        if state and state.completed:
+            onboarding_manager.save_to_lead(user_id)
+            analytics.track(user_id, FunnelEvent.LEAD_FORM_OPEN)
+            text, keyboard = onboarding_manager.generate_recommendation(user_id)
+            await query.edit_message_text(text, parse_mode="HTML", reply_markup=keyboard)
+
+    elif data == "quiz_skip":
+        from src.onboarding import onboarding_manager
+        onboarding_manager.clear_state(user_id)
+        await query.edit_message_text(
+            "Вот что могу показать:",
+            reply_markup=get_main_menu_keyboard()
+        )
+
+    elif data == "quiz_to_ai":
+        from src.onboarding import onboarding_manager
+        state = onboarding_manager.get_state(user_id)
+        hint = ""
+        if state and state.business_type:
+            from src.onboarding import BUSINESS_TYPES
+            biz = BUSINESS_TYPES.get(state.business_type, {})
+            hint = f" для направления «{biz.get('name', '')}»"
+        await query.message.reply_text(
+            f"💬 Отлично! Напишите мне любой вопрос{hint} — "
+            "я AI-консультант и помогу подобрать оптимальное решение."
+        )
+
+    elif data == "start_brief":
+        from src.brief_generator import brief_generator
+        brief_generator.start_brief(user_id)
+        result = brief_generator.get_current_step(user_id)
+        if result:
+            text, keyboard = result
+            await query.message.reply_text(text, parse_mode="HTML", reply_markup=keyboard)
+
+    elif data.startswith("brief_") and not data.startswith("brief_send"):
+        from src.brief_generator import brief_generator
+        if data == "brief_cancel":
+            brief_generator.clear_state(user_id)
+            await query.edit_message_text(
+                "❌ Бриф отменён.",
+                reply_markup=InlineKeyboardMarkup([
+                    [InlineKeyboardButton("◀️ Назад в меню", callback_data="menu_back")]
+                ])
+            )
+        else:
+            parts = data.split("_", 2)
+            if len(parts) >= 3:
+                step_id = parts[1]
+                answer = parts[2]
+                state = brief_generator.process_answer(user_id, step_id, answer)
+                if state and state.completed:
+                    brief_generator.save_to_lead(
+                        user_id,
+                        username=query.from_user.username,
+                        first_name=query.from_user.first_name
+                    )
+                    analytics.track(user_id, FunnelEvent.LEAD_FORM_OPEN)
+                    text, keyboard = brief_generator.format_brief(user_id)
+                    await query.edit_message_text(text, parse_mode="HTML", reply_markup=keyboard)
+                elif state:
+                    result = brief_generator.get_current_step(user_id)
+                    if result:
+                        text, keyboard = result
+                        await query.edit_message_text(text, parse_mode="HTML", reply_markup=keyboard)
+
+    elif data == "brief_send_manager":
+        from src.brief_generator import brief_generator
+        import os
+        manager_chat_id = os.environ.get("MANAGER_CHAT_ID")
+        brief_text = brief_generator.get_brief_summary_for_manager(user_id)
+        await query.edit_message_text(
+            "✅ <b>Бриф отправлен менеджеру!</b>\n\n"
+            "Он подготовит коммерческое предложение и свяжется с вами.",
+            parse_mode="HTML",
+            reply_markup=InlineKeyboardMarkup([
+                [InlineKeyboardButton("◀️ Назад в меню", callback_data="menu_back")]
+            ])
+        )
+        if manager_chat_id:
+            try:
+                await context.bot.send_message(
+                    int(manager_chat_id),
+                    f"📋 <b>Новый бриф от клиента!</b>\n\n"
+                    f"👤 {query.from_user.first_name} (@{query.from_user.username or 'нет'})\n"
+                    f"🆔 <code>{user_id}</code>\n\n"
+                    f"{brief_text}",
+                    parse_mode="HTML"
+                )
+            except Exception:
+                pass
+
+    elif data == "my_dashboard":
+        from src.client_dashboard import build_dashboard
+        text, keyboard = build_dashboard(
+            user_id,
+            username=query.from_user.username or "",
+            first_name=query.from_user.first_name or ""
+        )
+        await query.edit_message_text(text, parse_mode="HTML", reply_markup=keyboard)
+
+    elif data == "referral_info":
+        from src.referrals import referral_manager, REFERRER_REWARD
+        ref_code = referral_manager.get_referral_code(user_id)
+        ref_stats = referral_manager.get_user_stats(user_id)
+        bot_username = (await context.bot.get_me()).username
+        ref_link = f"https://t.me/{bot_username}?start=ref_{ref_code}"
+        text = (
+            f"👥 <b>Ваша реферальная программа</b>\n\n"
+            f"🔗 Ваша ссылка:\n<code>{ref_link}</code>\n\n"
+            f"👥 Приглашено: {ref_stats.get('referral_count', 0)}\n"
+            f"💰 Заработано: {ref_stats.get('total_earned', 0)} монет\n\n"
+            f"За каждого друга: <b>+{REFERRER_REWARD} монет</b>"
+        )
+        keyboard = InlineKeyboardMarkup([
+            [InlineKeyboardButton("◀️ Назад", callback_data="my_dashboard")]
+        ])
+        await query.edit_message_text(text, parse_mode="HTML", reply_markup=keyboard)
+
+    elif data == "compare_packages":
+        from src.package_comparison import get_comparison_view
+        text, keyboard = get_comparison_view()
+        await query.edit_message_text(text, parse_mode="HTML", reply_markup=keyboard)
+
+    elif data.startswith("pkg_"):
+        from src.package_comparison import get_package_detail
+        pkg_id = data.replace("pkg_", "")
+        text, keyboard = get_package_detail(pkg_id)
+        await query.edit_message_text(text, parse_mode="HTML", reply_markup=keyboard)
+
+    elif data.startswith("pkg_calc_"):
+        from src.package_comparison import calculate_with_discount
+        pkg_id = data.replace("pkg_calc_", "")
+        discount = 0
+        try:
+            from src.tasks_tracker import tasks_tracker
+            progress = tasks_tracker.get_user_progress(user_id)
+            discount = progress.get_discount_percent()
+        except Exception:
+            pass
+        text, keyboard = calculate_with_discount(pkg_id, discount)
+        await query.edit_message_text(text, parse_mode="HTML", reply_markup=keyboard)
+
+    elif data.startswith("timeline_"):
+        from src.package_comparison import get_timeline_view
+        pkg_id = data.replace("timeline_", "")
+        text, keyboard = get_timeline_view(pkg_id)
+        await query.edit_message_text(text, parse_mode="HTML", reply_markup=keyboard)
+
+    elif data == "menu_portfolio" or data == "portfolio_cases":
+        from src.portfolio_showcase import get_portfolio_menu
+        text, keyboard = get_portfolio_menu()
+        await query.edit_message_text(text, parse_mode="HTML", reply_markup=keyboard)
+
+    elif data.startswith("pcase_"):
+        from src.portfolio_showcase import get_case_detail
+        case_id = data.replace("pcase_", "")
+        text, keyboard = get_case_detail(case_id)
+        await query.edit_message_text(text, parse_mode="HTML", reply_markup=keyboard)
+
+    elif data == "book_consult":
+        from src.consultation import consultation_manager
+        text, keyboard = consultation_manager.start_booking(user_id)
+        await query.edit_message_text(text, parse_mode="HTML", reply_markup=keyboard)
+
+    elif data.startswith("consult_date_"):
+        from src.consultation import consultation_manager
+        date = data.replace("consult_date_", "")
+        text, keyboard = consultation_manager.set_date(user_id, date)
+        await query.edit_message_text(text, parse_mode="HTML", reply_markup=keyboard)
+
+    elif data.startswith("consult_time_"):
+        from src.consultation import consultation_manager
+        time_slot = data.replace("consult_time_", "")
+        text, keyboard = consultation_manager.set_time(user_id, time_slot)
+        await query.edit_message_text(text, parse_mode="HTML", reply_markup=keyboard)
+
+    elif data.startswith("consult_topic_"):
+        from src.consultation import consultation_manager
+        import os
+        topic = data.replace("consult_topic_", "")
+        text, keyboard = consultation_manager.set_topic(user_id, topic)
+        consultation_manager.save_to_lead(user_id)
+        await query.edit_message_text(text, parse_mode="HTML", reply_markup=keyboard)
+        manager_chat_id = os.environ.get("MANAGER_CHAT_ID")
+        if manager_chat_id:
+            try:
+                notif = consultation_manager.get_manager_notification(
+                    user_id, query.from_user.username or "", query.from_user.first_name or ""
+                )
+                await context.bot.send_message(int(manager_chat_id), notif, parse_mode="HTML")
+            except Exception:
+                pass
+
+    elif data == "consult_cancel":
+        await query.edit_message_text(
+            "❌ Запись отменена.",
+            reply_markup=InlineKeyboardMarkup([
+                [InlineKeyboardButton("◀️ Меню", callback_data="menu_back")]
+            ])
+        )
+
+    elif data == "offers_menu":
+        from src.countdown_offers import countdown_manager
+        text, keyboard = countdown_manager.get_offers_menu()
+        await query.edit_message_text(text, parse_mode="HTML", reply_markup=keyboard)
+
+    elif data.startswith("claim_offer_"):
+        from src.countdown_offers import countdown_manager
+        offer_id = data.replace("claim_offer_", "")
+        text, keyboard = countdown_manager.claim_offer(user_id, offer_id)
+        await query.edit_message_text(text, parse_mode="HTML", reply_markup=keyboard)
+
+    elif data == "demo_menu":
+        from src.trial_demo import get_demo_menu
+        text, keyboard = get_demo_menu()
+        await query.edit_message_text(text, parse_mode="HTML", reply_markup=keyboard)
+
+    elif data == "savings_calc":
+        from src.trial_demo import calculate_savings
+        text, keyboard = calculate_savings()
+        await query.edit_message_text(text, parse_mode="HTML", reply_markup=keyboard)
+
+    elif data == "crm_dashboard":
+        from src.crm_dashboard import get_crm_dashboard
+        text, keyboard = get_crm_dashboard()
+        await query.edit_message_text(text, parse_mode="HTML", reply_markup=keyboard)
+
+    elif data == "crm_hot":
+        from src.crm_dashboard import get_hot_leads_view
+        text, keyboard = get_hot_leads_view()
+        await query.edit_message_text(text, parse_mode="HTML", reply_markup=keyboard)
+
+    elif data == "crm_health":
+        from src.crm_dashboard import get_client_health_view
+        text, keyboard = get_client_health_view()
+        await query.edit_message_text(text, parse_mode="HTML", reply_markup=keyboard)
+
+    elif data == "achievements_view":
+        from src.achievements import achievement_manager
+        text, keyboard = achievement_manager.get_achievements_view(user_id)
+        await query.edit_message_text(text, parse_mode="HTML", reply_markup=keyboard)
+
+    elif data == "vip_program":
+        from src.achievements import get_vip_view
+        text, keyboard = get_vip_view(user_id)
+        await query.edit_message_text(text, parse_mode="HTML", reply_markup=keyboard)
+
+    elif data == "leaderboard":
+        from src.achievements import get_leaderboard
+        text, keyboard = get_leaderboard()
+        await query.edit_message_text(text, parse_mode="HTML", reply_markup=keyboard)
+
+    elif data == "seasonal_promo":
+        from src.achievements import get_seasonal_promo_view
+        text, keyboard = get_seasonal_promo_view()
+        await query.edit_message_text(text, parse_mode="HTML", reply_markup=keyboard)
+
+    elif data == "next_story":
+        from src.social_features import story_rotator
+        text, keyboard = story_rotator.get_story_view(user_id)
+        await query.edit_message_text(text, parse_mode="HTML", reply_markup=keyboard)
+
+    elif data == "share_story":
+        from src.social_features import get_share_text
+        ref_code = ""
+        try:
+            from src.referrals import referral_manager
+            ref_code = referral_manager.get_referral_code(user_id)
+        except Exception:
+            pass
+        text, keyboard = get_share_text(user_id, ref_code)
+        await query.edit_message_text(text, parse_mode="HTML", reply_markup=keyboard)
+
+    elif data == "gift_catalog":
+        from src.social_features import get_gift_catalog
+        text, keyboard = get_gift_catalog(user_id)
+        await query.edit_message_text(text, parse_mode="HTML", reply_markup=keyboard)
+
+    elif data.startswith("buy_gift_"):
+        from src.social_features import buy_gift
+        gift_id = data.replace("buy_gift_", "")
+        text, keyboard = buy_gift(user_id, gift_id)
+        await query.edit_message_text(text, parse_mode="HTML", reply_markup=keyboard)
+
+    elif data == "request_manager":
+        import os
+        from src.leads import lead_manager, LeadPriority
+        lead_manager.create_lead(user_id=user_id, username=query.from_user.username, first_name=query.from_user.first_name)
+        lead_manager.update_lead(user_id, score=40, priority=LeadPriority.HOT)
+        await query.edit_message_text(
+            "📞 <b>Запрос передан менеджеру!</b>\n\nОн свяжется с вами в ближайшее время.",
+            parse_mode="HTML",
+            reply_markup=InlineKeyboardMarkup([[InlineKeyboardButton("◀️ Меню", callback_data="menu_back")]])
+        )
+        manager_id = os.environ.get("MANAGER_CHAT_ID")
+        if manager_id:
+            try:
+                await context.bot.send_message(
+                    int(manager_id),
+                    f"🔔 Запрос менеджера\n👤 {query.from_user.first_name} (@{query.from_user.username or 'нет'})\n🆔 {user_id}",
+                    parse_mode="HTML"
+                )
+            except Exception:
+                pass
+
     else:
         logger.warning(f"Unknown callback_data: {data} from user {user_id}")

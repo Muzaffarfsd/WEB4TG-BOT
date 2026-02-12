@@ -120,9 +120,16 @@ async def start_handler(update: Update, context: ContextTypes.DEFAULT_TYPE) -> N
     except Exception as e:
         logger.debug(f"Could not pin message: {e}")
     
+    quiz_keyboard = InlineKeyboardMarkup([
+        [InlineKeyboardButton(
+            "🎯 Подобрать решение за 1 минуту", callback_data="start_quiz",
+            **styled_button_api_kwargs(style="constructive")
+        )],
+        [InlineKeyboardButton("📋 Главное меню", callback_data="menu_back")],
+    ])
     await update.message.reply_text(
         welcome_text,
-        reply_markup=get_quick_reply_keyboard()
+        reply_markup=quiz_keyboard
     )
     
     try:
@@ -467,6 +474,46 @@ async def inline_query_handler(update: Update, context: ContextTypes.DEFAULT_TYP
             )
     
     await update.inline_query.answer(results, cache_time=300)
+
+
+async def consult_handler(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
+    user = update.effective_user
+    from src.consultation import consultation_manager
+    text, keyboard = consultation_manager.start_booking(user.id)
+    await update.message.reply_text(text, parse_mode="HTML", reply_markup=keyboard)
+
+
+async def crm_handler(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
+    user = update.effective_user
+    import os
+    admin_ids = [os.environ.get("MANAGER_CHAT_ID", "")]
+    if str(user.id) not in admin_ids:
+        await update.message.reply_text("Эта команда доступна только администраторам.")
+        return
+    from src.crm_dashboard import get_crm_dashboard
+    text, keyboard = get_crm_dashboard()
+    await update.message.reply_text(text, parse_mode="HTML", reply_markup=keyboard)
+
+
+async def mystatus_handler(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
+    user = update.effective_user
+    from src.client_dashboard import build_dashboard
+    text, keyboard = build_dashboard(
+        user.id,
+        username=user.username or "",
+        first_name=user.first_name or ""
+    )
+    await update.message.reply_text(text, parse_mode="HTML", reply_markup=keyboard)
+
+
+async def brief_handler(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
+    user = update.effective_user
+    from src.brief_generator import brief_generator
+    brief_generator.start_brief(user.id)
+    result = brief_generator.get_current_step(user.id)
+    if result:
+        text, keyboard = result
+        await update.message.reply_text(text, parse_mode="HTML", reply_markup=keyboard)
 
 
 async def handoff_handler(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
