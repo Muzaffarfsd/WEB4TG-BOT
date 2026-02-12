@@ -228,40 +228,39 @@ DYNAMIC_BUTTONS_BY_STAGE = {
 }
 
 
-def should_show_buttons(user_message: str, ai_response: str, message_count: int) -> bool:
-    if message_count <= 1:
-        return False
+VALID_BUTTON_ACTIONS = {
+    'smart_prices', 'smart_portfolio', 'smart_faq', 'smart_calc',
+    'smart_roi', 'smart_discount', 'smart_brief', 'smart_lead',
+    'smart_payment', 'smart_contract'
+}
 
-    msg_lower = user_message.lower().strip().rstrip('.!,')
 
-    skip_signals = [
-        'спасибо', 'понял', 'ок', 'ладно', 'хорошо', 'ясно',
-        'угу', 'ага', 'да', 'нет', 'не надо', 'потом',
-        'пока', 'до свидания', 'bye'
-    ]
-    if msg_lower in skip_signals:
-        return False
+def parse_ai_buttons(ai_response: str) -> tuple:
+    import re
+    pattern = r'\[BUTTONS:\s*(.+?)\]\s*$'
+    match = re.search(pattern, ai_response, re.DOTALL)
 
-    show_signals = [
-        'цен', 'стоимост', 'сколько', 'прайс', 'тариф',
-        'пример', 'портфолио', 'кейс', 'работ',
-        'заказ', 'заявк', 'начать', 'хочу', 'готов',
-        'оплат', 'договор', 'счёт', 'счет',
-        'скидк', 'акци', 'бонус',
-        'калькулятор', 'рассчитать', 'посчитать',
-        'окупаем', 'roi', 'выгод',
-    ]
-    for signal in show_signals:
-        if signal in msg_lower:
-            return True
+    if not match:
+        clean = re.sub(r'\[BUTTONS:.*', '', ai_response, flags=re.DOTALL).rstrip()
+        return clean, []
 
-    resp_lower = ai_response.lower()
-    cta_signals = ['напишите', 'расскажите', 'оставьте заявку', 'рассчитаем', 'давайте']
-    for signal in cta_signals:
-        if signal in resp_lower:
-            return True
+    clean_response = ai_response[:match.start()].rstrip()
 
-    return message_count % 4 == 0
+    buttons_str = match.group(1).strip()
+    buttons = []
+
+    for part in buttons_str.split(','):
+        part = part.strip()
+        if '|' not in part:
+            continue
+        action_id, button_text = part.split('|', 1)
+        action_id = action_id.strip()
+        button_text = button_text.strip()
+
+        if action_id in VALID_BUTTON_ACTIONS and button_text and len(button_text) <= 40:
+            buttons.append((button_text, action_id))
+
+    return clean_response, buttons[:2]
 
 
 def detect_emotions(text: str) -> list:

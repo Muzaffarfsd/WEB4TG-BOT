@@ -462,7 +462,7 @@ async def message_handler(update: Update, context: ContextTypes.DEFAULT_TYPE) ->
             from src.multilang import get_string
             await update.message.reply_text(get_string("handoff_request", user_lang))
     
-    from src.context_builder import build_full_context, get_dynamic_buttons
+    from src.context_builder import build_full_context, parse_ai_buttons
     client_context = build_full_context(user.id, user_message, user.username, user.first_name)
 
     lang_suffix = get_prompt_suffix(user_lang)
@@ -547,12 +547,14 @@ async def message_handler(update: Update, context: ContextTypes.DEFAULT_TYPE) ->
 
             async def on_stream_chunk(partial_text: str):
                 nonlocal last_draft_len, draft_count
-                if len(partial_text) - last_draft_len >= 40:
+                import re as _re
+                display_text = _re.sub(r'\[BUTTONS:.*$', '', partial_text, flags=_re.DOTALL).rstrip()
+                if len(display_text) - last_draft_len >= 40:
                     try:
                         await send_message_draft(
                             context.bot,
                             update.effective_chat.id,
-                            partial_text + " ▌"
+                            display_text + " ▌"
                         )
                         last_draft_len = len(partial_text)
                         draft_count += 1
@@ -574,6 +576,8 @@ async def message_handler(update: Update, context: ContextTypes.DEFAULT_TYPE) ->
         if not response:
             response = "Извините, не удалось сформировать ответ. Попробуйте переформулировать вопрос."
 
+        response, ai_buttons = parse_ai_buttons(response)
+
         session.add_message("assistant", response, config.max_history_length)
 
         lead_manager.save_message(user.id, "assistant", response)
@@ -584,10 +588,9 @@ async def message_handler(update: Update, context: ContextTypes.DEFAULT_TYPE) ->
         except asyncio.CancelledError:
             pass
 
-        dynamic_btns = get_dynamic_buttons(user.id, user_message, session.message_count, ai_response=response)
         reply_markup = None
-        if dynamic_btns:
-            keyboard_rows = [[InlineKeyboardButton(text, callback_data=cb)] for text, cb in dynamic_btns]
+        if ai_buttons:
+            keyboard_rows = [[InlineKeyboardButton(text, callback_data=cb)] for text, cb in ai_buttons]
             reply_markup = InlineKeyboardMarkup(keyboard_rows)
 
         proactive_voice_sent = False

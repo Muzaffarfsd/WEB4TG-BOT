@@ -595,7 +595,7 @@ async def voice_handler(update: Update, context: ContextTypes.DEFAULT_TYPE) -> N
         follow_up_manager.cancel_follow_ups(user.id)
         follow_up_manager.schedule_follow_up(user.id)
 
-        from src.context_builder import build_full_context, get_dynamic_buttons
+        from src.context_builder import build_full_context, parse_ai_buttons
         client_context = build_full_context(user.id, transcription, user.username, user.first_name)
 
         emotion_hint = EMOTION_TO_VOICE_STYLE.get(client_emotion, "")
@@ -735,6 +735,8 @@ async def voice_handler(update: Update, context: ContextTypes.DEFAULT_TYPE) -> N
         if not response_text:
             response_text = "Извините, не удалось сформировать ответ. Попробуйте переформулировать вопрос."
 
+        response_text, ai_buttons = parse_ai_buttons(response_text)
+
         session.add_message("assistant", response_text, config.max_history_length)
         lead_manager.save_message(user.id, "assistant", response_text)
 
@@ -754,11 +756,9 @@ async def voice_handler(update: Update, context: ContextTypes.DEFAULT_TYPE) -> N
                 lead_manager.log_event("voice_reply_sent", user.id)
             except Exception as e:
                 logger.error(f"ElevenLabs TTS error ({type(e).__name__}): {e}")
-
-        dynamic_btns = get_dynamic_buttons(user.id, transcription, session.message_count, ai_response=response_text)
         reply_markup = None
-        if dynamic_btns:
-            keyboard_rows = [[InlineKeyboardButton(text, callback_data=cb)] for text, cb in dynamic_btns]
+        if ai_buttons:
+            keyboard_rows = [[InlineKeyboardButton(text, callback_data=cb)] for text, cb in ai_buttons]
             reply_markup = InlineKeyboardMarkup(keyboard_rows)
 
         text_summary = _make_text_summary(response_text)
@@ -861,7 +861,7 @@ async def photo_handler(update: Update, context: ContextTypes.DEFAULT_TYPE) -> N
             lead_manager.log_event("photo_analysis", user.id)
             lead_manager.update_activity(user.id)
 
-            from src.context_builder import build_full_context, get_dynamic_buttons
+            from src.context_builder import build_full_context, parse_ai_buttons
             client_context = build_full_context(user.id, user_text, user.username, user.first_name)
 
             from google import genai
@@ -893,16 +893,15 @@ async def photo_handler(update: Update, context: ContextTypes.DEFAULT_TYPE) -> N
             typing_task.cancel()
 
             if response.text:
-                session.add_message("assistant", response.text, config.max_history_length)
-                lead_manager.save_message(user.id, "assistant", response.text)
-
-                dynamic_btns = get_dynamic_buttons(user.id, user_text, session.message_count, ai_response=response.text)
+                clean_text, ai_buttons = parse_ai_buttons(response.text)
+                session.add_message("assistant", clean_text, config.max_history_length)
+                lead_manager.save_message(user.id, "assistant", clean_text)
                 reply_markup = None
-                if dynamic_btns:
-                    keyboard_rows = [[InlineKeyboardButton(text, callback_data=cb)] for text, cb in dynamic_btns]
+                if ai_buttons:
+                    keyboard_rows = [[InlineKeyboardButton(text, callback_data=cb)] for text, cb in ai_buttons]
                     reply_markup = InlineKeyboardMarkup(keyboard_rows)
 
-                await update.message.reply_text(response.text, parse_mode="Markdown", reply_markup=reply_markup)
+                await update.message.reply_text(clean_text, parse_mode="Markdown", reply_markup=reply_markup)
 
                 from src.handlers.messages import auto_tag_lead, auto_score_lead
                 auto_tag_lead(user.id, user_text)
