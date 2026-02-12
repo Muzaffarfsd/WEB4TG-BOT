@@ -1,5 +1,6 @@
 import os
 import logging
+import asyncio
 from telegram import Update, InlineKeyboardMarkup, InlineKeyboardButton, WebAppInfo, InlineQueryResultArticle, InputTextMessageContent
 from telegram.ext import ContextTypes
 from telegram.constants import ChatAction
@@ -124,16 +125,49 @@ async def start_handler(update: Update, context: ContextTypes.DEFAULT_TYPE) -> N
         reply_markup=get_quick_reply_keyboard()
     )
     
-    voice_greeting = (
-        f"Привет{name_part}! Меня зовут Алекс, я консультант в вэб-фор-тэ-гэ Студио. "
-        f"Ну смотрите... мы делаем мини-аппс для Телеграм — магазины, рестораны, салоны и много чего ещё. "
-        f"Кстати, можем общаться как удобно — текстом, голосовыми — мне без разницы. "
-        f"Расскажите, чем занимаетесь? Посмотрим, чем можем быть полезны."
-    )
+    try:
+        from google import genai
+        from google.genai import types as genai_types
+        from src.config import config as app_config
+
+        ai_client_greet = genai.Client(api_key=app_config.gemini_api_key)
+        greet_prompt = (
+            f"Ты — Алекс, живой консультант WEB4TG Studio. Запиши приветственное голосовое для нового клиента{name_part}.\n\n"
+            "ЗАДАЧА: поздороваться, коротко представиться, сказать что делаете (мини-аппс для Телеграм — магазины, рестораны, салоны), "
+            "упомянуть что можно общаться текстом или голосовыми, и спросить чем занимается клиент.\n\n"
+            "ПРАВИЛА:\n"
+            "- 200-350 символов максимум (15-25 секунд речи)\n"
+            "- Говори КАК ЖИВОЙ ЧЕЛОВЕК — с паузами (...), переходами ( — ), речевыми маркерами\n"
+            "- Никакого markdown, emoji, списков\n"
+            "- Каждый раз говори немного по-разному, не шаблонно\n"
+            "- Аббревиатуры раскрывай: WEB4TG = вэб-фор-тэ-гэ\n"
+            "- Верни ТОЛЬКО текст для озвучки, без комментариев"
+        )
+        greet_response = await asyncio.to_thread(
+            ai_client_greet.models.generate_content,
+            model=app_config.model_name,
+            contents=[greet_prompt],
+            config=genai_types.GenerateContentConfig(
+                max_output_tokens=400,
+                temperature=0.9
+            )
+        )
+        voice_greeting = greet_response.text.strip() if greet_response.text else None
+    except Exception as e:
+        logger.warning(f"AI greeting generation failed: {e}")
+        voice_greeting = None
+
+    if not voice_greeting:
+        voice_greeting = (
+            f"Привет{name_part}! Меня зовут Алекс, я консультант в вэб-фор-тэ-гэ Студио. "
+            f"Ну смотрите... мы делаем мини-аппс для Телеграм — магазины, рестораны, салоны и много чего ещё. "
+            f"Кстати, можем общаться как удобно — текстом, голосовыми — мне без разницы. "
+            f"Расскажите, чем занимаетесь? Посмотрим, чем можем быть полезны."
+        )
 
     try:
         await update.effective_chat.send_action(ChatAction.RECORD_VOICE)
-        voice_audio = await generate_voice_response(voice_greeting, use_cache=False, voice_profile="greeting")
+        voice_audio = await generate_voice_response(voice_greeting, use_cache=False)
         await update.message.reply_voice(voice=voice_audio)
         ab_testing.track_event(user.id, "welcome_voice", "voice_sent")
         logger.info(f"Sent voice greeting to user {user.id}")
