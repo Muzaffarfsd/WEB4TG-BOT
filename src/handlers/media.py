@@ -332,31 +332,63 @@ def _parse_emotion_json(raw: str) -> dict:
 async def _transcribe_voice_with_emotion(voice_bytes: bytes) -> dict:
     from google import genai
     from google.genai import types
+    import tempfile
+    import os
 
     client = genai.Client(api_key=config.gemini_api_key)
+    audio_model = config.audio_model_name
 
-    wav_bytes = await _convert_ogg_to_wav(voice_bytes)
-    if wav_bytes:
-        audio_part = types.Part.from_bytes(data=wav_bytes, mime_type="audio/wav")
-        logger.info("Using WAV format for transcription")
-    else:
-        audio_part = types.Part.from_bytes(data=bytes(voice_bytes), mime_type="audio/ogg")
-        logger.info("Using raw OGG format for transcription")
-
-    text_part = types.Part(text=(
+    prompt_text = (
         "Проанализируй это голосовое сообщение. Верни JSON:\n"
         '{"text": "дословная расшифровка на языке оригинала", '
         '"emotion": "одно слово: confident/hesitant/frustrated/excited/neutral/friendly/rushed/calm", '
         '"energy": "low/medium/high"}\n'
         "Если не можешь разобрать текст — верни пустой text.\n"
         "Верни ТОЛЬКО JSON, без комментариев и markdown."
-    ))
+    )
+
+    wav_bytes = await _convert_ogg_to_wav(voice_bytes)
 
     for attempt in range(2):
         try:
+            if attempt == 0:
+                audio_data = wav_bytes if wav_bytes else bytes(voice_bytes)
+                mime = "audio/wav" if wav_bytes else "audio/ogg"
+
+                tmp_path = None
+                try:
+                    suffix = ".wav" if wav_bytes else ".ogg"
+                    with tempfile.NamedTemporaryFile(suffix=suffix, delete=False) as tmp:
+                        tmp.write(audio_data)
+                        tmp_path = tmp.name
+
+                    uploaded_file = await asyncio.to_thread(
+                        client.files.upload,
+                        file=tmp_path
+                    )
+                    logger.info(f"Uploaded audio to Files API: {uploaded_file.name} ({len(audio_data)} bytes, {mime})")
+
+                    audio_part = types.Part.from_uri(
+                        file_uri=uploaded_file.uri,
+                        mime_type=uploaded_file.mime_type
+                    )
+                finally:
+                    if tmp_path:
+                        try:
+                            os.unlink(tmp_path)
+                        except Exception:
+                            pass
+            else:
+                audio_data = bytes(voice_bytes)
+                mime = "audio/ogg"
+                audio_part = types.Part.from_bytes(data=audio_data, mime_type=mime)
+                logger.info(f"Attempt 2: using inline bytes with {mime}")
+
+            text_part = types.Part(text=prompt_text)
+
             response = await asyncio.to_thread(
                 client.models.generate_content,
-                model=config.model_name,
+                model=audio_model,
                 contents=[audio_part, text_part],
                 config=types.GenerateContentConfig(
                     max_output_tokens=600,
@@ -364,19 +396,30 @@ async def _transcribe_voice_with_emotion(voice_bytes: bytes) -> dict:
                 )
             )
 
-            logger.info(f"Transcription attempt {attempt+1}: response.text={response.text[:200] if response.text else 'None'}")
+            resp_text = None
+            try:
+                resp_text = response.text
+            except (ValueError, AttributeError):
+                candidates = getattr(response, 'candidates', None)
+                if candidates and len(candidates) > 0:
+                    parts = getattr(candidates[0].content, 'parts', [])
+                    if parts:
+                        resp_text = getattr(parts[0], 'text', None)
 
-            if response.text:
-                result = _parse_emotion_json(response.text.strip())
+            logger.info(f"Transcription attempt {attempt+1} (model={audio_model}): response={resp_text[:200] if resp_text else 'None'}")
+
+            if resp_text:
+                result = _parse_emotion_json(resp_text.strip())
                 if result["text"]:
+                    try:
+                        if attempt == 0:
+                            await asyncio.to_thread(client.files.delete, name=uploaded_file.name)
+                    except Exception:
+                        pass
                     return result
-                logger.warning(f"Transcription attempt {attempt+1}: parsed text is empty, raw={response.text[:200]}")
+                logger.warning(f"Transcription attempt {attempt+1}: parsed text empty, raw={resp_text[:300]}")
             else:
-                logger.warning(f"Transcription attempt {attempt+1}: response.text is None, candidates={getattr(response, 'candidates', 'N/A')}")
-
-            if attempt == 0 and not wav_bytes:
-                audio_part = types.Part.from_bytes(data=bytes(voice_bytes), mime_type="audio/mpeg")
-                logger.info("Retrying with audio/mpeg mime type")
+                logger.warning(f"Transcription attempt {attempt+1}: no text, candidates={getattr(response, 'candidates', 'N/A')}")
 
         except Exception as e:
             logger.error(f"Voice transcription error (attempt {attempt+1}): {e}", exc_info=True)
