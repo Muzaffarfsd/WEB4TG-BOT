@@ -13,6 +13,7 @@ class Config:
     model_name: str = "gemini-3-pro-preview"
     fast_model_name: str = "gemini-3-pro-preview"
     thinking_model_name: str = "gemini-3-pro-preview"
+    audio_model_name: str = "gemini-2.0-flash"
     max_tokens: int = 2000
     temperature: float = 0.7
     
