@@ -191,32 +191,34 @@ async def execute_tool_call(tool_name: str, args: dict, user_id: int, username: 
         )
 
     elif tool_name == "generate_brief":
+        from src.brief_generator import brief_generator
+
+        brief_fields = {
+            "project_type": args.get("project_type", "custom"),
+            "audience": args.get("audience", "mixed"),
+            "key_features": args.get("key_features", "catalog_cart"),
+            "design_pref": args.get("design_pref", "modern"),
+            "integrations": args.get("integrations", "tg_payments"),
+            "budget_timeline": args.get("budget_timeline", "balanced"),
+        }
+
+        state = brief_generator.start_brief(user_id)
+        for field_id, value in brief_fields.items():
+            state.answers[field_id] = value
+        state.step = 6
+        state.completed = True
+
+        brief_generator.save_to_lead(user_id, username, first_name)
+
         desc = args.get("project_description", "")
-        features = args.get("features", [])
-        deadline = args.get("deadline", "")
-
-        brief_lines = ["📋 Бриф проекта:\n"]
-        brief_lines.append(f"Описание: {desc}")
-        if features:
-            brief_lines.append(f"Функции: {', '.join(features)}")
-        if deadline:
-            brief_lines.append(f"Сроки: {deadline}")
-
-        from src.calculator import FEATURES as CALC_FEATURES
-        if features:
-            valid_features = [f for f in features if f in CALC_FEATURES]
-            if valid_features:
-                total = sum(CALC_FEATURES[f]["price"] for f in valid_features)
-                brief_lines.append(f"\nОриентировочная стоимость: {total:,}₽".replace(",", " "))
-
-        brief_lines.append("\nСледующий шаг: отправить бриф менеджеру для точной оценки")
-
-        lead_manager.create_lead(user_id=user_id, username=username, first_name=first_name)
-        lead_manager.add_tag(user_id, "brief")
-        lead_manager.log_event("generate_brief", user_id, {"description": desc[:200]})
+        lead_manager.log_event("ai_generate_brief", user_id, {
+            "description": desc[:200],
+            "source": "ai_conversation",
+            **brief_fields,
+        })
         _track_propensity(user_id, 'tool_brief')
 
-        return "\n".join(brief_lines)
+        return "[AI_BRIEF_GENERATED]"
 
     elif tool_name == "check_discount":
         discounts = []

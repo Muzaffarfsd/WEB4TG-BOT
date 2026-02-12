@@ -600,6 +600,9 @@ class AIClient:
                 elif tool_result == "[PAYMENT]":
                     special_actions.append(("payment", None))
                     step_tool_results.append(f"{tc['name']}: показана оплата")
+                elif tool_result == "[AI_BRIEF_GENERATED]":
+                    special_actions.append(("ai_brief", None))
+                    step_tool_results.append(f"{tc['name']}: AI сформировал бриф проекта")
                 else:
                     step_tool_results.append(f"{tc['name']}: {tool_result}")
                     all_tool_results.append({"tool": tc["name"], "result": tool_result})
@@ -771,25 +774,46 @@ TOOL_DECLARATIONS = [
     },
     {
         "name": "generate_brief",
-        "description": "Сгенерировать краткое ТЗ (бриф) на основе обсуждения с клиентом. Вызывай когда клиент описал свой проект и нужно резюмировать требования.",
+        "description": "Автоматически сформировать бриф проекта и предложить PDF коммерческое предложение. Вызывай когда из разговора ты собрал достаточно информации о проекте клиента (минимум: тип проекта + бюджет/приоритет). Заполни максимум полей на основе контекста диалога. AI должен ПРОАКТИВНО предлагать сформировать бриф, когда понимает потребности клиента.",
         "parameters": {
             "type": "object",
             "properties": {
+                "project_type": {
+                    "type": "string",
+                    "enum": ["shop", "restaurant", "beauty", "fitness", "medical", "education", "services", "custom"],
+                    "description": "Тип проекта: shop=магазин, restaurant=ресторан/доставка, beauty=салон красоты, fitness=фитнес, medical=медицина, education=образование, services=услуги, custom=кастомный"
+                },
+                "audience": {
+                    "type": "string",
+                    "enum": ["b2c_young", "b2c_adult", "b2c_premium", "b2c_mass", "b2b", "mixed"],
+                    "description": "Аудитория: b2c_young=молодёжь 18-35, b2c_adult=семейные 25-45, b2c_premium=премиум, b2c_mass=массовый, b2b=бизнес, mixed=смешанная"
+                },
+                "key_features": {
+                    "type": "string",
+                    "enum": ["catalog_cart", "booking", "payments", "loyalty", "ai_bot", "delivery", "analytics", "crm"],
+                    "description": "Главная функция: catalog_cart=каталог+корзина, booking=бронирование, payments=оплата, loyalty=лояльность, ai_bot=AI бот, delivery=доставка, analytics=аналитика, crm=CRM"
+                },
+                "design_pref": {
+                    "type": "string",
+                    "enum": ["minimal", "modern", "premium", "bright", "corporate", "custom_design"],
+                    "description": "Стиль дизайна: minimal, modern, premium, bright=яркий, corporate, custom_design=свой макет"
+                },
+                "integrations": {
+                    "type": "string",
+                    "enum": ["tg_payments", "bank_cards", "1c", "crm_ext", "maps", "sms_email", "none"],
+                    "description": "Интеграции: tg_payments=Telegram Stars, bank_cards=карты, 1c, crm_ext=Bitrix/AmoCRM, maps, sms_email, none"
+                },
+                "budget_timeline": {
+                    "type": "string",
+                    "enum": ["fast_cheap", "balanced", "quality", "mvp_first"],
+                    "description": "Приоритет: fast_cheap=быстро и бюджетно, balanced=баланс, quality=максимальное качество, mvp_first=сначала MVP"
+                },
                 "project_description": {
                     "type": "string",
-                    "description": "Описание проекта клиента"
-                },
-                "features": {
-                    "type": "array",
-                    "items": {"type": "string"},
-                    "description": "Список нужных функций"
-                },
-                "deadline": {
-                    "type": "string",
-                    "description": "Желаемые сроки"
+                    "description": "Краткое описание проекта клиента своими словами"
                 }
             },
-            "required": ["project_description"]
+            "required": ["project_type", "budget_timeline"]
         }
     },
     {

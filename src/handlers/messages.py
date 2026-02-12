@@ -643,6 +643,20 @@ async def message_handler(update: Update, context: ContextTypes.DEFAULT_TYPE) ->
                             "💳 Выберите способ оплаты:",
                             reply_markup=get_payment_keyboard()
                         )
+                    elif action_type == "ai_brief":
+                        from src.brief_generator import brief_generator
+                        brief_text, brief_keyboard = brief_generator.format_brief(user.id)
+                        if "не завершён" not in brief_text:
+                            try:
+                                await update.message.reply_text(
+                                    brief_text, parse_mode="HTML",
+                                    reply_markup=brief_keyboard
+                                )
+                            except Exception:
+                                await update.message.reply_text(
+                                    brief_text.replace("<b>", "").replace("</b>", ""),
+                                    reply_markup=brief_keyboard
+                                )
             
             if agentic_result["text"]:
                 response = agentic_result["text"]
