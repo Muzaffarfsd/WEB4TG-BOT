@@ -1261,6 +1261,65 @@ async def callback_handler(update: Update, context: ContextTypes.DEFAULT_TYPE) -
             except Exception:
                 pass
 
+    elif data == "generate_kp":
+        from src.brief_generator import brief_generator
+        from src.kp_generator import generate_and_send_kp, get_kp_prompt_for_brief
+        state = brief_generator.get_state(user_id)
+        if not state or not state.completed:
+            await query.answer("Сначала пройдите бриф!", show_alert=True)
+        else:
+            await query.answer()
+            await query.edit_message_text(
+                "⏳ <b>Генерирую персональное предложение...</b>\n\n"
+                "AI анализирует ваш бриф и формирует PDF-документ.",
+                parse_mode="HTML"
+            )
+            client_name = query.from_user.first_name or ""
+            ai_text = ""
+            try:
+                from src.ai_client import ai_client
+                prompt = get_kp_prompt_for_brief(state.answers, client_name)
+                messages = [{"role": "user", "parts": [{"text": prompt}]}]
+                ai_text = await ai_client.generate_response(
+                    messages, thinking_level="medium"
+                )
+            except Exception as e:
+                logger.warning(f"AI KP text generation failed: {e}")
+
+            discount_pct = 0
+            try:
+                from src.achievements import vip_program
+                tier = vip_program.get_user_tier(user_id)
+                tier_discounts = {"bronze": 0, "silver": 5, "gold": 10, "platinum": 15, "diamond": 20}
+                discount_pct = tier_discounts.get(tier, 0)
+            except Exception:
+                pass
+
+            success = await generate_and_send_kp(
+                update=update,
+                context=context,
+                brief_answers=state.answers,
+                client_name=client_name,
+                ai_text=ai_text,
+                discount_pct=discount_pct,
+            )
+
+            if success:
+                await context.bot.send_message(
+                    chat_id=update.effective_chat.id,
+                    text=(
+                        "✅ <b>PDF отправлен!</b>\n\n"
+                        "Вы можете переслать документ коллегам для согласования."
+                    ),
+                    parse_mode="HTML",
+                    reply_markup=InlineKeyboardMarkup([
+                        [InlineKeyboardButton("👨‍💼 Отправить менеджеру", callback_data="brief_send_manager")],
+                        [InlineKeyboardButton("📄 Скачать ещё раз", callback_data="generate_kp")],
+                        [InlineKeyboardButton("◀️ Главное меню", callback_data="menu_back")],
+                    ])
+                )
+                analytics.track(user_id, FunnelEvent.LEAD_FORM_OPEN)
+
     elif data == "my_dashboard":
         from src.client_dashboard import build_dashboard
         text, keyboard = build_dashboard(

@@ -68,7 +68,8 @@ The bot is developed in Python, utilizing Telegram Bot API 9.4. It features a mo
 - `src/trial_demo.py` — Trial/demo access + savings calculator
 - `src/crm_dashboard.py` — Admin CRM dashboard with revenue forecasting + health score
 - `src/achievements.py` — Achievements, VIP program, leaderboard, seasonal promos
-- `src/ai_tools_extended.py` — AI case study generator, KP generator, AI coach
+- `src/kp_generator.py` — PDF commercial proposal generator (Gemini AI text + fpdf2 PDF rendering)
+- `src/ai_tools_extended.py` — AI case study generator, KP text prompts, AI coach
 - `src/social_features.py` — Story rotator, share, gift catalog
 - `src/advanced_analytics.py` — Analytics with drop-off, LTV/churn prediction
 - `src/ab_testing.py` — A/B testing with significance monitoring
@@ -108,7 +109,8 @@ The bot is developed in Python, utilizing Telegram Bot API 9.4. It features a mo
   - Seasonal promotions (New Year/Spring/Summer/Black Friday)
   - AI Case Study Generator prompts
   - AI Sales Coach prompts
-  - AI KP (Commercial Proposal) Generator
+  - AI KP (Commercial Proposal) Generator — text prompts
+  - PDF Commercial Proposal auto-generation (Gemini AI text + fpdf2 PDF with DejaVu Cyrillic fonts, VIP discount, timeline, payment schedule)
   - Success story rotator (non-repeating)
   - Share/invite system with referral preview
   - Gift catalog with coin redemption (4 gifts)
