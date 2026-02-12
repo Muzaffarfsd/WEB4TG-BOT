@@ -125,16 +125,15 @@ async def start_handler(update: Update, context: ContextTypes.DEFAULT_TYPE) -> N
     )
     
     voice_greeting = (
-        f"[warm] Привет{name_part}! Меня зовут Алекс... я консультант в вэб-фор-тэ-гэ Студио. "
-        f"[friendly] Ну смотрите, мы делаем мини-аппс для Телегра́м — магазины, рестораны, салоны и много чего ещё. "
-        f"[calm] Кстати, можем общаться как удобно — текстом, голосовыми — мне без разницы. "
-        f"[curious] Расскажите, чем занимаетесь? Посмотрим, чем можем быть полезны."
+        f"Привет{name_part}! Меня зовут Алекс, я консультант в вэб-фор-тэ-гэ Студио. "
+        f"Ну смотрите... мы делаем мини-аппс для Телеграм — магазины, рестораны, салоны и много чего ещё. "
+        f"Кстати, можем общаться как удобно — текстом, голосовыми — мне без разницы. "
+        f"Расскажите, чем занимаетесь? Посмотрим, чем можем быть полезны."
     )
 
     try:
         await update.effective_chat.send_action(ChatAction.RECORD_VOICE)
-        use_cache = not name_part
-        voice_audio = await generate_voice_response(voice_greeting, use_cache=use_cache, voice_profile="greeting")
+        voice_audio = await generate_voice_response(voice_greeting, use_cache=False, voice_profile="greeting")
         await update.message.reply_voice(voice=voice_audio)
         ab_testing.track_event(user.id, "welcome_voice", "voice_sent")
         logger.info(f"Sent voice greeting to user {user.id}")
