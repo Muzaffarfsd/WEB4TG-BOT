@@ -152,11 +152,11 @@ def _clean_text_for_voice(text: str) -> str:
 
 
 VOICE_PROFILES = {
-    "greeting": {"stability": 0.35, "similarity_boost": 0.75, "style": 0.7},
-    "empathy": {"stability": 0.45, "similarity_boost": 0.85, "style": 0.65},
-    "factual": {"stability": 0.5, "similarity_boost": 0.8, "style": 0.5},
-    "excited": {"stability": 0.3, "similarity_boost": 0.75, "style": 0.8},
-    "default": {"stability": 0.4, "similarity_boost": 0.8, "style": 0.6},
+    "greeting": {"stability": 0.5, "similarity_boost": 0.75, "style": 0.7},
+    "empathy": {"stability": 0.5, "similarity_boost": 0.85, "style": 0.65},
+    "factual": {"stability": 1.0, "similarity_boost": 0.8, "style": 0.5},
+    "excited": {"stability": 0.0, "similarity_boost": 0.75, "style": 0.8},
+    "default": {"stability": 0.5, "similarity_boost": 0.8, "style": 0.6},
 }
 
 
@@ -309,9 +309,9 @@ def _parse_emotion_json(raw: str) -> dict:
     except _json.JSONDecodeError:
         pass
 
-    json_match = re.search(r'\{[^}]*"text"\s*:\s*"[^"]*"[^}]*\}', raw)
+    json_match = re.search(r'\{.*?"text"\s*:\s*".*?".*?\}', raw, re.DOTALL)
     if not json_match:
-        json_match = re.search(r'\{[^}]+\}', raw)
+        json_match = re.search(r'\{.+?\}', raw, re.DOTALL)
     if json_match:
         try:
             parsed = _json.loads(json_match.group())
@@ -322,6 +322,16 @@ def _parse_emotion_json(raw: str) -> dict:
             }
         except _json.JSONDecodeError:
             pass
+
+    text_match = re.search(r'"text"\s*:\s*"([^"]*)"', raw)
+    if text_match and text_match.group(1).strip():
+        emotion_match = re.search(r'"emotion"\s*:\s*"([^"]*)"', raw)
+        energy_match = re.search(r'"energy"\s*:\s*"([^"]*)"', raw)
+        return {
+            "text": text_match.group(1).strip(),
+            "emotion": emotion_match.group(1) if emotion_match else "neutral",
+            "energy": energy_match.group(1) if energy_match else "medium"
+        }
 
     clean_text = raw.strip().strip('"').strip("'")
     if len(clean_text) > 5 and not clean_text.startswith("{"):
