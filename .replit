@@ -23,12 +23,12 @@ args = "Status Check"
 name = "Status Check"
 author = "agent"
 
+[workflows.workflow.metadata]
+outputType = "console"
+
 [[workflows.workflow.tasks]]
 task = "shell.exec"
 args = "python status.py"
-
-[workflows.workflow.metadata]
-outputType = "console"
 
 [userenv]
 
