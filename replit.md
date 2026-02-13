@@ -23,7 +23,7 @@ The bot is developed in Python, utilizing Telegram Bot API 9.4. It features a mo
 - **Lead Management**: Automates lead capture, manager notifications, AI-based auto-tagging, and priority setting with propensity scoring and buying signal decay.
 - **Gamification & Loyalty**: Implements a system for earning coins through tasks, a tiered referral program with quality scoring, and a loyalty program with discounts.
 - **Payment System**: Supports manual payment integration, downloadable contracts, and automated payment reminders.
-- **Communication & Marketing**: Features a smart follow-up system with AI-generated personalized messages, win-back strategy for cold clients, a broadcast system with audience targeting, and multi-language support (RU/EN/UZ/KZ auto-detection with cultural adaptation).
+- **Communication & Marketing**: Features a 7-step adaptive follow-up system (micro-value → social proof → value bomb → scarcity → perspective shift → soft breakup → win-back) with AI-generated personalized messages using client signals (BANT, propensity, industry, pain points), CTA buttons per stage, voice follow-ups for voice-preferring clients, adaptive scheduling (hot/warm/cold), timezone-aware delivery (9:00-20:00), broadcast system with audience targeting, and multi-language support (RU/EN/UZ/KZ auto-detection with cultural adaptation).
 - **Security & Administration**: Provides admin access control, audit logging, column whitelist for SQL safety, and environment variable management.
 - **Deployment**: Exclusively deployed on Railway using a PostgreSQL database.
 - **Voice System**: Integrates Gemini Flash transcription and ElevenLabs v3 TTS for voice interactions, including emotion detection and proactive voice responses during key sales moments.

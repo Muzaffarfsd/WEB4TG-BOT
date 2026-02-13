@@ -1,4 +1,5 @@
 #!/usr/bin/env python3
+import asyncio
 import logging
 from telegram import Update, BotCommand, MenuButtonCommands
 from telegram.ext import (
@@ -180,6 +181,29 @@ async def _send_voice_follow_up(bot, user_id: int, message: str) -> bool:
         return False
 
 
+def _get_followup_cta_keyboard(follow_up_number: int):
+    from telegram import InlineKeyboardButton, InlineKeyboardMarkup
+    if follow_up_number <= 2:
+        return InlineKeyboardMarkup([
+            [InlineKeyboardButton("✦ Посмотреть портфолио", callback_data="menu_portfolio")],
+            [InlineKeyboardButton("⚡ Рассчитать стоимость", callback_data="menu_calculator")],
+        ])
+    elif follow_up_number <= 4:
+        return InlineKeyboardMarkup([
+            [InlineKeyboardButton("✨ Бесплатная консультация", callback_data="book_consultation")],
+            [InlineKeyboardButton("✦ Посмотреть кейсы", callback_data="menu_portfolio")],
+        ])
+    elif follow_up_number <= 6:
+        return InlineKeyboardMarkup([
+            [InlineKeyboardButton("✨ Написать Алексу", callback_data="menu_ai_agent")],
+        ])
+    else:
+        return InlineKeyboardMarkup([
+            [InlineKeyboardButton("⚡ Узнать подробнее", callback_data="menu_services")],
+            [InlineKeyboardButton("✨ Бесплатный аудит", callback_data="book_consultation")],
+        ])
+
+
 async def process_follow_ups(context: ContextTypes.DEFAULT_TYPE) -> None:
     from src.followup import follow_up_manager
 
@@ -197,24 +221,35 @@ async def process_follow_ups(context: ContextTypes.DEFAULT_TYPE) -> None:
                         context.bot, fu['user_id'], message
                     )
 
+                cta_keyboard = _get_followup_cta_keyboard(fu['follow_up_number'])
+
                 if not voice_sent:
                     await context.bot.send_message(
                         chat_id=fu['user_id'],
-                        text=message
+                        text=message,
+                        reply_markup=cta_keyboard
+                    )
+                else:
+                    await context.bot.send_message(
+                        chat_id=fu['user_id'],
+                        text="👆",
+                        reply_markup=cta_keyboard
                     )
 
                 follow_up_manager.mark_sent(fu['id'], message)
 
                 from src.leads import lead_manager
                 lead_manager.save_message(fu['user_id'], "assistant", message)
-                if voice_sent:
-                    lead_manager.log_event("voice_followup_sent", fu['user_id'], {
-                        "followup_number": fu['follow_up_number']
-                    })
+                lead_manager.log_event("followup_sent", fu['user_id'], {
+                    "followup_number": fu['follow_up_number'],
+                    "voice": voice_sent
+                })
 
                 follow_up_manager.schedule_follow_up(fu['user_id'])
 
                 logger.info(f"Sent follow-up #{fu['follow_up_number']} to user {fu['user_id']} (voice={voice_sent})")
+
+                await asyncio.sleep(2)
             except Forbidden:
                 follow_up_manager.cancel_for_blocked_user(fu['user_id'])
                 from src.broadcast import broadcast_manager
