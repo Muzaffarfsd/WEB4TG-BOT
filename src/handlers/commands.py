@@ -141,6 +141,11 @@ async def start_handler(update: Update, context: ContextTypes.DEFAULT_TYPE) -> N
         reply_markup=quiz_keyboard
     )
 
+    await update.message.reply_text(
+        "⬇️ Используйте кнопки ниже для быстрого доступа:",
+        reply_markup=get_quick_reply_keyboard()
+    )
+
     chat_id = update.effective_chat.id
     bot_instance = context.bot
 
