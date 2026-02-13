@@ -155,11 +155,11 @@ def _clean_text_for_voice(text: str) -> str:
 
 
 VOICE_PROFILES = {
-    "greeting": {"stability": 0.5, "similarity_boost": 0.75, "style": 0.7},
-    "empathy": {"stability": 0.5, "similarity_boost": 0.85, "style": 0.65},
+    "greeting": {"stability": 0.5, "similarity_boost": 0.75, "style": 0.5},
+    "empathy": {"stability": 0.5, "similarity_boost": 0.85, "style": 0.5},
     "factual": {"stability": 1.0, "similarity_boost": 0.8, "style": 0.5},
-    "excited": {"stability": 0.0, "similarity_boost": 0.75, "style": 0.8},
-    "default": {"stability": 0.5, "similarity_boost": 0.8, "style": 0.6},
+    "excited": {"stability": 0.0, "similarity_boost": 0.75, "style": 1.0},
+    "default": {"stability": 0.5, "similarity_boost": 0.8, "style": 0.5},
 }
 
 

@@ -77,8 +77,6 @@ def styled_button_api_kwargs(
     icon_custom_emoji_id: Optional[str] = None
 ) -> dict:
     api_kwargs = {}
-    if style:
-        api_kwargs["style"] = style
     if icon_custom_emoji_id:
         api_kwargs["icon_custom_emoji_id"] = icon_custom_emoji_id
     if api_kwargs:
