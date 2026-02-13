@@ -495,11 +495,17 @@ async def get_emoji_id_handler(update: Update, context: ContextTypes.DEFAULT_TYP
     context.user_data["awaiting_emoji_sticker"] = True
     await update.message.reply_text(
         "🎨 <b>Получение Custom Emoji ID</b>\n\n"
-        "Отправьте мне кастомный emoji-стикер из любого стикерпака, "
-        "и я покажу его <code>custom_emoji_id</code>.\n\n"
-        "Этот ID можно использовать в переменных окружения:\n"
-        "<code>EMOJI_LEAD</code>, <code>EMOJI_PAYMENT</code>, <code>EMOJI_CALCULATOR</code> и др.",
-        parse_mode="HTML"
+        "Отправьте мне:\n"
+        "• <b>Кастомный emoji</b> в текстовом сообщении (из пака кастомных эмодзи)\n"
+        "• или <b>emoji-стикер</b> из стикерпака\n\n"
+        "Я покажу <code>custom_emoji_id</code> для каждого.\n\n"
+        "💡 <b>Совет:</b> Можно отправить сразу несколько эмодзи в одном сообщении!\n\n"
+        "Рекомендуемые паки для кнопок бота:\n"
+        "• <a href='https://t.me/addemoji/TgPremiumIcon'>Telegram Premium Icons</a> (116 шт)\n"
+        "• <a href='https://t.me/addemoji/PremiumIcons'>Premium Icons</a> (71 анимир.)\n"
+        "• <a href='https://t.me/addemoji/business_emojis'>Business Emojis</a> (150 шт)",
+        parse_mode="HTML",
+        disable_web_page_preview=True
     )
 
 
@@ -507,37 +513,87 @@ async def sticker_emoji_handler(update: Update, context: ContextTypes.DEFAULT_TY
     if not context.user_data.get("awaiting_emoji_sticker"):
         return
 
-    context.user_data.pop("awaiting_emoji_sticker", None)
+    emoji_env_keys = [
+        ("EMOJI_CALC", "Калькулятор"),
+        ("EMOJI_PORTFOLIO", "Портфолио"),
+        ("EMOJI_CONSULT", "Консультация"),
+        ("EMOJI_BRIEF", "Бриф/Заявка"),
+        ("EMOJI_PACKAGES", "Пакеты/Тарифы"),
+        ("EMOJI_VIP", "VIP/Premium"),
+        ("EMOJI_PRICE", "Цены"),
+        ("EMOJI_TIMELINE", "Сроки"),
+        ("EMOJI_START", "Старт"),
+        ("EMOJI_FIRE", "Акция/Горячее"),
+        ("EMOJI_STAR", "Отзывы/Рейтинг"),
+        ("EMOJI_GIFT", "Подарки/Бонусы"),
+        ("EMOJI_COMPARE", "Сравнение"),
+        ("EMOJI_STATS", "Статистика/ROI"),
+        ("EMOJI_FAQ", "FAQ/Вопросы"),
+        ("EMOJI_PAYMENT", "Оплата"),
+        ("EMOJI_CONTRACT", "Контракт"),
+        ("EMOJI_BACK", "Назад"),
+        ("EMOJI_HOME", "Главное меню"),
+        ("EMOJI_PROFILE", "Мой статус"),
+        ("EMOJI_COINS", "Монеты"),
+        ("EMOJI_TROPHY", "Достижения"),
+        ("EMOJI_REFERRAL", "Рефералы"),
+    ]
+
+    if update.message.entities:
+        custom_emojis = [
+            e for e in update.message.entities
+            if e.type == "custom_emoji" and e.custom_emoji_id
+        ]
+        if custom_emojis:
+            lines = []
+            for i, entity in enumerate(custom_emojis, 1):
+                emoji_text = update.message.text[entity.offset:entity.offset + entity.length] if update.message.text else "?"
+                lines.append(
+                    f"<b>{i}.</b> {emoji_text} → <code>{entity.custom_emoji_id}</code>"
+                )
+
+            env_hint = "\n".join([
+                f"<code>{key}={custom_emojis[0].custom_emoji_id}</code>  # {desc}"
+                for key, desc in emoji_env_keys
+            ])
+
+            context.user_data.pop("awaiting_emoji_sticker", None)
+            await update.message.reply_text(
+                f"✅ <b>Найдено {len(custom_emojis)} кастомных эмодзи:</b>\n\n"
+                + "\n".join(lines) +
+                f"\n\n<b>Для Railway (замените ID на нужный):</b>\n{env_hint}\n\n"
+                "💡 Отправьте ещё эмодзи или /get_emoji_id для нового поиска.",
+                parse_mode="HTML"
+            )
+            return
 
     sticker = update.message.sticker
-    if not sticker:
-        await update.message.reply_text("Это не стикер. Отправьте custom emoji стикер.")
-        return
-
-    if sticker.custom_emoji_id:
-        env_keys = [
-            "EMOJI_LEAD", "EMOJI_PAYMENT", "EMOJI_CALCULATOR",
-            "EMOJI_PORTFOLIO", "EMOJI_SERVICES", "EMOJI_MANAGER",
-            "EMOJI_FAQ", "EMOJI_BONUS", "EMOJI_STARS"
-        ]
-        env_list = "\n".join([f"<code>{k}={sticker.custom_emoji_id}</code>" for k in env_keys])
-
+    if sticker and sticker.custom_emoji_id:
+        env_list = "\n".join([
+            f"<code>{key}={sticker.custom_emoji_id}</code>  # {desc}"
+            for key, desc in emoji_env_keys
+        ])
+        context.user_data.pop("awaiting_emoji_sticker", None)
         await update.message.reply_text(
             f"✅ <b>Custom Emoji ID:</b>\n"
             f"<code>{sticker.custom_emoji_id}</code>\n\n"
             f"<b>Тип:</b> {sticker.type}\n"
             f"<b>Набор:</b> {sticker.set_name or 'нет'}\n"
             f"<b>Emoji:</b> {sticker.emoji or '—'}\n\n"
-            f"<b>Для Railway переменных (копируйте нужную):</b>\n{env_list}",
+            f"<b>Для Railway (замените ID на нужный):</b>\n{env_list}",
             parse_mode="HTML"
         )
-    else:
+        return
+
+    if sticker and not sticker.custom_emoji_id:
         await update.message.reply_text(
             "⚠️ Это обычный стикер, а не custom emoji.\n\n"
-            "Для получения ID нужен именно <b>кастомный emoji-стикер</b> "
-            "(из пакетов custom emoji, не обычных стикерпаков).",
+            "Для получения ID нужен <b>кастомный emoji</b> из пака "
+            "(установите через t.me/addemoji/... ссылку).\n\n"
+            "Попробуйте ещё раз или отправьте /get_emoji_id",
             parse_mode="HTML"
         )
+        return
 
 
 @admin_required

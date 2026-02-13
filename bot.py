@@ -456,6 +456,7 @@ def main() -> None:
     
     application.add_handler(MessageHandler(filters.SUCCESSFUL_PAYMENT, successful_payment_handler))
     application.add_handler(MessageHandler(filters.Sticker.ALL, sticker_emoji_handler), group=1)
+    application.add_handler(MessageHandler(filters.TEXT & ~filters.COMMAND, sticker_emoji_handler), group=2)
     application.add_handler(MessageHandler(filters.VOICE, voice_handler))
     application.add_handler(MessageHandler(filters.VIDEO | filters.VIDEO_NOTE, video_handler))
     application.add_handler(MessageHandler(filters.PHOTO, photo_handler))
