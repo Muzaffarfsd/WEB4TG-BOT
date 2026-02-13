@@ -43,24 +43,11 @@ async def post_init(application) -> None:
     logger.info(f"Bot API target version: {get_api_version()}")
 
     commands = [
-        BotCommand("start", "🚀 Открыть приложение"),
-        BotCommand("menu", "📋 Главное меню"),
-        BotCommand("price", "💰 Цены на услуги"),
-        BotCommand("calc", "🧮 Калькулятор стоимости"),
-        BotCommand("faq", "❓ Частые вопросы"),
+        BotCommand("start", "🚀 Начать"),
+        BotCommand("menu", "📋 Все услуги и функции"),
         BotCommand("portfolio", "🎨 Примеры работ"),
-        BotCommand("testimonials", "⭐ Отзывы клиентов"),
-        BotCommand("payment", "💳 Оплата услуг"),
-        BotCommand("contract", "📄 Скачать договор"),
-        BotCommand("promo", "🎟 Промокод"),
-        BotCommand("referral", "👥 Реферальная программа"),
-        BotCommand("bonus", "🎁 Бонусы и скидки"),
         BotCommand("mystatus", "📊 Мой кабинет"),
-        BotCommand("brief", "📋 Составить бриф"),
-        BotCommand("consult", "📅 Записаться на консультацию"),
-        BotCommand("contact", "📞 Связаться с нами"),
-        BotCommand("privacy", "🔒 Конфиденциальность"),
-        BotCommand("help", "❓ Помощь"),
+        BotCommand("consult", "📅 Бесплатная консультация"),
     ]
     await application.bot.set_my_commands(commands)
     await application.bot.set_chat_menu_button(menu_button=MenuButtonCommands())
