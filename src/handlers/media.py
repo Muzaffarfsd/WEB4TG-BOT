@@ -116,7 +116,7 @@ VOICE_CONTEXT_INSTRUCTION = """
 
 
 async def analyze_emotions_and_prepare_text(text: str) -> str:
-    if len(text) < 200:
+    if len(text) < 100:
         return text
 
     from google.genai import types
@@ -127,7 +127,7 @@ async def analyze_emotions_and_prepare_text(text: str) -> str:
     try:
         response = await asyncio.to_thread(
             client.models.generate_content,
-            model=config.fast_model_name,
+            model=config.model_name,
             contents=[VOICE_EMOTION_PROMPT + text],
             config=types.GenerateContentConfig(
                 max_output_tokens=2000,
@@ -155,11 +155,11 @@ def _clean_text_for_voice(text: str) -> str:
 
 
 VOICE_PROFILES = {
-    "greeting": {"stability": 0.5, "similarity_boost": 0.75, "style": 0.5},
-    "empathy": {"stability": 0.5, "similarity_boost": 0.85, "style": 0.5},
+    "greeting": {"stability": 0.5, "similarity_boost": 0.75, "style": 1.0},
+    "empathy": {"stability": 0.5, "similarity_boost": 0.85, "style": 1.0},
     "factual": {"stability": 1.0, "similarity_boost": 0.8, "style": 0.5},
     "excited": {"stability": 0.0, "similarity_boost": 0.75, "style": 1.0},
-    "default": {"stability": 0.5, "similarity_boost": 0.8, "style": 0.5},
+    "default": {"stability": 0.5, "similarity_boost": 0.8, "style": 1.0},
 }
 
 
