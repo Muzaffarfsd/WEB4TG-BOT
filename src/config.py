@@ -47,3 +47,12 @@ class Config:
 
 
 config = Config.from_env()
+
+_gemini_client = None
+
+def get_gemini_client():
+    global _gemini_client
+    if _gemini_client is None:
+        from google import genai
+        _gemini_client = genai.Client(api_key=config.gemini_api_key)
+    return _gemini_client

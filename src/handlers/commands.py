@@ -146,13 +146,12 @@ async def start_handler(update: Update, context: ContextTypes.DEFAULT_TYPE) -> N
 
     async def _send_voice_greeting_background():
         try:
-            from google import genai
             from google.genai import types as genai_types
-            from src.config import config as app_config
+            from src.config import config as app_config, get_gemini_client
 
             await bot_instance.send_chat_action(chat_id=chat_id, action=ChatAction.RECORD_VOICE)
 
-            ai_client_greet = genai.Client(api_key=app_config.gemini_api_key)
+            ai_client_greet = get_gemini_client()
             greet_prompt = (
                 f"Ты — Алекс, живой консультант WEB4TG Studio. Запиши приветственное голосовое для нового клиента{name_part}.\n\n"
                 "ЗАДАЧА: поздороваться, коротко представиться, сказать что делаете (мини-аппс для Телеграм — магазины, рестораны, салоны), "

@@ -171,7 +171,8 @@ def check_response_quality(response_text: str, user_message: str) -> str:
 
 class AIClient:
     def __init__(self):
-        self._client = genai.Client(api_key=config.gemini_api_key)
+        from src.config import get_gemini_client
+        self._client = get_gemini_client()
 
     def select_model_and_config(self, query_context: Optional[str] = None) -> Tuple[str, types.GenerateContentConfig]:
         if not query_context:

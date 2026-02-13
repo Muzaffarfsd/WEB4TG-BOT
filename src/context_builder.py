@@ -5,6 +5,25 @@ from typing import Optional, List, Dict
 
 logger = logging.getLogger(__name__)
 
+_context_cache = {}
+_CACHE_TTL = 30
+
+def _cached_get(key, fetcher):
+    now = time.time()
+    if key in _context_cache:
+        val, ts = _context_cache[key]
+        if now - ts < _CACHE_TTL:
+            return val
+    try:
+        result = fetcher()
+    except Exception:
+        result = None
+    _context_cache[key] = (result, now)
+    if len(_context_cache) > 500:
+        cutoff = now - _CACHE_TTL * 2
+        _context_cache.clear()
+    return result
+
 
 OBJECTION_PATTERNS = {
     "price": [
@@ -1193,13 +1212,15 @@ def build_full_context(user_id: int, user_message: str, username: str = None, fi
 
     try:
         from src.rag import get_relevant_knowledge
-        rag_context = get_relevant_knowledge(user_message, limit=5)
+        import hashlib as _hl
+        rag_key = f"rag:{_hl.md5(user_message.encode()).hexdigest()}"
+        rag_context = _cached_get(rag_key, lambda: get_relevant_knowledge(user_message, limit=5))
         if rag_context:
             parts.append(rag_context)
     except Exception as e:
         logger.debug(f"RAG knowledge retrieval skipped: {e}")
 
-    client_ctx = build_client_context(user_id, username, first_name)
+    client_ctx = _cached_get(f"client_ctx:{user_id}", lambda: build_client_context(user_id, username, first_name))
     if client_ctx:
         parts.append(client_ctx)
 
@@ -1227,7 +1248,7 @@ def build_full_context(user_id: int, user_message: str, username: str = None, fi
 
     try:
         from src.propensity import propensity_scorer
-        score = propensity_scorer.get_score(user_id)
+        score = _cached_get(f"propensity:{user_id}", lambda: propensity_scorer.get_score(user_id))
         if score is not None:
             if score >= 70:
                 parts.append(f"\n[PROPENSITY SCORE: {score}/100 — ГОРЯЧИЙ]\nКлиент с высокой вероятностью покупки. Действуй решительно: предлагай конкретные следующие шаги (бриф, оплата, созвон).")

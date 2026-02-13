@@ -116,15 +116,18 @@ VOICE_CONTEXT_INSTRUCTION = """
 
 
 async def analyze_emotions_and_prepare_text(text: str) -> str:
-    from google import genai
-    from google.genai import types
+    if len(text) < 200:
+        return text
 
-    client = genai.Client(api_key=config.gemini_api_key)
+    from google.genai import types
+    from src.config import get_gemini_client
+
+    client = get_gemini_client()
 
     try:
         response = await asyncio.to_thread(
             client.models.generate_content,
-            model=config.model_name,
+            model=config.fast_model_name,
             contents=[VOICE_EMOTION_PROMPT + text],
             config=types.GenerateContentConfig(
                 max_output_tokens=2000,
@@ -345,7 +348,8 @@ async def _transcribe_voice_with_emotion(voice_bytes: bytes) -> dict:
     import tempfile
     import os
 
-    client = genai.Client(api_key=config.gemini_api_key)
+    from src.config import get_gemini_client
+    client = get_gemini_client()
     audio_model = config.audio_model_name
 
     prompt_text = (
@@ -696,7 +700,8 @@ async def voice_handler(update: Update, context: ContextTypes.DEFAULT_TYPE) -> N
             from google import genai
             from google.genai import types
 
-            gemini_client = genai.Client(api_key=config.gemini_api_key)
+            from src.config import get_gemini_client
+            gemini_client = get_gemini_client()
 
             history_text = ""
             for msg in session.get_history()[-6:]:
@@ -868,7 +873,8 @@ async def photo_handler(update: Update, context: ContextTypes.DEFAULT_TYPE) -> N
             from google.genai import types
             from src.knowledge_base import SYSTEM_PROMPT
 
-            gemini_client = genai.Client(api_key=config.gemini_api_key)
+            from src.config import get_gemini_client
+            gemini_client = get_gemini_client()
 
             image_part = types.Part.from_bytes(data=bytes(photo_bytes), mime_type="image/jpeg")
             text_part = types.Part(text=user_text)

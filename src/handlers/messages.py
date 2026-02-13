@@ -771,55 +771,61 @@ async def message_handler(update: Update, context: ContextTypes.DEFAULT_TYPE) ->
 
         logger.info(f"User {user.id}: processed message #{session.message_count} (voice={'proactive' if proactive_voice_sent else 'text'})")
 
-        auto_tag_lead(user.id, user_message)
-        auto_score_lead(user.id, user_message)
-
-        try:
-            from src.feedback_loop import feedback_loop
-            from src.context_builder import detect_funnel_stage
-            stage = detect_funnel_stage(user.id, user_message, session.message_count)
-            p_score = None
-            try:
-                from src.propensity import propensity_scorer
-                p_score = propensity_scorer.get_score(user.id)
-            except Exception as e:
-                logger.debug(f"Propensity score retrieval skipped: {e}")
-            from src.ab_testing import ab_testing
-            variant = None
-            try:
-                variant = ab_testing.get_variant(user.id, "response_style")
-            except Exception as e:
-                logger.debug(f"A/B variant retrieval skipped: {e}")
-            feedback_loop.log_response(
-                user_id=user.id,
-                message_text=user_message[:500],
-                response_text=response[:1000] if response else "",
-                variant=variant,
-                funnel_stage=stage,
-                propensity_score=p_score
-            )
-        except Exception as e:
-            logger.debug(f"Feedback loop logging skipped: {e}")
-
-        try:
-            qa_manager.score_conversation(
-                user_id=user.id,
-                user_message=user_message,
-                ai_response=response,
-                message_count=session.message_count,
-                session_messages=len(session.messages)
-            )
-        except Exception as e:
-            logger.debug(f"QA scoring skipped: {e}")
-
         monitor.track_request("message_handler", _time.time() - _msg_start, success=True)
 
-        asyncio.create_task(
-            extract_insights_if_needed(user.id, session)
-        )
-        asyncio.create_task(
-            summarize_if_needed(user.id, session)
-        )
+        _msg_count_snap = session.message_count
+        _sess_msgs_snap = len(session.messages)
+
+        async def _post_response_analytics(uid, u_msg, resp, msg_count, sess_msgs_len):
+            try:
+                auto_tag_lead(uid, u_msg)
+                auto_score_lead(uid, u_msg)
+            except Exception as e:
+                logger.debug(f"Auto-tagging skipped: {e}")
+
+            try:
+                from src.feedback_loop import feedback_loop
+                from src.context_builder import detect_funnel_stage
+                stage = detect_funnel_stage(uid, u_msg, msg_count)
+                p_score = None
+                try:
+                    from src.propensity import propensity_scorer
+                    p_score = propensity_scorer.get_score(uid)
+                except Exception:
+                    pass
+                from src.ab_testing import ab_testing
+                variant = None
+                try:
+                    variant = ab_testing.get_variant(uid, "response_style")
+                except Exception:
+                    pass
+                feedback_loop.log_response(
+                    user_id=uid,
+                    message_text=u_msg[:500],
+                    response_text=resp[:1000] if resp else "",
+                    variant=variant,
+                    funnel_stage=stage,
+                    propensity_score=p_score
+                )
+            except Exception as e:
+                logger.debug(f"Feedback loop logging skipped: {e}")
+
+            try:
+                qa_manager.score_conversation(
+                    user_id=uid,
+                    user_message=u_msg,
+                    ai_response=resp,
+                    message_count=msg_count,
+                    session_messages=sess_msgs_len
+                )
+            except Exception as e:
+                logger.debug(f"QA scoring skipped: {e}")
+
+        asyncio.create_task(_post_response_analytics(
+            user.id, user_message, response, _msg_count_snap, _sess_msgs_snap
+        ))
+        asyncio.create_task(extract_insights_if_needed(user.id, session))
+        asyncio.create_task(summarize_if_needed(user.id, session))
 
     except Exception as e:
         typing_task.cancel()

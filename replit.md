@@ -115,6 +115,14 @@ The bot is developed in Python, utilizing Telegram Bot API 9.4. It features a mo
   - Share/invite system with referral preview
   - Gift catalog with coin redemption (4 gifts)
   - Modified /start to offer quiz as primary CTA
+- **Performance Optimizations** (February 2026):
+  - Singleton Gemini client (`get_gemini_client()`) — eliminated 5 redundant `genai.Client()` creations across files
+  - /start voice greeting moved to background `asyncio.create_task` — instant welcome text, voice arrives async
+  - Non-critical DB operations (analytics, broadcast, AB testing) moved to background tasks in /start
+  - Post-response analytics (auto-tag, feedback loop, QA scoring) moved to background in message handler
+  - TTL cache (30s) for heavy context queries: RAG knowledge, client profiles, propensity scores
+  - Voice emotion analysis skipped for short texts (<200 chars), uses fast model for longer texts
+  - Session data snapshots for background tasks to prevent race conditions
 
 ## External Dependencies
 - **Telegram Bot API**: Version 9.4 (via `python-telegram-bot` 22.6) for core bot functionalities.
