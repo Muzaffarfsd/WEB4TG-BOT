@@ -1466,6 +1466,36 @@ async def callback_handler(update: Update, context: ContextTypes.DEFAULT_TYPE) -
         text, keyboard = get_client_health_view()
         await query.edit_message_text(text, parse_mode="HTML", reply_markup=keyboard)
 
+    elif data == "crm_analytics":
+        from src.advanced_analytics import advanced_analytics as adv_analytics
+        try:
+            dropoff = adv_analytics.get_dropoff_analysis(days=30)
+            stages = dropoff.get("stages", {})
+            text = "📊 <b>Аналитика воронки (30 дней)</b>\n\n"
+            if stages:
+                for stage_name, stage_data in stages.items():
+                    count = stage_data.get("count", 0)
+                    text += f"• {stage_name}: {count}\n"
+            else:
+                text += "Данных пока недостаточно для анализа.\n"
+            text += "\n<i>Подробная аналитика доступна через /crm</i>"
+        except Exception as e:
+            logger.warning(f"CRM analytics error: {e}")
+            text = "📊 <b>Аналитика</b>\n\nДанных пока недостаточно для анализа."
+        keyboard = InlineKeyboardMarkup([
+            [InlineKeyboardButton("◀️ Назад к CRM", callback_data="crm_dashboard")],
+        ])
+        await query.edit_message_text(text, parse_mode="HTML", reply_markup=keyboard)
+
+    elif data == "promo_enter":
+        text = ("🎟 <b>Введите промокод</b>\n\n"
+                "Отправьте команду с кодом:\n"
+                "<code>/promo ВАШКОД</code>")
+        keyboard = InlineKeyboardMarkup([
+            [InlineKeyboardButton("◀️ Назад", callback_data="menu_back")],
+        ])
+        await query.edit_message_text(text, parse_mode="HTML", reply_markup=keyboard)
+
     elif data == "achievements_view":
         from src.achievements import achievement_manager
         text, keyboard = achievement_manager.get_achievements_view(user_id)
