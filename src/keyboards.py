@@ -188,11 +188,11 @@ def get_subscription_keyboard() -> InlineKeyboardMarkup:
 def get_quick_reply_keyboard() -> ReplyKeyboardMarkup:
     keyboard = [
         [
-            KeyboardButton("🚀 Открыть приложение", web_app=WebAppInfo(url="https://w4tg.up.railway.app/"))
+            KeyboardButton("⚡ Открыть приложение", web_app=WebAppInfo(url="https://w4tg.up.railway.app/"))
         ],
         [
-            KeyboardButton("💰 Цены"),
-            KeyboardButton("🎁 Получить скидку")
+            KeyboardButton("✦ Цены"),
+            KeyboardButton("✨ Получить скидку")
         ]
     ]
     return ReplyKeyboardMarkup(
