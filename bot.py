@@ -26,6 +26,7 @@ from src.handlers import (
     ab_detail_handler, feedback_insights_handler,
     health_handler, qa_handler, advanced_stats_handler,
     export_csv_handler, export_analytics_handler, webhook_handler,
+    triggers_handler,
 )
 
 logging.basicConfig(
@@ -104,6 +105,13 @@ async def post_init(application) -> None:
             first=300
         )
         logger.info("Metrics save job scheduled (every 15 min)")
+
+        application.job_queue.run_repeating(
+            process_proactive_triggers,
+            interval=180,
+            first=90
+        )
+        logger.info("Proactive engagement job scheduled (every 3 min)")
 
         from src.rate_limiter import rate_limiter
         async def cleanup_rate_limiter(context):
@@ -267,6 +275,99 @@ async def process_follow_ups(context: ContextTypes.DEFAULT_TYPE) -> None:
         logger.error(f"Follow-up processing error: {e}")
 
 
+def _get_trigger_cta_keyboard(trigger_type: str):
+    from telegram import InlineKeyboardButton, InlineKeyboardMarkup
+    if trigger_type in ("cart_abandonment", "high_intent_no_action"):
+        return InlineKeyboardMarkup([
+            [InlineKeyboardButton("✨ Бесплатная консультация", callback_data="book_consultation")],
+            [InlineKeyboardButton("⚡ Рассчитать стоимость", callback_data="menu_calculator")],
+        ])
+    elif trigger_type in ("competitor_research",):
+        return InlineKeyboardMarkup([
+            [InlineKeyboardButton("✦ Сравнить решения", callback_data="menu_compare")],
+            [InlineKeyboardButton("✦ Наши преимущества", callback_data="menu_portfolio")],
+        ])
+    elif trigger_type in ("funnel_stall", "engagement_drop"):
+        return InlineKeyboardMarkup([
+            [InlineKeyboardButton("✦ Посмотреть портфолио", callback_data="menu_portfolio")],
+            [InlineKeyboardButton("⚡ Задать вопрос", callback_data="menu_ai_agent")],
+        ])
+    elif trigger_type in ("comeback_window", "warm_reactivation"):
+        return InlineKeyboardMarkup([
+            [InlineKeyboardButton("⚡ Что нового?", callback_data="menu_services")],
+            [InlineKeyboardButton("✨ Бесплатный аудит", callback_data="book_consultation")],
+        ])
+    else:
+        return InlineKeyboardMarkup([
+            [InlineKeyboardButton("✦ Узнать подробнее", callback_data="menu_services")],
+        ])
+
+
+async def process_proactive_triggers(context: ContextTypes.DEFAULT_TYPE) -> None:
+    from src.proactive_engagement import proactive_engine
+
+    try:
+        triggered = proactive_engine.evaluate_triggers()
+        if not triggered:
+            return
+
+        for trigger in triggered[:5]:
+            try:
+                message = await proactive_engine.generate_trigger_message(trigger)
+                user_id = trigger["user_id"]
+
+                voice_sent = False
+                if _user_prefers_voice(user_id):
+                    voice_sent = await _send_voice_follow_up(context.bot, user_id, message)
+
+                cta_keyboard = _get_trigger_cta_keyboard(trigger["trigger_type"])
+
+                if not voice_sent:
+                    await context.bot.send_message(
+                        chat_id=user_id,
+                        text=message,
+                        reply_markup=cta_keyboard
+                    )
+                else:
+                    await context.bot.send_message(
+                        chat_id=user_id,
+                        text="👆",
+                        reply_markup=cta_keyboard
+                    )
+
+                proactive_engine.record_trigger_sent(
+                    user_id, trigger["trigger_type"],
+                    trigger["score"], message
+                )
+
+                from src.leads import lead_manager
+                lead_manager.save_message(user_id, "assistant", message)
+                lead_manager.log_event("proactive_trigger", user_id, {
+                    "trigger_type": trigger["trigger_type"],
+                    "score": trigger["score"],
+                    "voice": voice_sent
+                })
+
+                logger.info(
+                    f"Proactive trigger '{trigger['trigger_type']}' sent to {user_id} "
+                    f"(score={trigger['score']:.0f}, voice={voice_sent})"
+                )
+
+                await asyncio.sleep(2)
+            except Forbidden:
+                from src.broadcast import broadcast_manager
+                broadcast_manager.mark_blocked(trigger["user_id"])
+                logger.info(f"User {trigger['user_id']} blocked bot, skipping proactive trigger")
+            except Exception as e:
+                if "Forbidden" in str(type(e).__name__) or "blocked" in str(e).lower():
+                    from src.broadcast import broadcast_manager
+                    broadcast_manager.mark_blocked(trigger["user_id"])
+                else:
+                    logger.error(f"Failed to send proactive trigger to {trigger['user_id']}: {e}")
+    except Exception as e:
+        logger.error(f"Proactive trigger processing error: {e}")
+
+
 async def pre_checkout_handler(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
     await update.pre_checkout_query.answer(ok=True)
 
@@ -347,6 +448,7 @@ def main() -> None:
     application.add_handler(CommandHandler("export_csv", export_csv_handler))
     application.add_handler(CommandHandler("export_analytics", export_analytics_handler))
     application.add_handler(CommandHandler("webhook", webhook_handler))
+    application.add_handler(CommandHandler("triggers", triggers_handler))
     
     application.add_handler(PreCheckoutQueryHandler(pre_checkout_handler))
     application.add_handler(InlineQueryHandler(inline_query_handler))
@@ -368,7 +470,7 @@ def main() -> None:
     logger.info("WEB4TG Studio AI Agent starting...")
     logger.info(f"Model: {config.model_name}")
     logger.info(f"Bot API: {get_api_version()}")
-    logger.info(f"Features: Inline, Calculator, Leads, Streaming, FAQ, Promo, Testimonials, DailyDigest, PaymentReminders, Monitoring, RateLimiter, MultiLang, QA, AdvancedAnalytics, CRM")
+    logger.info(f"Features: Inline, Calculator, Leads, Streaming, FAQ, Promo, Testimonials, DailyDigest, PaymentReminders, Monitoring, RateLimiter, MultiLang, QA, AdvancedAnalytics, CRM, ProactiveEngagement")
     
     application.run_polling(allowed_updates=Update.ALL_TYPES)
 

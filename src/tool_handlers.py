@@ -12,6 +12,14 @@ def _track_propensity(user_id: int, event_type: str) -> None:
         logger.debug(f"Propensity tracking skipped: {e}")
 
 
+def _track_proactive(user_id: int, event_type: str, **kwargs) -> None:
+    try:
+        from src.proactive_engagement import proactive_engine
+        proactive_engine.update_behavioral_signals(user_id, event_type, **kwargs)
+    except Exception as e:
+        logger.debug(f"Proactive tracking skipped: {e}")
+
+
 def _track_outcome(user_id: int, outcome_type: str) -> None:
     try:
         from src.feedback_loop import feedback_loop
@@ -32,6 +40,7 @@ async def execute_tool_call(tool_name: str, args: dict, user_id: int, username: 
         lines = [f"✓ {FEATURES[f]['name']} — {FEATURES[f]['price']:,}₽".replace(",", " ") for f in valid]
         prepay = int(total * 0.35)
         _track_propensity(user_id, 'tool_calculator')
+        _track_proactive(user_id, 'calculator_used', cost=total, features=", ".join(valid))
         return (
             "Расчёт стоимости:\n" +
             "\n".join(lines) +

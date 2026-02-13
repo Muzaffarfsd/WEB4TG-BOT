@@ -621,3 +621,60 @@ async def handoff_handler(update: Update, context: ContextTypes.DEFAULT_TYPE) ->
             )
         except Exception as e:
             logging.getLogger(__name__).error(f"Handoff notification failed: {e}")
+
+
+async def triggers_handler(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
+    user = update.effective_user
+    import os
+    admin_ids = [os.environ.get("MANAGER_CHAT_ID", "")]
+    if str(user.id) not in admin_ids:
+        await update.message.reply_text("Эта команда доступна только администраторам.")
+        return
+
+    from src.proactive_engagement import proactive_engine, TRIGGER_TYPES
+
+    stats = proactive_engine.get_trigger_stats()
+    metrics = proactive_engine.get_conversion_metrics()
+    recent = proactive_engine.get_recent_triggers(limit=5)
+    tracked_users = proactive_engine.get_pending_triggers_count()
+
+    lines = ["<b>🎯 Проактивные продажи — Мониторинг</b>\n"]
+
+    if metrics:
+        total = metrics.get("total_triggers", 0)
+        responded = metrics.get("total_responded", 0)
+        rate = metrics.get("overall_response_rate", 0)
+        week_t = metrics.get("week_triggers", 0)
+        week_r = metrics.get("week_responded", 0)
+        week_rate = metrics.get("week_response_rate", 0)
+        lines.append(f"📊 <b>Общая статистика:</b>")
+        lines.append(f"  Всего триггеров: {total}")
+        lines.append(f"  Ответили: {responded} ({rate}%)")
+        lines.append(f"  За неделю: {week_t} → {week_r} ({week_rate}%)")
+        lines.append(f"  Уникальных клиентов: {metrics.get('unique_users', 0)}")
+        lines.append(f"  Отслеживается: {tracked_users} клиентов\n")
+
+    if stats:
+        lines.append(f"<b>📋 По типам триггеров:</b>")
+        for tt, data in stats.items():
+            name = TRIGGER_TYPES.get(tt, tt)
+            lines.append(
+                f"  • {name}: {data['total']} отправлено, "
+                f"{data['responded']} ответ ({data['response_rate']}%), "
+                f"сегодня: {data['today']}"
+            )
+        lines.append("")
+
+    if recent:
+        lines.append(f"<b>🕐 Последние 5 триггеров:</b>")
+        for r in recent:
+            name = r.get("first_name", "") or r.get("username", "") or str(r["user_id"])
+            tt = TRIGGER_TYPES.get(r["trigger_type"], r["trigger_type"])
+            responded_mark = "✅" if r.get("responded") else "⏳"
+            time_str = r["created_at"].strftime("%d.%m %H:%M") if r.get("created_at") else ""
+            lines.append(f"  {responded_mark} {name} — {tt} (score: {r.get('trigger_score', 0):.0f}) {time_str}")
+
+    if not stats and not metrics:
+        lines.append("Пока нет данных о проактивных триггерах.")
+
+    await update.message.reply_text("\n".join(lines), parse_mode="HTML")

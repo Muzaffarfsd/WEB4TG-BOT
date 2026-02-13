@@ -21,6 +21,7 @@ from src.handlers.commands import (
     brief_handler,
     consult_handler,
     crm_handler,
+    triggers_handler,
 )
 
 from src.handlers.callbacks import callback_handler
@@ -128,6 +129,7 @@ __all__ = [
     'export_csv_handler',
     'export_analytics_handler',
     'webhook_handler',
+    'triggers_handler',
     'message_handler',
     'error_handler',
     'send_typing_action',

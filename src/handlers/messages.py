@@ -530,7 +530,22 @@ async def message_handler(update: Update, context: ContextTypes.DEFAULT_TYPE) ->
         propensity_scorer.record_interaction(user.id, 'message')
     except Exception as e:
         logger.debug(f"Propensity tracking skipped: {e}")
-    
+
+    try:
+        from src.proactive_engagement import proactive_engine
+        proactive_engine.update_behavioral_signals(user.id, "message")
+        proactive_engine.mark_trigger_responded(user.id)
+
+        from src.context_builder import detect_competitor_mention
+        competitor = detect_competitor_mention(user_message)
+        if competitor:
+            proactive_engine.update_behavioral_signals(
+                user.id, "competitor_mention",
+                competitor_context=user_message[:300]
+            )
+    except Exception as e:
+        logger.debug(f"Proactive engagement tracking skipped: {e}")
+
     if 'prefers_voice' not in context.user_data:
         try:
             from src.session import get_client_profile
