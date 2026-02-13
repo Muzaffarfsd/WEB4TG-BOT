@@ -27,18 +27,33 @@ from reportlab.pdfbase.ttfonts import TTFont
 
 logger = logging.getLogger(__name__)
 
-FONT_DIR = "/usr/share/fonts/truetype/dejavu"
 W, H = A4
 
-try:
-    pdfmetrics.registerFont(TTFont("DejaVu", os.path.join(FONT_DIR, "DejaVuSans.ttf")))
-    pdfmetrics.registerFont(TTFont("DejaVuB", os.path.join(FONT_DIR, "DejaVuSans-Bold.ttf")))
-    FONT = "DejaVu"
-    FONTB = "DejaVuB"
-except Exception:
-    FONT = "Helvetica"
-    FONTB = "Helvetica-Bold"
-    logger.warning("DejaVu fonts not available, using Helvetica")
+_PROJECT_ROOT = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
+_FONT_DIRS = [
+    os.path.join(_PROJECT_ROOT, "fonts"),
+    "/usr/share/fonts/truetype/dejavu",
+    "/usr/share/fonts/dejavu",
+    "/app/fonts",
+]
+
+FONT = "Helvetica"
+FONTB = "Helvetica-Bold"
+for _fd in _FONT_DIRS:
+    _regular = os.path.join(_fd, "DejaVuSans.ttf")
+    _bold = os.path.join(_fd, "DejaVuSans-Bold.ttf")
+    if os.path.isfile(_regular) and os.path.isfile(_bold):
+        try:
+            pdfmetrics.registerFont(TTFont("DejaVu", _regular))
+            pdfmetrics.registerFont(TTFont("DejaVuB", _bold))
+            FONT = "DejaVu"
+            FONTB = "DejaVuB"
+            logger.info(f"DejaVu fonts loaded from {_fd}")
+            break
+        except Exception as e:
+            logger.warning(f"Failed to register fonts from {_fd}: {e}")
+else:
+    logger.warning("DejaVu fonts not found in any location, PDF may lack Cyrillic support")
 
 C_BG = HexColor("#fafbfd")
 C_DARK = HexColor("#0c1222")
