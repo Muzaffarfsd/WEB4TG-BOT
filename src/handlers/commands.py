@@ -36,17 +36,19 @@ async def start_handler(update: Update, context: ContextTypes.DEFAULT_TYPE) -> N
         first_name=user.first_name
     )
     session.clear_history()
-    
-    analytics.track(user.id, FunnelEvent.START)
-    
+
     lang_code = user.language_code or "en"
     logger.info(f"User {user.id} ({user.username}) started bot, lang={lang_code}")
-    
+
+    name = user.first_name or ""
+    name_part = f", {name}" if name else ""
+
     referral_bonus_text = ""
-    if context.args and len(context.args) > 0:
-        arg = context.args[0]
-        if arg.startswith("ref_"):
-            referral_code = arg[4:]
+    has_referral = context.args and len(context.args) > 0 and context.args[0].startswith("ref_")
+
+    if has_referral:
+        try:
+            referral_code = context.args[0][4:]
             result = referral_manager.apply_referral_code(
                 telegram_id=user.id,
                 referral_code=referral_code,
@@ -56,37 +58,22 @@ async def start_handler(update: Update, context: ContextTypes.DEFAULT_TYPE) -> N
             if result["success"]:
                 referral_bonus_text = f"\n\n🎁 Вы получили {REFERRED_REWARD} монет по реферальному коду!"
                 logger.info(f"User {user.id} applied referral code {referral_code}")
-                
                 referrer_id = result.get("referrer_telegram_id")
                 if referrer_id:
-                    try:
-                        new_user_name = user.first_name or user.username or "Новый пользователь"
-                        await context.bot.send_message(
-                            chat_id=referrer_id,
-                            text=f"🎉 Отличные новости!\n\n"
-                                 f"Ваш друг **{new_user_name}** присоединился по вашей ссылке!\n\n"
-                                 f"💰 Вам начислено **+{REFERRER_REWARD} монет**\n\n"
-                                 f"Продолжайте приглашать друзей и зарабатывайте ещё больше!",
-                            parse_mode="Markdown"
-                        )
-                        logger.info(f"Sent referral notification to {referrer_id}")
-                    except Exception as e:
-                        logger.warning(f"Failed to notify referrer {referrer_id}: {e}")
-    
-    referral_manager.get_or_create_user(user.id, user.username, user.first_name)
-    
-    from src.broadcast import broadcast_manager
-    broadcast_manager.register_user(user.id, user.username, user.first_name)
-    
-    name = user.first_name or ""
-    name_part = f", {name}" if name else ""
-    
-    welcome_variant = ab_testing.get_variant(user.id, "welcome_voice")
-    ab_testing.track_event(user.id, "welcome_voice", "start_command", {"variant": welcome_variant})
-    
+                    asyncio.create_task(context.bot.send_message(
+                        chat_id=referrer_id,
+                        text=f"🎉 Отличные новости!\n\n"
+                             f"Ваш друг **{user.first_name or user.username or 'Новый пользователь'}** присоединился по вашей ссылке!\n\n"
+                             f"💰 Вам начислено **+{REFERRER_REWARD} монет**\n\n"
+                             f"Продолжайте приглашать друзей и зарабатывайте ещё больше!",
+                        parse_mode="Markdown"
+                    ))
+        except Exception as e:
+            logger.warning(f"Referral processing failed: {e}")
+
     from src.context_builder import is_returning_user, get_returning_context
     is_returning = is_returning_user(user.id)
-    
+
     if is_returning and lang_code.startswith("ru"):
         returning_ctx = get_returning_context(user.id)
         if returning_ctx:
@@ -104,9 +91,9 @@ async def start_handler(update: Update, context: ContextTypes.DEFAULT_TYPE) -> N
         welcome_text = WELCOME_MESSAGES["uk"].format(name=name_part)
     else:
         welcome_text = WELCOME_MESSAGES["en"].format(name=name_part)
-    
+
     welcome_text += referral_bonus_text
-    
+
     pinned_keyboard = InlineKeyboardMarkup([
         [InlineKeyboardButton("🚀 Открыть приложение", web_app=WebAppInfo(url="https://w4tg.up.railway.app/"))]
     ])
@@ -114,11 +101,33 @@ async def start_handler(update: Update, context: ContextTypes.DEFAULT_TYPE) -> N
         "👋 Добро пожаловать в WEB4TG Studio!",
         reply_markup=pinned_keyboard
     )
-    
+
     try:
         await pinned_msg.pin(disable_notification=True)
     except Exception as e:
         logger.debug(f"Could not pin message: {e}")
+
+    async def _background_registrations(uid, uname, fname):
+        try:
+            analytics.track(uid, FunnelEvent.START)
+        except Exception:
+            pass
+        try:
+            referral_manager.get_or_create_user(uid, uname, fname)
+        except Exception:
+            pass
+        try:
+            from src.broadcast import broadcast_manager
+            broadcast_manager.register_user(uid, uname, fname)
+        except Exception:
+            pass
+        try:
+            welcome_variant = ab_testing.get_variant(uid, "welcome_voice")
+            ab_testing.track_event(uid, "welcome_voice", "start_command", {"variant": welcome_variant})
+        except Exception:
+            pass
+
+    asyncio.create_task(_background_registrations(user.id, user.username, user.first_name))
     
     quiz_keyboard = InlineKeyboardMarkup([
         [InlineKeyboardButton(
@@ -131,56 +140,64 @@ async def start_handler(update: Update, context: ContextTypes.DEFAULT_TYPE) -> N
         welcome_text,
         reply_markup=quiz_keyboard
     )
-    
-    try:
-        from google import genai
-        from google.genai import types as genai_types
-        from src.config import config as app_config
 
-        ai_client_greet = genai.Client(api_key=app_config.gemini_api_key)
-        greet_prompt = (
-            f"Ты — Алекс, живой консультант WEB4TG Studio. Запиши приветственное голосовое для нового клиента{name_part}.\n\n"
-            "ЗАДАЧА: поздороваться, коротко представиться, сказать что делаете (мини-аппс для Телеграм — магазины, рестораны, салоны), "
-            "упомянуть что можно общаться текстом или голосовыми, и спросить чем занимается клиент.\n\n"
-            "ПРАВИЛА:\n"
-            "- 200-350 символов максимум (15-25 секунд речи)\n"
-            "- Говори КАК ЖИВОЙ ЧЕЛОВЕК — с паузами (...), переходами ( — ), речевыми маркерами\n"
-            "- Никакого markdown, emoji, списков\n"
-            "- Каждый раз говори немного по-разному, не шаблонно\n"
-            "- Аббревиатуры раскрывай: WEB4TG = вэб-фор-тэ-гэ\n"
-            "- Верни ТОЛЬКО текст для озвучки, без комментариев"
-        )
-        greet_response = await asyncio.to_thread(
-            ai_client_greet.models.generate_content,
-            model=app_config.model_name,
-            contents=[greet_prompt],
-            config=genai_types.GenerateContentConfig(
-                max_output_tokens=400,
-                temperature=0.9
+    chat_id = update.effective_chat.id
+    bot_instance = context.bot
+
+    async def _send_voice_greeting_background():
+        try:
+            from google import genai
+            from google.genai import types as genai_types
+            from src.config import config as app_config
+
+            await bot_instance.send_chat_action(chat_id=chat_id, action=ChatAction.RECORD_VOICE)
+
+            ai_client_greet = genai.Client(api_key=app_config.gemini_api_key)
+            greet_prompt = (
+                f"Ты — Алекс, живой консультант WEB4TG Studio. Запиши приветственное голосовое для нового клиента{name_part}.\n\n"
+                "ЗАДАЧА: поздороваться, коротко представиться, сказать что делаете (мини-аппс для Телеграм — магазины, рестораны, салоны), "
+                "упомянуть что можно общаться текстом или голосовыми, и спросить чем занимается клиент.\n\n"
+                "ПРАВИЛА:\n"
+                "- 200-350 символов максимум (15-25 секунд речи)\n"
+                "- Говори КАК ЖИВОЙ ЧЕЛОВЕК — с паузами (...), переходами ( — ), речевыми маркерами\n"
+                "- Никакого markdown, emoji, списков\n"
+                "- Каждый раз говори немного по-разному, не шаблонно\n"
+                "- Аббревиатуры раскрывай: WEB4TG = вэб-фор-тэ-гэ\n"
+                "- Верни ТОЛЬКО текст для озвучки, без комментариев"
             )
-        )
-        voice_greeting = greet_response.text.strip() if greet_response.text else None
-    except Exception as e:
-        logger.warning(f"AI greeting generation failed: {e}")
-        voice_greeting = None
+            greet_response = await asyncio.to_thread(
+                ai_client_greet.models.generate_content,
+                model=app_config.model_name,
+                contents=[greet_prompt],
+                config=genai_types.GenerateContentConfig(
+                    max_output_tokens=400,
+                    temperature=0.9
+                )
+            )
+            voice_greeting = greet_response.text.strip() if greet_response.text else None
+        except Exception as e:
+            logger.warning(f"AI greeting generation failed: {e}")
+            voice_greeting = None
 
-    if not voice_greeting:
-        voice_greeting = (
-            f"Привет{name_part}! Меня зовут Алекс, я консультант в вэб-фор-тэ-гэ Студио. "
-            f"Ну смотрите... мы делаем мини-аппс для Телеграм — магазины, рестораны, салоны и много чего ещё. "
-            f"Кстати, можем общаться как удобно — текстом, голосовыми — мне без разницы. "
-            f"Расскажите, чем занимаетесь? Посмотрим, чем можем быть полезны."
-        )
+        if not voice_greeting:
+            voice_greeting = (
+                f"Привет{name_part}! Меня зовут Алекс, я консультант в вэб-фор-тэ-гэ Студио. "
+                f"Ну смотрите... мы делаем мини-аппс для Телеграм — магазины, рестораны, салоны и много чего ещё. "
+                f"Кстати, можем общаться как удобно — текстом, голосовыми — мне без разницы. "
+                f"Расскажите, чем занимаетесь? Посмотрим, чем можем быть полезны."
+            )
 
-    try:
-        await update.effective_chat.send_action(ChatAction.RECORD_VOICE)
-        voice_audio = await generate_voice_response(voice_greeting, use_cache=False)
-        await update.message.reply_voice(voice=voice_audio)
-        ab_testing.track_event(user.id, "welcome_voice", "voice_sent")
-        logger.info(f"Sent voice greeting to user {user.id}")
-    except Exception as e:
-        ab_testing.track_event(user.id, "welcome_voice", "voice_failed")
-        logger.warning(f"Failed to send voice greeting: {e}")
+        try:
+            await bot_instance.send_chat_action(chat_id=chat_id, action=ChatAction.RECORD_VOICE)
+            voice_audio = await generate_voice_response(voice_greeting, use_cache=False)
+            await bot_instance.send_voice(chat_id=chat_id, voice=voice_audio)
+            ab_testing.track_event(user.id, "welcome_voice", "voice_sent")
+            logger.info(f"Sent voice greeting to user {user.id}")
+        except Exception as e:
+            ab_testing.track_event(user.id, "welcome_voice", "voice_failed")
+            logger.warning(f"Failed to send voice greeting: {e}")
+
+    asyncio.create_task(_send_voice_greeting_background())
 
 
 async def help_handler(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
