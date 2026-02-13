@@ -45,6 +45,7 @@ async def post_init(application) -> None:
     commands = [
         BotCommand("start", "🚀 Начать"),
         BotCommand("menu", "📋 Все услуги и функции"),
+        BotCommand("price", "💰 Цены и пакеты"),
         BotCommand("portfolio", "🎨 Примеры работ"),
         BotCommand("mystatus", "📊 Мой кабинет"),
         BotCommand("consult", "📅 Бесплатная консультация"),
