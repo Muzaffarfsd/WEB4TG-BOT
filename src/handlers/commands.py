@@ -22,7 +22,7 @@ from src.keyboards import get_portfolio_keyboard
 from src.analytics import analytics, FunnelEvent
 from src.bot_api import copy_text_button, styled_button_api_kwargs
 
-from src.handlers.utils import WELCOME_MESSAGES
+from src.handlers.utils import WELCOME_MESSAGES, get_welcome_message
 from src.handlers.media import generate_voice_response
 
 logger = logging.getLogger(__name__)
@@ -74,23 +74,23 @@ async def start_handler(update: Update, context: ContextTypes.DEFAULT_TYPE) -> N
     from src.context_builder import is_returning_user, get_returning_context
     is_returning = is_returning_user(user.id)
 
-    if is_returning and lang_code.startswith("ru"):
+    if lang_code.startswith("uk"):
+        lang_key = "uk"
+    elif lang_code.startswith("en"):
+        lang_key = "en"
+    else:
+        lang_key = "ru"
+
+    if is_returning:
         returning_ctx = get_returning_context(user.id)
         if returning_ctx:
             short_ctx = returning_ctx[:200]
-            welcome_text = WELCOME_MESSAGE_RETURNING.format(
-                context=f"В прошлый раз мы обсуждали: {short_ctx}..."
-            )
+            ctx_text = f"В прошлый раз мы обсуждали: {short_ctx}..."
         else:
-            welcome_text = WELCOME_MESSAGE_RETURNING.format(
-                context="Помню вас) Как продвигаются дела с проектом?"
-            )
-    elif lang_code.startswith("ru"):
-        welcome_text = WELCOME_MESSAGES["ru"].format(name=name_part)
-    elif lang_code.startswith("uk"):
-        welcome_text = WELCOME_MESSAGES["uk"].format(name=name_part)
+            ctx_text = None
+        welcome_text = get_welcome_message(lang_key, name_part, is_returning=True, returning_context=ctx_text)
     else:
-        welcome_text = WELCOME_MESSAGES["en"].format(name=name_part)
+        welcome_text = get_welcome_message(lang_key, name_part, is_returning=False)
 
     welcome_text += referral_bonus_text
 
@@ -156,19 +156,41 @@ async def start_handler(update: Update, context: ContextTypes.DEFAULT_TYPE) -> N
 
             await bot_instance.send_chat_action(chat_id=chat_id, action=ChatAction.RECORD_VOICE)
 
+            from src.handlers.utils import _get_time_greeting
+            time_greet = _get_time_greeting()
+            time_word = time_greet["ru"]
+
             ai_client_greet = get_gemini_client()
-            greet_prompt = (
-                f"Ты — Алекс, живой консультант WEB4TG Studio. Запиши приветственное голосовое для нового клиента{name_part}.\n\n"
-                "ЗАДАЧА: поздороваться, коротко представиться, сказать что делаете (мини-аппс для Телеграм — магазины, рестораны, салоны), "
-                "упомянуть что можно общаться текстом или голосовыми, и спросить чем занимается клиент.\n\n"
-                "ПРАВИЛА:\n"
-                "- 200-350 символов максимум (15-25 секунд речи)\n"
-                "- Говори КАК ЖИВОЙ ЧЕЛОВЕК — с паузами (...), переходами ( — ), речевыми маркерами\n"
-                "- Никакого markdown, emoji, списков\n"
-                "- Каждый раз говори немного по-разному, не шаблонно\n"
-                "- Аббревиатуры раскрывай: WEB4TG = вэб-фор-тэ-гэ\n"
-                "- Верни ТОЛЬКО текст для озвучки, без комментариев"
-            )
+
+            if is_returning:
+                greet_prompt = (
+                    f"Ты — Алекс, живой консультант WEB4TG Studio. Запиши приветственное голосовое для ВОЗВРАЩАЮЩЕГОСЯ клиента{name_part}.\n\n"
+                    f"Сейчас по Москве — {time_word.lower()}. Используй приветствие по времени суток.\n\n"
+                    "ЗАДАЧА: тепло поприветствовать, сказать что рад видеть снова, "
+                    "спросить как дела с проектом или бизнесом, предложить помощь.\n\n"
+                    "ПРАВИЛА:\n"
+                    "- 150-250 символов максимум (10-18 секунд речи)\n"
+                    "- Говори КАК ЖИВОЙ ЧЕЛОВЕК — с паузами (...), переходами ( — ), речевыми маркерами\n"
+                    "- Покажи что помнишь клиента, общайся как со знакомым\n"
+                    "- Никакого markdown, emoji, списков\n"
+                    "- Каждый раз говори немного по-разному, не шаблонно\n"
+                    "- Аббревиатуры раскрывай: WEB4TG = вэб-фор-тэ-гэ\n"
+                    "- Верни ТОЛЬКО текст для озвучки, без комментариев"
+                )
+            else:
+                greet_prompt = (
+                    f"Ты — Алекс, живой консультант WEB4TG Studio. Запиши приветственное голосовое для НОВОГО клиента{name_part}.\n\n"
+                    f"Сейчас по Москве — {time_word.lower()}. Используй приветствие по времени суток.\n\n"
+                    "ЗАДАЧА: поздороваться, коротко представиться, сказать что делаете (мини-аппс для Телеграм — магазины, рестораны, салоны), "
+                    "упомянуть что можно общаться текстом или голосовыми, и спросить чем занимается клиент.\n\n"
+                    "ПРАВИЛА:\n"
+                    "- 200-350 символов максимум (15-25 секунд речи)\n"
+                    "- Говори КАК ЖИВОЙ ЧЕЛОВЕК — с паузами (...), переходами ( — ), речевыми маркерами\n"
+                    "- Никакого markdown, emoji, списков\n"
+                    "- Каждый раз говори немного по-разному, не шаблонно\n"
+                    "- Аббревиатуры раскрывай: WEB4TG = вэб-фор-тэ-гэ\n"
+                    "- Верни ТОЛЬКО текст для озвучки, без комментариев"
+                )
             greet_response = await asyncio.to_thread(
                 ai_client_greet.models.generate_content,
                 model=app_config.model_name,
@@ -184,12 +206,19 @@ async def start_handler(update: Update, context: ContextTypes.DEFAULT_TYPE) -> N
             voice_greeting = None
 
         if not voice_greeting:
-            voice_greeting = (
-                f"Привет{name_part}! Меня зовут Алекс, я консультант в вэб-фор-тэ-гэ Студио. "
-                f"Ну смотрите... мы делаем мини-аппс для Телеграм — магазины, рестораны, салоны и много чего ещё. "
-                f"Кстати, можем общаться как удобно — текстом, голосовыми — мне без разницы. "
-                f"Расскажите, чем занимаетесь? Посмотрим, чем можем быть полезны."
-            )
+            if is_returning:
+                voice_greeting = (
+                    f"{time_word}{name_part}! Рад снова вас слышать... "
+                    f"Ну что, как дела? Продвинулись с проектом? "
+                    f"Если что — я тут, поможем разобраться."
+                )
+            else:
+                voice_greeting = (
+                    f"{time_word}{name_part}! Меня зовут Алекс, я консультант в вэб-фор-тэ-гэ Студио. "
+                    f"Ну смотрите... мы делаем мини-аппс для Телеграм — магазины, рестораны, салоны и много чего ещё. "
+                    f"Кстати, можем общаться как удобно — текстом, голосовыми — мне без разницы. "
+                    f"Расскажите, чем занимаетесь? Посмотрим, чем можем быть полезны."
+                )
 
         try:
             await bot_instance.send_chat_action(chat_id=chat_id, action=ChatAction.RECORD_VOICE)

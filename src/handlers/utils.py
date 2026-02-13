@@ -29,6 +29,69 @@ async def send_typing_action(update: Update, duration: float = 4.0):
         logger.debug(f"Typing action error: {e}")
 
 
+def _get_time_greeting() -> dict:
+    from datetime import datetime, timezone, timedelta
+    moscow_tz = timezone(timedelta(hours=3))
+    hour = datetime.now(moscow_tz).hour
+    if 5 <= hour < 12:
+        return {"ru": "Доброе утро", "en": "Good morning", "uk": "Доброго ранку", "period": "morning"}
+    elif 12 <= hour < 18:
+        return {"ru": "Добрый день", "en": "Good afternoon", "uk": "Добрий день", "period": "afternoon"}
+    elif 18 <= hour < 23:
+        return {"ru": "Добрый вечер", "en": "Good evening", "uk": "Добрий вечір", "period": "evening"}
+    else:
+        return {"ru": "Доброй ночи", "en": "Hey there", "uk": "Доброї ночі", "period": "night"}
+
+
+def get_welcome_message(lang: str, name: str, is_returning: bool = False, returning_context: str = None) -> str:
+    tg = _get_time_greeting()
+
+    if is_returning:
+        if lang == "uk":
+            ctx = returning_context or "Як просувається проєкт?"
+            return (
+                f"{tg['uk']}{name}! Раді бачити вас знову)\n\n"
+                f"{ctx}\n\n"
+                f"Чим можу допомогти сьогодні?"
+            )
+        elif lang == "en":
+            ctx = returning_context or "How's the project going?"
+            return (
+                f"{tg['en']}{name}! Great to see you back)\n\n"
+                f"{ctx}\n\n"
+                f"What can I help you with today?"
+            )
+        else:
+            ctx = returning_context or "Как продвигаются дела с проектом?"
+            return (
+                f"{tg['ru']}{name}! Рад что вернулись)\n\n"
+                f"{ctx}\n\n"
+                f"Чем могу помочь сегодня?"
+            )
+
+    if lang == "uk":
+        return (
+            f"{tg['uk']}{name}! Мене звати Алекс, працюю консультантом у WEB4TG Studio.\n\n"
+            f"Ми робимо Telegram Mini Apps для бізнесу — інтернет-магазини, ресторани, салони краси та багато іншого.\n\n"
+            f"До речі, можемо спілкуватися як зручно — текстом або голосовими, мені без різниці)\n\n"
+            f"Розкажіть, чим займаєтесь? Подивимось, чим можемо бути корисні."
+        )
+    elif lang == "en":
+        return (
+            f"{tg['en']}{name}! I'm Alex, consultant at WEB4TG Studio.\n\n"
+            f"We build Telegram Mini Apps for businesses — online stores, restaurants, beauty salons and more.\n\n"
+            f"By the way, feel free to text or send voice messages — whatever works for you)\n\n"
+            f"So what's your business about? Let's see how we can help."
+        )
+    else:
+        return (
+            f"{tg['ru']}{name}! Меня зовут Алекс, работаю консультантом в WEB4TG Studio.\n\n"
+            f"Мы делаем Telegram Mini Apps для бизнеса — интернет-магазины, рестораны, салоны красоты и многое другое.\n\n"
+            f"Кстати, можем общаться как удобно — текстом или голосовыми, мне без разницы)\n\n"
+            f"Расскажите, чем занимаетесь? Посмотрим, чем можем быть полезны."
+        )
+
+
 WELCOME_MESSAGES = {
     "ru": """Привет{name}! Меня зовут Алекс, работаю консультантом в WEB4TG Studio.
 
