@@ -51,3 +51,14 @@ requests
 tenacity
 tqdm
 websockets
+fpdf2
+google-genai
+httpx
+pycparser
+pydantic
+pytz
+reportlab
+requests
+telegram
+tqdm
+websockets
