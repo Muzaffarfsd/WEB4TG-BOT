@@ -18,13 +18,17 @@ logger = logging.getLogger(__name__)
 
 @admin_required
 async def leads_handler(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
-    user_id = update.effective_user.id
+    user = update.effective_user
+    message = update.message
+    if not user or not message:
+        return
+    user_id = user.id
     log_admin_action(user_id, "view_leads")
     
     leads = lead_manager.get_all_leads(limit=20)
     
     if not leads:
-        await update.message.reply_text("Лидов пока нет.")
+        await message.reply_text("Лидов пока нет.")
         return
     
     text_parts = ["📋 **Последние лиды:**\n"]
@@ -35,12 +39,16 @@ async def leads_handler(update: Update, context: ContextTypes.DEFAULT_TYPE) -> N
         cost = f"{lead.estimated_cost:,}₽".replace(",", " ") if lead.estimated_cost else "—"
         text_parts.append(f"{status_emoji} {name} ({username}) — {cost}")
     
-    await update.message.reply_text("\n".join(text_parts), parse_mode="Markdown")
+    await message.reply_text("\n".join(text_parts), parse_mode="Markdown")
 
 
 @admin_required
 async def stats_handler(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
-    user_id = update.effective_user.id
+    user = update.effective_user
+    message = update.message
+    if not user or not message:
+        return
+    user_id = user.id
     log_admin_action(user_id, "view_stats")
     
     stats = lead_manager.get_stats()
@@ -65,26 +73,30 @@ async def stats_handler(update: Update, context: ContextTypes.DEFAULT_TYPE) -> N
 📅 Сегодня: {lead_analytics.get('today_users', 0)}
 📆 За неделю: {lead_analytics.get('week_users', 0)}"""
 
-    await update.message.reply_text(text, parse_mode="Markdown")
-    await update.message.reply_text(funnel_text, parse_mode="HTML")
+    await message.reply_text(text, parse_mode="Markdown")
+    await message.reply_text(funnel_text, parse_mode="HTML")
 
 
 @admin_required
 async def reviews_handler(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
-    user_id = update.effective_user.id
+    user = update.effective_user
+    message = update.message
+    if not user or not message:
+        return
+    user_id = user.id
     log_admin_action(user_id, "view_reviews")
     
     pending = loyalty_system.get_pending_reviews()
     
     if not pending:
-        await update.message.reply_text("✅ Нет отзывов на модерацию")
+        await message.reply_text("✅ Нет отзывов на модерацию")
         return
     
-    await update.message.reply_text(f"📋 <b>Отзывы на модерацию: {len(pending)}</b>", parse_mode="HTML")
+    await message.reply_text(f"📋 <b>Отзывы на модерацию: {len(pending)}</b>", parse_mode="HTML")
     
     for review in pending[:10]:
         text = format_review_notification(review)
-        await update.message.reply_text(
+        await message.reply_text(
             text,
             parse_mode="HTML",
             reply_markup=get_review_moderation_keyboard(review.id)
@@ -93,7 +105,11 @@ async def reviews_handler(update: Update, context: ContextTypes.DEFAULT_TYPE) ->
 
 @admin_required
 async def export_handler(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
-    user_id = update.effective_user.id
+    user = update.effective_user
+    message = update.message
+    if not user or not message:
+        return
+    user_id = user.id
     log_admin_action(user_id, "export_leads")
     
     csv_data = lead_manager.export_leads_csv()
@@ -104,7 +120,7 @@ async def export_handler(update: Update, context: ContextTypes.DEFAULT_TYPE) -> 
     
     try:
         with open(temp_path, 'rb') as f:
-            await update.message.reply_document(
+            await message.reply_document(
                 document=f,
                 filename="leads_export.csv",
                 caption="📥 Экспорт лидов"
@@ -115,21 +131,25 @@ async def export_handler(update: Update, context: ContextTypes.DEFAULT_TYPE) -> 
 
 @admin_required
 async def history_handler(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
-    user_id = update.effective_user.id
-    args = context.args
+    user = update.effective_user
+    message = update.message
+    if not user or not message:
+        return
+    user_id = user.id
+    args = context.args or []
     if not args:
-        await update.message.reply_text("Использование: /history <user_id>")
+        await message.reply_text("Использование: /history <user_id>")
         return
     
     try:
         target_user_id = int(args[0])
     except ValueError:
-        await update.message.reply_text("User ID должен быть числом")
+        await message.reply_text("User ID должен быть числом")
         return
     
     lead = lead_manager.get_lead(target_user_id)
     if not lead:
-        await update.message.reply_text("Лид не найден")
+        await message.reply_text("Лид не найден")
         return
     
     history = lead_manager.get_lead_history(target_user_id, limit=30)

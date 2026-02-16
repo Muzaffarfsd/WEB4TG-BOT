@@ -240,7 +240,7 @@ async def execute_tool_call(tool_name: str, args: dict, user_id: int, username: 
         except Exception as e:
             logger.debug(f"Tasks tracker check failed: {e}")
         try:
-            from src.loyalty import loyalty_system as ls
+            from src.handlers.utils import loyalty_system as ls
             if ls.is_returning_customer(user_id):
                 discounts.append("🔄 Постоянный клиент → +5% скидка")
             reviews = ls.get_user_reviews(user_id)
@@ -249,8 +249,8 @@ async def execute_tool_call(tool_name: str, args: dict, user_id: int, username: 
         except Exception as e:
             logger.debug(f"Loyalty check failed: {e}")
         try:
-            from src.referrals import referral_system
-            referrals = referral_system.get_referrals_list(user_id)
+            from src.referrals import referral_manager
+            referrals = referral_manager.get_referrals_list(user_id)
             if referrals:
                 discounts.append(f"👥 {len(referrals)} рефералов → реферальные бонусы")
         except Exception as e:

@@ -353,7 +353,9 @@ def detect_funnel_stage(user_id: int, user_message: str, message_count: int = 0)
             lead_score = lead.score or 0
             if lead.tags:
                 lead_tags = set(lead.tags)
-            events = lead_manager.get_events(user_id) if hasattr(lead_manager, 'get_events') else []
+            events: list = []
+            if hasattr(lead_manager, 'get_events'):
+                events = lead_manager.get_events(user_id)  # type: ignore[attr-defined]
             for ev in events:
                 event_type = ev.get("event_type", "") if isinstance(ev, dict) else ""
                 lead_actions.add(event_type)
@@ -594,7 +596,7 @@ def get_social_proof(objections: list, funnel_stage: str) -> str:
     return ""
 
 
-def build_client_context(user_id: int, username: str = None, first_name: str = None) -> str:
+def build_client_context(user_id: int, username: Optional[str] = None, first_name: Optional[str] = None) -> str:
     context_parts = []
 
     try:
@@ -624,7 +626,7 @@ def build_client_context(user_id: int, username: str = None, first_name: str = N
         logger.debug(f"Failed to get coins data: {e}")
 
     try:
-        from src.loyalty import loyalty_system
+        from src.handlers.utils import loyalty_system
         if loyalty_system.is_returning_customer(user_id):
             context_parts.append("Статус: постоянный клиент (+5% скидка)")
         reviews = loyalty_system.get_user_reviews(user_id)
@@ -634,8 +636,8 @@ def build_client_context(user_id: int, username: str = None, first_name: str = N
         logger.debug(f"Failed to get loyalty data: {e}")
 
     try:
-        from src.referrals import referral_system
-        referrals = referral_system.get_referrals_list(user_id)
+        from src.referrals import referral_manager
+        referrals = referral_manager.get_referrals_list(user_id)
         if referrals:
             context_parts.append(f"Привёл {len(referrals)} рефералов")
     except Exception as e:
@@ -643,7 +645,9 @@ def build_client_context(user_id: int, username: str = None, first_name: str = N
 
     try:
         from src.leads import lead_manager
-        events = lead_manager.get_events(user_id) if hasattr(lead_manager, 'get_events') else []
+        events: list = []
+        if hasattr(lead_manager, 'get_events'):
+            events = lead_manager.get_events(user_id)  # type: ignore[attr-defined]
         if events:
             actions = set()
             for ev in events:
@@ -905,7 +909,7 @@ def detect_negotiation_stance(text: str) -> Optional[str]:
     for p in NEGOTIATION_SOFT_PATTERNS:
         if p in text_lower:
             scores["soft"] += 1
-    best = max(scores, key=scores.get)
+    best = max(scores, key=lambda k: scores[k])
     if scores[best] == 0:
         return None
     return NEGOTIATION_HINTS[best]
@@ -1067,7 +1071,9 @@ def get_smart_upsell(user_id: int, funnel_stage: str) -> Optional[str]:
         if not lead or not lead.tags:
             return None
 
-        events = lead_manager.get_events(user_id) if hasattr(lead_manager, 'get_events') else []
+        events: list = []
+        if hasattr(lead_manager, 'get_events'):
+            events = lead_manager.get_events(user_id)  # type: ignore[attr-defined]
         discussed_topics = set()
         for ev in events:
             if isinstance(ev, dict):
@@ -1207,7 +1213,7 @@ def detect_decision_fatigue(text: str, message_count: int) -> Optional[str]:
     return None
 
 
-def build_full_context(user_id: int, user_message: str, username: str = None, first_name: str = None, message_count: int = 0) -> Optional[str]:
+def build_full_context(user_id: int, user_message: str, username: Optional[str] = None, first_name: Optional[str] = None, message_count: int = 0) -> Optional[str]:
     parts = []
 
     try:

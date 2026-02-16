@@ -1,7 +1,7 @@
 import asyncio
 import logging
 import re
-from typing import List, Dict, Optional, Tuple
+from typing import Any, List, Dict, Optional, Tuple
 from google import genai
 from google.genai import types
 from tenacity import retry, stop_after_attempt, wait_exponential, retry_if_exception
@@ -10,6 +10,18 @@ from src.config import config
 from src.knowledge_base import SYSTEM_PROMPT
 
 logger = logging.getLogger(__name__)
+
+
+def is_rate_limit_error(exc: BaseException) -> bool:
+    exc_str = str(exc).lower()
+    exc_type = type(exc).__name__
+    if "429" in exc_str or "rate" in exc_str or "quota" in exc_str:
+        return True
+    if "resourceexhausted" in exc_type.lower():
+        return True
+    if "too many requests" in exc_str:
+        return True
+    return False
 
 VALID_TEMPLATE_PRICES = {150000, 170000, 180000, 200000}
 VALID_SUBSCRIPTION_PRICES = {9900, 14900, 24900}
@@ -307,14 +319,14 @@ class AIClient:
             try:
                 import queue
                 chunk_queue = queue.Queue()
-                stream_error = [None]
+                stream_error: list[Optional[Exception]] = [None]
 
                 def _stream_in_thread():
                     full = ""
                     try:
                         stream = self._client.models.generate_content_stream(
                             model=model,
-                            contents=messages,
+                            contents=messages,  # type: ignore[arg-type]
                             config=gen_config
                         )
                         for chunk in stream:
@@ -454,7 +466,7 @@ class AIClient:
             response = await asyncio.to_thread(
                 self._client.models.generate_content,
                 model=model,
-                contents=messages,
+                contents=messages,  # type: ignore[arg-type]
                 config=gen_config
             )
             return response
@@ -485,7 +497,7 @@ class AIClient:
                     response = await asyncio.to_thread(
                         self._client.models.generate_content,
                         model=model,
-                        contents=messages,
+                        contents=messages,  # type: ignore[arg-type]
                         config=gen_config
                     )
                     if response.text:
@@ -507,21 +519,21 @@ class AIClient:
         """Returns {"text": str, "tool_calls": list[dict], "all_tool_calls": list}"""
         try:
             model = config.fast_model_name
-            tools = types.Tool(function_declarations=TOOL_DECLARATIONS)
+            tools = types.Tool(function_declarations=TOOL_DECLARATIONS)  # type: ignore[arg-type]
             gen_config = types.GenerateContentConfig(
                 system_instruction=SYSTEM_PROMPT,
                 max_output_tokens=config.max_tokens,
                 temperature=config.temperature,
                 tools=[tools],
                 tool_config=types.ToolConfig(
-                    function_calling_config=types.FunctionCallingConfig(mode='AUTO')
+                    function_calling_config=types.FunctionCallingConfig(mode=types.FunctionCallingConfigMode.AUTO)
                 )
             )
 
             response = await asyncio.to_thread(
                 self._client.models.generate_content,
                 model=model,
-                contents=messages,
+                contents=messages,  # type: ignore[arg-type]
                 config=gen_config
             )
 

@@ -1,6 +1,7 @@
 """Shared database connection pool for all modules."""
 import os
 import logging
+from typing import Optional
 from contextlib import contextmanager
 import psycopg2
 from psycopg2 import pool
@@ -81,6 +82,8 @@ def get_connection():
             if attempt == MAX_CONN_RETRIES:
                 raise Exception(f"Failed to get healthy database connection after {MAX_CONN_RETRIES} attempts")
 
+    if conn is None:
+        raise Exception("Failed to get database connection")
     try:
         yield conn
         conn.commit()
@@ -108,7 +111,7 @@ def get_cursor(dict_cursor=False):
             cursor.close()
 
 
-def execute_query(query: str, params: tuple = None, fetch: bool = False, dict_cursor: bool = False):
+def execute_query(query: str, params: Optional[tuple] = None, fetch: bool = False, dict_cursor: bool = False):
     """Execute a query and optionally fetch results."""
     with get_cursor(dict_cursor=dict_cursor) as cursor:
         cursor.execute(query, params)
@@ -117,7 +120,7 @@ def execute_query(query: str, params: tuple = None, fetch: bool = False, dict_cu
         return None
 
 
-def execute_one(query: str, params: tuple = None, dict_cursor: bool = False):
+def execute_one(query: str, params: Optional[tuple] = None, dict_cursor: bool = False):
     """Execute a query and fetch one result."""
     with get_cursor(dict_cursor=dict_cursor) as cursor:
         cursor.execute(query, params)

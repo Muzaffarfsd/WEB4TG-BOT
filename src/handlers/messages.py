@@ -334,12 +334,17 @@ def auto_tag_lead(user_id: int, message_text: str) -> None:
 
 async def message_handler(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
     user = update.effective_user
-    user_message = update.message.text
+    message = update.message
+    chat = update.effective_chat
+    if not user or not message or not chat:
+        return
+    user_data = context.user_data or {}
+    user_message = message.text or ""
 
     from src.rate_limiter import rate_limiter
     allowed, rate_msg = rate_limiter.check_rate_limit(user.id)
     if not allowed:
-        await update.message.reply_text(rate_msg)
+        await message.reply_text(rate_msg)
         return
 
     from src.monitoring import monitor
@@ -348,16 +353,16 @@ async def message_handler(update: Update, context: ContextTypes.DEFAULT_TYPE) ->
     monitor.track_message()
     
     if user_message and len(user_message) > 4000:
-        await update.message.reply_text(
+        await message.reply_text(
             "Сообщение слишком длинное. Пожалуйста, сократите до 4000 символов."
         )
         return
     
-    if context.user_data.get('broadcast_compose'):
+    if user_data.get('broadcast_compose'):
         from src.security import is_admin
         if is_admin(user.id):
-            context.user_data.pop('broadcast_compose', None)
-            context.user_data['broadcast_draft'] = {
+            user_data.pop('broadcast_compose', None)
+            user_data['broadcast_draft'] = {
                 'type': 'text',
                 'text': user_message,
             }
@@ -365,14 +370,14 @@ async def message_handler(update: Update, context: ContextTypes.DEFAULT_TYPE) ->
             counts = broadcast_manager.get_audience_counts()
             from src.handlers.utils import get_broadcast_audience_keyboard
             keyboard = get_broadcast_audience_keyboard(counts)
-            await update.message.reply_text(
+            await message.reply_text(
                 f"📋 <b>Предпросмотр рассылки:</b>\n\n{user_message}\n\n<b>Выберите аудиторию:</b>",
                 parse_mode="HTML",
                 reply_markup=keyboard
             )
             return
     
-    pending_review_type = context.user_data.get("pending_review_type")
+    pending_review_type = user_data.get("pending_review_type")
     if pending_review_type and user_message:
         review_id = loyalty_system.submit_review(
             user_id=user.id,
@@ -382,10 +387,10 @@ async def message_handler(update: Update, context: ContextTypes.DEFAULT_TYPE) ->
         )
         
         if review_id:
-            context.user_data.pop("pending_review_type", None)
+            user_data.pop("pending_review_type", None)
             
             coins = REVIEW_REWARDS.get(pending_review_type, 0)
-            await update.message.reply_text(
+            await message.reply_text(
                 f"✅ <b>Отзыв отправлен на модерацию!</b>\n\n"
                 f"После проверки вам будет начислено <b>{coins} монет</b>.\n"
                 f"Обычно это занимает до 24 часов.",
@@ -405,7 +410,7 @@ async def message_handler(update: Update, context: ContextTypes.DEFAULT_TYPE) ->
                     if review:
                         await context.bot.send_message(
                             int(MANAGER_CHAT_ID),
-                            format_review_notification(review, user.username or user.first_name),
+                            format_review_notification(review, (user.username or user.first_name or "")),
                             parse_mode="HTML",
                             reply_markup=get_review_moderation_keyboard(review_id)
                         )
@@ -414,18 +419,18 @@ async def message_handler(update: Update, context: ContextTypes.DEFAULT_TYPE) ->
             
             return
         else:
-            await update.message.reply_text(
+            await message.reply_text(
                 "❌ Вы уже отправляли отзыв этого типа.",
                 reply_markup=get_loyalty_menu_keyboard()
             )
-            context.user_data.pop("pending_review_type", None)
+            user_data.pop("pending_review_type", None)
             return
     
     if not user_message or not user_message.strip():
         return
     
     if user_message == "💰 Цены":
-        await update.message.reply_text(
+        await message.reply_text(
             get_price_main_text(), 
             parse_mode="Markdown",
             reply_markup=get_price_main_keyboard()
@@ -474,7 +479,7 @@ async def message_handler(update: Update, context: ContextTypes.DEFAULT_TYPE) ->
             [InlineKeyboardButton("Назад в меню", callback_data="menu_back")]
         ])
         
-        await update.message.reply_text(
+        await message.reply_text(
             discount_text,
             parse_mode="Markdown",
             reply_markup=earn_keyboard
@@ -491,8 +496,8 @@ async def message_handler(update: Update, context: ContextTypes.DEFAULT_TYPE) ->
         if user_message == "🚀 Хочу приложение!":
             lead = lead_manager.create_lead(
                 user_id=user.id,
-                username=user.username,
-                first_name=user.first_name
+                username=(user.username or ""),
+                first_name=(user.first_name or "")
             )
             lead_manager.update_lead(user.id, score=30, priority=LeadPriority.HOT)
             lead_manager.log_event("hot_button", user.id)
@@ -505,7 +510,7 @@ async def message_handler(update: Update, context: ContextTypes.DEFAULT_TYPE) ->
 — Примерный бюджет?
 
 Или нажмите «Да, хочу заказать!» — и я свяжусь с вами для обсуждения деталей."""
-            await update.message.reply_text(
+            await message.reply_text(
                 text,
                 reply_markup=get_lead_keyboard()
             )
@@ -515,8 +520,8 @@ async def message_handler(update: Update, context: ContextTypes.DEFAULT_TYPE) ->
     
     session = session_manager.get_session(
         user_id=user.id,
-        username=user.username,
-        first_name=user.first_name
+        username=(user.username or ""),
+        first_name=(user.first_name or "")
     )
     
     session.add_message("user", user_message, config.max_history_length)
@@ -546,13 +551,13 @@ async def message_handler(update: Update, context: ContextTypes.DEFAULT_TYPE) ->
     except Exception as e:
         logger.debug(f"Proactive engagement tracking skipped: {e}")
 
-    if 'prefers_voice' not in context.user_data:
+    if 'prefers_voice' not in user_data:
         try:
             from src.session import get_client_profile
             profile = get_client_profile(user.id)
             if profile and profile.get("prefers_voice") == "true":
-                context.user_data['prefers_voice'] = True
-                context.user_data['voice_message_count'] = 1
+                user_data['prefers_voice'] = True
+                user_data['voice_message_count'] = 1
         except Exception as e:
             logger.debug(f"Voice preference check skipped: {e}")
 
@@ -575,14 +580,14 @@ async def message_handler(update: Update, context: ContextTypes.DEFAULT_TYPE) ->
         )
         await qa_manager.notify_manager_handoff(
             context.bot, user.id, trigger_reason, trigger_type,
-            user_name=f"{user.first_name} (@{user.username or 'нет'})"
+            user_name=f"{user.first_name or ''} (@{user.username or 'нет'})"
         )
         if trigger_type == "explicit_request":
             from src.multilang import get_string
-            await update.message.reply_text(get_string("handoff_request", user_lang))
+            await message.reply_text(get_string("handoff_request", user_lang))
     
     from src.context_builder import build_full_context, parse_ai_buttons
-    client_context = build_full_context(user.id, user_message, user.username, user.first_name)
+    client_context = build_full_context(user.id, user_message, user.username or "", user.first_name or "")
 
     lang_suffix = get_prompt_suffix(user_lang)
     if lang_suffix and client_context:
@@ -590,7 +595,7 @@ async def message_handler(update: Update, context: ContextTypes.DEFAULT_TYPE) ->
     elif lang_suffix:
         client_context = lang_suffix
     
-    velocity_info = track_conversation_velocity(user.id, context.user_data)
+    velocity_info = track_conversation_velocity(user.id, user_data)
     if velocity_info.get("delta") is not None:
         logger.debug(f"User {user.id} response delta: {velocity_info['delta']}s")
 
@@ -627,7 +632,7 @@ async def message_handler(update: Update, context: ContextTypes.DEFAULT_TYPE) ->
             async def _tool_executor(tool_name, tool_args):
                 return await execute_tool_call(
                     tool_name, tool_args,
-                    user.id, user.username, user.first_name
+                    user.id, user.username or "", user.first_name or ""
                 )
             
             agentic_result = await ai_client.agentic_loop(
@@ -643,18 +648,18 @@ async def message_handler(update: Update, context: ContextTypes.DEFAULT_TYPE) ->
                     if action_type == "portfolio":
                         from src.keyboards import get_portfolio_keyboard
                         from src.knowledge_base import PORTFOLIO_MESSAGE
-                        await update.message.reply_text(
+                        await message.reply_text(
                             PORTFOLIO_MESSAGE, parse_mode="Markdown",
                             reply_markup=get_portfolio_keyboard()
                         )
                     elif action_type == "pricing":
-                        await update.message.reply_text(
+                        await message.reply_text(
                             get_price_main_text(), parse_mode="Markdown",
                             reply_markup=get_price_main_keyboard()
                         )
                     elif action_type == "payment":
                         from src.payments import get_payment_keyboard
-                        await update.message.reply_text(
+                        await message.reply_text(
                             "💳 Выберите способ оплаты:",
                             reply_markup=get_payment_keyboard()
                         )
@@ -663,12 +668,12 @@ async def message_handler(update: Update, context: ContextTypes.DEFAULT_TYPE) ->
                         brief_text, brief_keyboard = brief_generator.format_brief(user.id)
                         if "не завершён" not in brief_text:
                             try:
-                                await update.message.reply_text(
+                                await message.reply_text(
                                     brief_text, parse_mode="HTML",
                                     reply_markup=brief_keyboard
                                 )
                             except Exception:
-                                await update.message.reply_text(
+                                await message.reply_text(
                                     brief_text.replace("<b>", "").replace("</b>", ""),
                                     reply_markup=brief_keyboard
                                 )
@@ -705,7 +710,7 @@ async def message_handler(update: Update, context: ContextTypes.DEFAULT_TYPE) ->
                     try:
                         await send_message_draft(
                             context.bot,
-                            update.effective_chat.id,
+                            chat.id,
                             display_text + " ▌"
                         )
                         last_draft_len = len(partial_text)
@@ -722,7 +727,7 @@ async def message_handler(update: Update, context: ContextTypes.DEFAULT_TYPE) ->
 
             if draft_count > 0:
                 try:
-                    await send_message_draft(context.bot, update.effective_chat.id, "")
+                    await send_message_draft(context.bot, chat.id, "")
                 except Exception as e:
                     logger.debug(f"Draft clear error: {e}")
 
@@ -754,11 +759,11 @@ async def message_handler(update: Update, context: ContextTypes.DEFAULT_TYPE) ->
         proactive_voice_sent = False
         try:
             from src.handlers.media import should_send_proactive_voice, generate_voice_response, _make_text_summary
-            if should_send_proactive_voice(user.id, user_message, context.user_data):
+            if should_send_proactive_voice(user.id, user_message, user_data):
                 try:
-                    await update.effective_chat.send_action(ChatAction.RECORD_VOICE)
+                    await chat.send_action(ChatAction.RECORD_VOICE)
                     voice_audio = await generate_voice_response(response)
-                    await update.message.reply_voice(voice=voice_audio)
+                    await message.reply_voice(voice=voice_audio)
                     proactive_voice_sent = True
                     lead_manager.log_event("proactive_voice_sent", user.id, {
                         "trigger": "sales_moment",
@@ -766,7 +771,7 @@ async def message_handler(update: Update, context: ContextTypes.DEFAULT_TYPE) ->
                     })
                     text_summary = _make_text_summary(response)
                     summary_msg = f"👆 Голосовое сообщение\n\n{text_summary}"
-                    await update.message.reply_text(summary_msg, reply_markup=reply_markup)
+                    await message.reply_text(summary_msg, reply_markup=reply_markup)
                 except Exception as voice_err:
                     logger.warning(f"Proactive voice failed for user {user.id}: {voice_err}")
                     proactive_voice_sent = False
@@ -778,11 +783,11 @@ async def message_handler(update: Update, context: ContextTypes.DEFAULT_TYPE) ->
                 chunks = [response[i:i+4096] for i in range(0, len(response), 4096)]
                 for i, chunk in enumerate(chunks):
                     if i == len(chunks) - 1:
-                        await update.message.reply_text(chunk, reply_markup=reply_markup)
+                        await message.reply_text(chunk, reply_markup=reply_markup)
                     else:
-                        await update.message.reply_text(chunk)
+                        await message.reply_text(chunk)
             else:
-                await update.message.reply_text(response, reply_markup=reply_markup)
+                await message.reply_text(response, reply_markup=reply_markup)
 
         logger.info(f"User {user.id}: processed message #{session.message_count} (voice={'proactive' if proactive_voice_sent else 'text'})")
 
@@ -847,7 +852,7 @@ async def message_handler(update: Update, context: ContextTypes.DEFAULT_TYPE) ->
         error_type = type(e).__name__
         logger.error(f"Error handling message from user {user.id}: {error_type}: {e}")
         monitor.track_request("message_handler", _time.time() - _msg_start, success=False, error=str(e))
-        await update.message.reply_text(
+        await message.reply_text(
             ERROR_MESSAGE,
             reply_markup=get_main_menu_keyboard()
         )

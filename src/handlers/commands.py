@@ -30,10 +30,13 @@ logger = logging.getLogger(__name__)
 
 async def start_handler(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
     user = update.effective_user
+    message = update.message
+    if not user or not message:
+        return
     session = session_manager.get_session(
         user_id=user.id,
-        username=user.username,
-        first_name=user.first_name
+        username=user.username or "",
+        first_name=user.first_name or ""
     )
     session.clear_history()
 
@@ -46,14 +49,14 @@ async def start_handler(update: Update, context: ContextTypes.DEFAULT_TYPE) -> N
     referral_bonus_text = ""
     has_referral = context.args and len(context.args) > 0 and context.args[0].startswith("ref_")
 
-    if has_referral:
+    if has_referral and context.args:
         try:
             referral_code = context.args[0][4:]
             result = referral_manager.apply_referral_code(
                 telegram_id=user.id,
                 referral_code=referral_code,
-                username=user.username,
-                first_name=user.first_name
+                username=user.username or "",
+                first_name=user.first_name or ""
             )
             if result["success"]:
                 referral_bonus_text = f"\n\n🎁 Вы получили {REFERRED_REWARD} монет по реферальному коду!"
@@ -88,7 +91,7 @@ async def start_handler(update: Update, context: ContextTypes.DEFAULT_TYPE) -> N
             ctx_text = f"В прошлый раз мы обсуждали: {short_ctx}..."
         else:
             ctx_text = None
-        welcome_text = get_welcome_message(lang_key, name_part, is_returning=True, returning_context=ctx_text)
+        welcome_text = get_welcome_message(lang_key, name_part, is_returning=True, returning_context=ctx_text or "")
     else:
         welcome_text = get_welcome_message(lang_key, name_part, is_returning=False)
 
@@ -97,7 +100,7 @@ async def start_handler(update: Update, context: ContextTypes.DEFAULT_TYPE) -> N
     pinned_keyboard = InlineKeyboardMarkup([
         [InlineKeyboardButton("🚀 Открыть приложение", web_app=WebAppInfo(url="https://w4tg.up.railway.app/"))]
     ])
-    pinned_msg = await update.message.reply_text(
+    pinned_msg = await message.reply_text(
         "👋 Добро пожаловать в WEB4TG Studio!",
         reply_markup=pinned_keyboard
     )
@@ -127,7 +130,7 @@ async def start_handler(update: Update, context: ContextTypes.DEFAULT_TYPE) -> N
         except Exception:
             pass
 
-    asyncio.create_task(_background_registrations(user.id, user.username, user.first_name))
+    asyncio.create_task(_background_registrations(user.id, user.username or "", user.first_name or ""))
     
     quiz_keyboard = InlineKeyboardMarkup([
         [InlineKeyboardButton(
@@ -136,29 +139,29 @@ async def start_handler(update: Update, context: ContextTypes.DEFAULT_TYPE) -> N
         )],
         [InlineKeyboardButton("📋 Главное меню", callback_data="menu_back")],
     ])
-    await update.message.reply_text(
+    await message.reply_text(
         welcome_text,
         reply_markup=quiz_keyboard
     )
 
-    await update.message.reply_text(
+    await message.reply_text(
         "⬇️ Используйте кнопки ниже для быстрого доступа:",
         reply_markup=get_quick_reply_keyboard()
     )
 
-    chat_id = update.effective_chat.id
+    chat_id = message.chat.id
     bot_instance = context.bot
 
     async def _send_voice_greeting_background():
+        from src.handlers.utils import _get_time_greeting
+        time_greet = _get_time_greeting()
+        time_word = time_greet["ru"]
+
         try:
             from google.genai import types as genai_types
             from src.config import config as app_config, get_gemini_client
 
             await bot_instance.send_chat_action(chat_id=chat_id, action=ChatAction.RECORD_VOICE)
-
-            from src.handlers.utils import _get_time_greeting
-            time_greet = _get_time_greeting()
-            time_word = time_greet["ru"]
 
             ai_client_greet = get_gemini_client()
 
@@ -234,32 +237,46 @@ async def start_handler(update: Update, context: ContextTypes.DEFAULT_TYPE) -> N
 
 
 async def help_handler(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
-    await update.message.reply_text(
+    message = update.message
+    if not message:
+        return
+    await message.reply_text(
         HELP_MESSAGE,
         reply_markup=get_main_menu_keyboard()
     )
 
 
 async def clear_handler(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
-    user_id = update.effective_user.id
+    user = update.effective_user
+    message = update.message
+    if not user or not message:
+        return
+    user_id = user.id
     session_manager.clear_session(user_id)
     calculator_manager.reset_calculation(user_id)
     
     logger.info(f"User {user_id} cleared history")
-    await update.message.reply_text(CLEAR_MESSAGE, reply_markup=get_main_menu_keyboard())
+    await message.reply_text(CLEAR_MESSAGE, reply_markup=get_main_menu_keyboard())
 
 
 async def menu_handler(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
-    user_id = update.effective_user.id
+    user = update.effective_user
+    message = update.message
+    if not user or not message:
+        return
+    user_id = user.id
     analytics.track(user_id, FunnelEvent.MENU_OPEN)
-    await update.message.reply_text(
+    await message.reply_text(
         "Вот что могу показать:",
         reply_markup=get_main_menu_keyboard()
     )
 
 
 async def price_handler(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
-    await update.message.reply_text(
+    message = update.message
+    if not message:
+        return
+    await message.reply_text(
         get_price_main_text(), 
         parse_mode="Markdown",
         reply_markup=get_price_main_keyboard()
@@ -267,7 +284,10 @@ async def price_handler(update: Update, context: ContextTypes.DEFAULT_TYPE) -> N
 
 
 async def portfolio_handler(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
-    await update.message.reply_text(
+    message = update.message
+    if not message:
+        return
+    await message.reply_text(
         PORTFOLIO_MESSAGE, 
         parse_mode="Markdown",
         reply_markup=get_portfolio_keyboard()
@@ -275,18 +295,25 @@ async def portfolio_handler(update: Update, context: ContextTypes.DEFAULT_TYPE) 
 
 
 async def contact_handler(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
-    await update.message.reply_text(
+    message = update.message
+    if not message:
+        return
+    await message.reply_text(
         CONTACT_MESSAGE,
         reply_markup=get_lead_keyboard()
     )
 
 
 async def calc_handler(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
-    user_id = update.effective_user.id
+    user = update.effective_user
+    message = update.message
+    if not user or not message:
+        return
+    user_id = user.id
     analytics.track(user_id, FunnelEvent.CALCULATOR_OPEN)
     calc = calculator_manager.get_calculation(user_id)
     
-    await update.message.reply_text(
+    await message.reply_text(
         f"**Калькулятор стоимости**\n\n{calc.get_summary()}",
         parse_mode="Markdown",
         reply_markup=get_calculator_keyboard()
@@ -294,7 +321,11 @@ async def calc_handler(update: Update, context: ContextTypes.DEFAULT_TYPE) -> No
 
 
 async def bonus_handler(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
-    user_id = update.effective_user.id
+    user = update.effective_user
+    message = update.message
+    if not user or not message:
+        return
+    user_id = user.id
     progress = tasks_tracker.get_user_progress(user_id)
     tier_emoji = {0: "🔰", 5: "🥉", 10: "🥈", 15: "🥇", 20: "💎", 25: "👑"}
     current_emoji = tier_emoji.get(progress.get_discount_percent(), "🔰")
@@ -321,12 +352,15 @@ async def bonus_handler(update: Update, context: ContextTypes.DEFAULT_TYPE) -> N
         [InlineKeyboardButton("📊 Мои скидки", callback_data="loyalty_my_discounts")]
     ])
     
-    await update.message.reply_text(text, parse_mode="HTML", reply_markup=keyboard)
+    await message.reply_text(text, parse_mode="HTML", reply_markup=keyboard)
 
 
 async def referral_handler(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
     user = update.effective_user
-    stats = referral_manager.get_or_create_user(user.id, user.username, user.first_name)
+    message = update.message
+    if not user or not message:
+        return
+    stats = referral_manager.get_or_create_user(user.id, user.username or "", user.first_name or "")
     
     tier_emoji = stats.get_tier_emoji()
     ref_link = referral_manager.get_bot_referral_link(stats.referral_code)
@@ -371,11 +405,14 @@ async def referral_handler(update: Update, context: ContextTypes.DEFAULT_TYPE) -
         [InlineKeyboardButton("Назад в меню", callback_data="menu_back")]
     ])
     
-    await update.message.reply_text(text, parse_mode="Markdown", reply_markup=keyboard)
+    await message.reply_text(text, parse_mode="Markdown", reply_markup=keyboard)
 
 
 async def faq_handler(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
-    await update.message.reply_text(
+    message = update.message
+    if not message:
+        return
+    await message.reply_text(
         "❓ **Частые вопросы**\n\nВыберите интересующий вопрос:",
         parse_mode="Markdown",
         reply_markup=get_faq_keyboard()
@@ -383,15 +420,21 @@ async def faq_handler(update: Update, context: ContextTypes.DEFAULT_TYPE) -> Non
 
 
 async def privacy_handler(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
-    await update.message.reply_text(
+    message = update.message
+    if not message:
+        return
+    await message.reply_text(
         PRIVACY_POLICY,
         parse_mode="Markdown"
     )
 
 
 async def payment_handler(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
+    message = update.message
+    if not message:
+        return
     from src.payments import get_payment_main_text, get_payment_keyboard
-    await update.message.reply_text(
+    await message.reply_text(
         get_payment_main_text(),
         parse_mode="Markdown",
         reply_markup=get_payment_keyboard()
@@ -400,16 +443,20 @@ async def payment_handler(update: Update, context: ContextTypes.DEFAULT_TYPE) ->
 
 async def promo_handler(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
     from src.promocodes import promo_manager
-    user_id = update.effective_user.id
+    user = update.effective_user
+    message = update.message
+    if not user or not message:
+        return
+    user_id = user.id
 
     if not promo_manager:
-        await update.message.reply_text("⚠️ Система промокодов временно недоступна")
+        await message.reply_text("⚠️ Система промокодов временно недоступна")
         return
 
     if context.args and len(context.args) > 0:
         code = context.args[0].upper().strip()
         result = promo_manager.activate_promo(user_id, code)
-        await update.message.reply_text(result["message"])
+        await message.reply_text(result["message"])
         return
 
     active = promo_manager.get_user_active_promo(user_id)
@@ -423,10 +470,13 @@ async def promo_handler(update: Update, context: ContextTypes.DEFAULT_TYPE) -> N
                 "Чтобы активировать промокод, отправьте:\n"
                 "/promo КОД")
 
-    await update.message.reply_text(text, parse_mode="HTML")
+    await message.reply_text(text, parse_mode="HTML")
 
 
 async def testimonials_handler(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
+    message = update.message
+    if not message:
+        return
     from src.handlers.utils import loyalty_system
     reviews = loyalty_system.get_approved_reviews(limit=5)
     
@@ -447,27 +497,33 @@ async def testimonials_handler(update: Update, context: ContextTypes.DEFAULT_TYP
         [InlineKeyboardButton("◀️ Назад в меню", callback_data="menu_back")]
     ])
     
-    await update.message.reply_text(text, parse_mode="HTML", reply_markup=keyboard)
+    await message.reply_text(text, parse_mode="HTML", reply_markup=keyboard)
 
 
 async def contract_handler(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
+    message = update.message
+    if not message:
+        return
     from src.payments import CONTRACT_PATH
     try:
         with open(CONTRACT_PATH, "rb") as contract_file:
-            await update.message.reply_document(
+            await message.reply_document(
                 document=contract_file,
                 filename="Договор_WEB4TG_Studio.pdf",
                 caption="📄 **Договор на разработку ПО**\n\nОзнакомьтесь с условиями сотрудничества. Если есть вопросы — пишите!",
                 parse_mode="Markdown"
             )
     except FileNotFoundError:
-        await update.message.reply_text(
+        await message.reply_text(
             "Договор временно недоступен. Свяжитесь с менеджером для получения."
         )
 
 
 async def inline_query_handler(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
-    query_text = update.inline_query.query.lower()
+    query = update.inline_query
+    if not query:
+        return
+    query_text = query.query.lower()
     
     templates = [
         {
@@ -523,59 +579,74 @@ async def inline_query_handler(update: Update, context: ContextTypes.DEFAULT_TYP
                 )
             )
     
-    await update.inline_query.answer(results, cache_time=300)
+    await query.answer(results, cache_time=300)
 
 
 async def consult_handler(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
     user = update.effective_user
+    message = update.message
+    if not user or not message:
+        return
     from src.consultation import consultation_manager
     text, keyboard = consultation_manager.start_booking(user.id)
-    await update.message.reply_text(text, parse_mode="HTML", reply_markup=keyboard)
+    await message.reply_text(text, parse_mode="HTML", reply_markup=keyboard)
 
 
 async def crm_handler(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
     user = update.effective_user
+    message = update.message
+    if not user or not message:
+        return
     import os
     admin_ids = [os.environ.get("MANAGER_CHAT_ID", "")]
     if str(user.id) not in admin_ids:
-        await update.message.reply_text("Эта команда доступна только администраторам.")
+        await message.reply_text("Эта команда доступна только администраторам.")
         return
     from src.crm_dashboard import get_crm_dashboard
     text, keyboard = get_crm_dashboard()
-    await update.message.reply_text(text, parse_mode="HTML", reply_markup=keyboard)
+    await message.reply_text(text, parse_mode="HTML", reply_markup=keyboard)
 
 
 async def mystatus_handler(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
     user = update.effective_user
+    message = update.message
+    if not user or not message:
+        return
     from src.client_dashboard import build_dashboard
     text, keyboard = build_dashboard(
         user.id,
         username=user.username or "",
         first_name=user.first_name or ""
     )
-    await update.message.reply_text(text, parse_mode="HTML", reply_markup=keyboard)
+    await message.reply_text(text, parse_mode="HTML", reply_markup=keyboard)
 
 
 async def brief_handler(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
     user = update.effective_user
+    message = update.message
+    if not user or not message:
+        return
     from src.brief_generator import brief_generator
     brief_generator.start_brief(user.id)
     result = brief_generator.get_current_step(user.id)
     if result:
         text, keyboard = result
-        await update.message.reply_text(text, parse_mode="HTML", reply_markup=keyboard)
+        await message.reply_text(text, parse_mode="HTML", reply_markup=keyboard)
 
 
 async def handoff_handler(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
     """Request manager contact - available to all users."""
     user = update.effective_user
+    message = update.message
+    if not user or not message:
+        return
     
     from src.leads import lead_manager, LeadPriority
-    lead_manager.create_lead(user_id=user.id, username=user.username, first_name=user.first_name)
+    lead_manager.create_lead(user_id=user.id, username=user.username or "", first_name=user.first_name or "")
     lead_manager.update_lead(user.id, score=40, priority=LeadPriority.HOT)
     lead_manager.log_event("handoff_request", user.id)
     
-    await update.message.reply_text(
+    await message.reply_text(
         "👨‍💼 <b>Передаю вас менеджеру</b>\n\n"
         "Менеджер свяжется с вами в ближайшее время.\n"
         "А пока — можете написать, что именно вас интересует, и я передам ему контекст.",
@@ -586,7 +657,7 @@ async def handoff_handler(update: Update, context: ContextTypes.DEFAULT_TYPE) ->
     if manager_chat_id:
         try:
             from src.session import session_manager
-            session = session_manager.get_session(user.id, user.username, user.first_name)
+            session = session_manager.get_session(user.id, user.username or "", user.first_name or "")
             history = session.get_history()
             
             context_lines = []
@@ -614,7 +685,7 @@ async def handoff_handler(update: Update, context: ContextTypes.DEFAULT_TYPE) ->
             await context.bot.send_message(
                 int(manager_chat_id),
                 f"🔔 <b>Запрос на менеджера!</b>\n\n"
-                f"👤 {user.first_name} (@{user.username or 'нет'})\n"
+                f"👤 {user.first_name or ''} (@{user.username or 'нет'})\n"
                 f"🆔 <code>{user.id}</code>{tags}\n\n"
                 f"<b>Контекст разговора:</b>\n{context_text}",
                 parse_mode="HTML"
@@ -625,10 +696,13 @@ async def handoff_handler(update: Update, context: ContextTypes.DEFAULT_TYPE) ->
 
 async def triggers_handler(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
     user = update.effective_user
+    message = update.message
+    if not user or not message:
+        return
     import os
     admin_ids = [os.environ.get("MANAGER_CHAT_ID", "")]
     if str(user.id) not in admin_ids:
-        await update.message.reply_text("Эта команда доступна только администраторам.")
+        await message.reply_text("Эта команда доступна только администраторам.")
         return
 
     from src.proactive_engagement import proactive_engine, TRIGGER_TYPES
@@ -677,4 +751,4 @@ async def triggers_handler(update: Update, context: ContextTypes.DEFAULT_TYPE) -
     if not stats and not metrics:
         lines.append("Пока нет данных о проактивных триггерах.")
 
-    await update.message.reply_text("\n".join(lines), parse_mode="HTML")
+    await message.reply_text("\n".join(lines), parse_mode="HTML")
