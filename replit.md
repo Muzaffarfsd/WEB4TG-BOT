@@ -46,6 +46,16 @@ The bot is developed in Python, leveraging Telegram Bot API 9.4. It features a m
 - **Calendar Booking**: AI-enabled availability slots and booking management.
 - **Guardrails**: System prompt rules to prevent unauthorized promises, response validation, and confidence scoring.
 
+## Recent Changes
+- **2026-02-16**: Full LSP refactoring — fixed 765 type diagnostics across 10 files
+  - Added null guards for `update.effective_user`, `update.message`, `update.callback_query` in all handlers
+  - Fixed `is_rate_limit_error` function (was missing, now defined in `ai_client.py`)
+  - Corrected import paths: `loyalty_system` from `handlers/utils`, `referral_manager` from `referrals`
+  - Fixed Gemini API type annotations with proper `type: ignore` comments
+  - Fixed `database.py` connection null safety and Optional parameter types
+  - Fixed `context_builder.py`: Optional function params, `max()` key argument, `get_events` hasattr guard
+  - All 10 files pass Python compilation and 0 LSP diagnostics
+
 ## External Dependencies
 - **Telegram Bot API**: Version 9.4 (via `python-telegram-bot` 22.6).
 - **Google AI (Gemini 3 Pro Preview)**: For natural language processing and AI functionalities.
