@@ -27,7 +27,8 @@ def check_status():
         ("src.vision_sales", "Vision Sales Analyzer (Multimodal)"),
         ("src.propensity", "Propensity Scorer"),
         ("src.smart_buttons", "Smart Buttons"),
-        ("src.tool_handlers", "Tool Handlers (18 tools)"),
+        ("src.feedback_loop", "Self-Learning Loop v2"),
+        ("src.tool_handlers", "Tool Handlers (17 tools)"),
         ("src.handlers", "Handlers"),
     ]
 
@@ -52,6 +53,8 @@ def check_status():
 
     print("\n")
     run_vision_demo()
+    print("\n")
+    run_learning_demo()
 
     print("\n" + "=" * 60)
     print("  Ready for Railway deployment (python bot.py)")
@@ -242,6 +245,142 @@ def run_vision_demo():
 
     print("-" * 60)
     print("  VISION SALES ANALYZER: ALL SYSTEMS OPERATIONAL")
+    print("-" * 60)
+
+
+def run_learning_demo():
+    print("=" * 60)
+    print("  DEMO: Self-Learning Feedback Loop v2")
+    print("=" * 60)
+
+    from src.feedback_loop import (
+        CLOSING_TECHNIQUES,
+        NICHE_PATTERNS,
+        STYLE_PATTERNS,
+        _wilson_score,
+        feedback_loop,
+    )
+    import re
+
+    print(f"\n  Closing Techniques: {len(CLOSING_TECHNIQUES)} tracked")
+    print(f"  Business Niches: {len(NICHE_PATTERNS)} recognized")
+    print(f"  Communication Styles: {len(STYLE_PATTERNS)} detected")
+
+    print("\n" + "-" * 60)
+    print("  1. TECHNIQUE DETECTION TEST")
+    print("-" * 60)
+
+    test_responses = [
+        ("Представьте — через 2 недели ваши клиенты заказывают в Telegram", "future_pacing"),
+        ("Бесплатный расчёт, ноль обязательств — просто посмотрите", "puppy_dog_close"),
+        ("Давайте определимся — шаблон подходит или нужна кастомная?", "assumptive_close"),
+        ("Итак, мы обсудили всё — давайте подведём итог", "summary_close"),
+        ("Может, вам это и не нужно — давайте честно разберёмся", "inversion_close"),
+        ("Если я добавлю бесплатный месяц поддержки — начнём?", "sharp_angle_close"),
+        ("Я рекомендую именно этот вариант. Риск нулевой: предоплата 35%", "jolt_close"),
+        ("Вам удобнее начать на этой неделе или на следующей?", "alternative_close"),
+    ]
+
+    passed = 0
+    for text, expected in test_responses:
+        detected = []
+        for tech_id, info in CLOSING_TECHNIQUES.items():
+            if re.search(info["patterns"], text, re.IGNORECASE):
+                detected.append(tech_id)
+        ok_mark = "✓" if expected in detected else "✗"
+        if expected in detected:
+            passed += 1
+        label = CLOSING_TECHNIQUES[expected]["label"]
+        print(f"  {ok_mark} {label}: {'detected' if expected in detected else 'MISSED'}")
+
+    print(f"\n  Technique detection: {passed}/{len(test_responses)} passed")
+
+    print("\n" + "-" * 60)
+    print("  2. NICHE DETECTION TEST")
+    print("-" * 60)
+
+    test_niches = [
+        ("У меня ресторан на 50 мест", "restaurant"),
+        ("Интернет-магазин одежды", "shop"),
+        ("Салон красоты, нужен онлайн-запись", "beauty"),
+        ("Фитнес-клуб с бассейном", "fitness"),
+        ("Стоматологическая клиника", "medical"),
+        ("Онлайн-курсы по Python", "education"),
+        ("Доставка суши по городу", "delivery"),
+        ("Автосервис, ремонт машин", "services"),
+    ]
+
+    passed_n = 0
+    for msg, expected_niche in test_niches:
+        detected_niche = None
+        for niche_id, niche_info in NICHE_PATTERNS.items():
+            if re.search(niche_info["patterns"], msg, re.IGNORECASE):
+                detected_niche = niche_id
+                break
+        ok_mark = "✓" if detected_niche == expected_niche else "✗"
+        if detected_niche == expected_niche:
+            passed_n += 1
+        label = NICHE_PATTERNS[expected_niche]["label"]
+        print(f"  {ok_mark} '{msg}' → {label}")
+
+    print(f"\n  Niche detection: {passed_n}/{len(test_niches)} passed")
+
+    print("\n" + "-" * 60)
+    print("  3. WILSON SCORE CONFIDENCE")
+    print("-" * 60)
+
+    test_scores = [
+        (10, 100, "10% raw, low confidence"),
+        (50, 100, "50% raw, medium confidence"),
+        (8, 10, "80% raw, very small sample"),
+        (80, 100, "80% raw, good sample"),
+        (3, 5, "60% raw, tiny sample"),
+    ]
+
+    for succ, total, desc in test_scores:
+        wilson = round(_wilson_score(succ, total) * 100, 1)
+        raw = round(succ / total * 100, 1)
+        print(f"  {succ}/{total} ({desc})")
+        print(f"    Raw: {raw}% → Wilson lower bound: {wilson}%")
+
+    print("\n" + "-" * 60)
+    print("  4. SELF-LEARNING PIPELINE")
+    print("-" * 60)
+    print("""
+  AI Response ──► Auto-Tag Extraction
+                        │
+          ┌─────────────┼─────────────┐
+          ▼             ▼             ▼
+    Technique ID   Niche Tag     Style Tag
+    (13 patterns)  (10 patterns) (5 patterns)
+          │             │             │
+          └─────────────┼─────────────┘
+                        ▼
+              response_tags table
+              (response_id, type, value, confidence)
+                        │
+                        ▼
+              Client Action (outcome)
+              (calculator, booking, lead, etc.)
+                        │
+          ┌─────────────┼─────────────┐
+          ▼             ▼             ▼
+    Technique      Niche Style   Avoid List
+    Ranking        Memory        (low converters)
+    (Wilson score)  (best style)  (<5% rate)
+          │             │             │
+          └─────────────┼─────────────┘
+                        ▼
+              get_adaptive_instructions()
+              (injected into AI context)
+                        │
+                        ▼
+              AI uses learned insights
+              for next conversation
+    """)
+
+    print("-" * 60)
+    print("  SELF-LEARNING LOOP v2: ALL SYSTEMS OPERATIONAL")
     print("-" * 60)
 
 

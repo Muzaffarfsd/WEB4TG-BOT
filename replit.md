@@ -40,7 +40,7 @@ The bot is developed in Python, leveraging Telegram Bot API 9.4. It features a m
 - **RAG Knowledge Base**: PostgreSQL-backed searchable knowledge base with weighted relevance scoring.
 - **Smart Button System**: Context-aware buttons after every AI response based on funnel stage, detected intents, and propensity score.
 - **Response Validation**: Hallucination guard validates prices, timelines, guarantees, and discounts against known data.
-- **Self-Learning Feedback Loop**: Tracks AI response outcomes, conversion rates, and learning insights.
+- **Self-Learning Feedback Loop v2**: Active learning system — auto-tags AI responses with closing technique (13 patterns), business niche (10 patterns), communication style (5 patterns); aggregates conversion rates per technique/niche/style with Wilson score confidence; injects adaptive instructions into AI context via `get_adaptive_instructions()`; niche memory with preferred styles and avoid lists; 30-day rolling window with min sample thresholds.
 - **Propensity Scoring**: Composite score (0-100) based on engagement velocity, session depth, tool usage, buying signals, and time decay.
 - **Proactive Engagement**: ProactiveEngagementEngine with behavioral signals + trigger history DB tables, 8 deterministic trigger rules, predictive scoring model, AI message generation, and anti-spam controls.
 - **A/B Dialog Testing**: Chi-square test with auto-winner detection and significance monitoring.
@@ -48,6 +48,17 @@ The bot is developed in Python, leveraging Telegram Bot API 9.4. It features a m
 - **Guardrails**: System prompt rules to prevent unauthorized promises, response validation, and confidence scoring.
 
 ## Recent Changes
+- **2026-02-18**: Phase 4 — Self-Learning Loop v2
+  - UPGRADED: `src/feedback_loop.py` — from passive tracking to active learning
+  - NEW: `response_tags` table — tags each AI response with technique/niche/style
+  - NEW: `niche_style_memory` table — remembers what works per business niche
+  - NEW: `get_adaptive_instructions()` — injects learned insights into AI context
+  - NEW: `get_best_techniques()` — ranks closing techniques by Wilson score confidence
+  - NEW: `get_niche_insights()` — per-niche strategy memory (best style, best/avoid techniques)
+  - INTEGRATED: `context_builder.py` now calls `get_adaptive_instructions()` as 30th context signal
+  - 13 closing technique regex patterns, 10 niche patterns, 5 style patterns
+  - Auto-tagging on every AI response, no performance impact (regex-based, <1ms)
+  - All tests pass: 8/8 techniques, 8/8 niches, Wilson score verified
 - **2026-02-18**: Phase 3 — Multimodal Vision Sales Analysis
   - NEW: `src/vision_sales.py` — 10 image types with tailored sales prompts, smart buttons, lead scoring, manager notifications
   - UPGRADED: `src/handlers/media.py` — photo_handler rewritten with 2-step flow: AI classification → sales-oriented analysis

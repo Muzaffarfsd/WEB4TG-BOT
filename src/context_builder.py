@@ -1668,6 +1668,14 @@ def build_full_context(user_id: int, user_message: str, username: Optional[str] 
     except Exception as e:
         logger.debug(f"A/B dialog testing skipped: {e}")
 
+    try:
+        from src.feedback_loop import feedback_loop
+        adaptive_ctx = feedback_loop.get_adaptive_instructions(user_id, user_message, funnel_stage)
+        if adaptive_ctx:
+            parts.append(f"\n{adaptive_ctx}")
+    except Exception as e:
+        logger.debug(f"Self-learning context skipped: {e}")
+
     social_keywords = ['соцсет', 'инстаграм', 'тикток', 'ютуб', 'youtube', 'instagram', 'tiktok', 'подпис', 'монет', 'задан', 'бонус', 'скидк']
     if any(kw in user_message.lower() for kw in social_keywords) or funnel_stage in ('awareness', 'interest'):
         try:
