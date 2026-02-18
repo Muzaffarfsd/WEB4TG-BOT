@@ -7,7 +7,7 @@ from telegram.ext import ContextTypes
 from telegram.constants import ChatAction
 
 from src.session import session_manager
-from src.ai_client import ai_client, validate_response
+from src.ai_client import ai_client, validate_response, check_response_quality
 from src.config import config
 from src.keyboards import get_main_menu_keyboard, get_lead_keyboard, get_loyalty_menu_keyboard
 from src.leads import lead_manager, LeadPriority
@@ -16,6 +16,7 @@ from src.tasks_tracker import tasks_tracker
 from src.pricing import get_price_main_text, get_price_main_keyboard
 from src.loyalty import REVIEW_REWARDS, RETURNING_CUSTOMER_BONUS, format_review_notification
 from src.tool_handlers import execute_tool_call
+from src.prompt_composer import compose_system_prompt, build_context_signals_dict
 
 from src.handlers.utils import send_typing_action, loyalty_system, MANAGER_CHAT_ID
 from src.keyboards import get_review_moderation_keyboard
@@ -586,14 +587,19 @@ async def message_handler(update: Update, context: ContextTypes.DEFAULT_TYPE) ->
             from src.multilang import get_string
             await message.reply_text(get_string("handoff_request", user_lang))
     
-    from src.context_builder import build_full_context, parse_ai_buttons
-    client_context = build_full_context(user.id, user_message, user.username or "", user.first_name or "")
+    from src.context_builder import parse_ai_buttons
+
+    context_signals = build_context_signals_dict(
+        user_id=user.id,
+        user_message=user_message,
+        username=user.username or "",
+        first_name=user.first_name or "",
+        message_count=session.message_count
+    )
 
     lang_suffix = get_prompt_suffix(user_lang)
-    if lang_suffix and client_context:
-        client_context += lang_suffix
-    elif lang_suffix:
-        client_context = lang_suffix
+
+    adaptive_hint = get_adaptive_length_hint(session)
     
     velocity_info = track_conversation_velocity(user.id, user_data)
     if velocity_info.get("delta") is not None:
@@ -603,7 +609,12 @@ async def message_handler(update: Update, context: ContextTypes.DEFAULT_TYPE) ->
     if query_context:
         logger.debug(f"User {user.id} query_context: {query_context}")
 
-    adaptive_hint = get_adaptive_length_hint(session)
+    dynamic_prompt = compose_system_prompt(
+        context_signals=context_signals,
+        query_context=query_context or None,
+        adaptive_hint=adaptive_hint or None,
+        lang_suffix=lang_suffix or None,
+    )
 
     typing_task = asyncio.create_task(
         send_typing_action(update, duration=60.0)
@@ -615,18 +626,6 @@ async def message_handler(update: Update, context: ContextTypes.DEFAULT_TYPE) ->
         response = None
 
         messages_for_ai = session.get_history()
-
-        extra_context_parts = []
-        if client_context:
-            extra_context_parts.append(client_context)
-        if adaptive_hint:
-            extra_context_parts.append(adaptive_hint)
-
-        if extra_context_parts:
-            full_context = "\n".join(extra_context_parts)
-            context_msg = {"role": "user", "parts": [{"text": f"[СИСТЕМНЫЙ КОНТЕКСТ — не показывай клиенту, используй для персонализации]\n{full_context}"}]}
-            response_ack = {"role": "model", "parts": [{"text": "Понял контекст, учту в ответе."}]}
-            messages_for_ai = [context_msg, response_ack] + messages_for_ai
 
         try:
             async def _tool_executor(tool_name, tool_args):
@@ -640,7 +639,8 @@ async def message_handler(update: Update, context: ContextTypes.DEFAULT_TYPE) ->
                 tool_executor=_tool_executor,
                 thinking_level=thinking_level,
                 max_steps=4,
-                query_context=query_context or None
+                query_context=query_context or None,
+                dynamic_system_prompt=dynamic_prompt
             )
             
             if agentic_result["special_actions"]:
@@ -722,7 +722,8 @@ async def message_handler(update: Update, context: ContextTypes.DEFAULT_TYPE) ->
                 messages=messages_for_ai,
                 thinking_level=thinking_level,
                 on_chunk=on_stream_chunk,
-                query_context=query_context or None
+                query_context=query_context or None,
+                dynamic_system_prompt=dynamic_prompt
             )
 
             if draft_count > 0:
@@ -738,6 +739,8 @@ async def message_handler(update: Update, context: ContextTypes.DEFAULT_TYPE) ->
         if not is_valid:
             logger.info(f"Response validation corrected issues for user {user.id}")
             response = cleaned
+
+        response = check_response_quality(response, user_message)
 
         response, ai_buttons = parse_ai_buttons(response)
 

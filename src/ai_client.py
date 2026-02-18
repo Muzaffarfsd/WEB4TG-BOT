@@ -150,35 +150,74 @@ def check_response_quality(response_text: str, user_message: str) -> str:
     if not response_text or not response_text.strip():
         return response_text
 
-    response_words = len(response_text.split())
-    user_words = len(user_message.split())
+    cleaned = response_text.strip()
 
-    if user_words > 20 and response_words < 15:
-        logger.info(f"Response too short ({response_words} words) for detailed query ({user_words} words)")
-
-    fluff_phrases = [
-        "конечно", "безусловно", "разумеется", "несомненно",
-        "с удовольствием", "отличный вопрос", "хороший вопрос",
+    fluff_openers = [
+        "Конечно!", "Конечно,", "Безусловно!", "Безусловно,",
+        "Разумеется!", "Разумеется,", "Несомненно!", "Несомненно,",
+        "С удовольствием!", "С удовольствием,",
+        "Отличный вопрос!", "Отличный вопрос,",
+        "Хороший вопрос!", "Хороший вопрос,",
+        "Спасибо за вопрос!", "Спасибо за вопрос,",
+        "Рад, что вы спросили!", "Рад, что спросили!",
+        "Здравствуйте!", "Добрый день!",
+        "Благодарю за обращение!", "Благодарю!",
     ]
-    fluff_count = sum(1 for phrase in fluff_phrases if phrase in response_text.lower())
-    content_sentences = [s.strip() for s in re.split(r'[.!?]', response_text) if len(s.strip()) > 20]
+    for opener in fluff_openers:
+        if cleaned.startswith(opener):
+            rest = cleaned[len(opener):].strip()
+            if rest:
+                cleaned = rest
+                logger.debug(f"Removed fluff opener: '{opener}'")
+            break
 
-    if fluff_count > 2 and len(content_sentences) < 2:
-        logger.info("Response appears to be mostly fluff without actionable content")
+    bot_phrases = [
+        "Чем я могу вам помочь?", "Чем могу помочь?",
+        "Обращайтесь, если будут вопросы!",
+        "Я всегда готов помочь!", "Всегда рад помочь!",
+        "Не стесняйтесь обращаться!",
+        "Если у вас есть ещё вопросы, не стесняйтесь задавать!",
+    ]
+    for phrase in bot_phrases:
+        if cleaned.endswith(phrase):
+            rest = cleaned[:-len(phrase)].strip()
+            if rest:
+                cleaned = rest
+                logger.debug(f"Removed bot phrase: '{phrase}'")
 
-    if response_words > 50:
+    response_words = len(cleaned.split())
+
+    MAX_WORDS = 200
+    if response_words > MAX_WORDS:
+        sentences = re.split(r'(?<=[.!?])\s+', cleaned)
+        trimmed = []
+        word_count = 0
+        for sent in sentences:
+            sent_words = len(sent.split())
+            if word_count + sent_words > MAX_WORDS and trimmed:
+                break
+            trimmed.append(sent)
+            word_count += sent_words
+        if trimmed:
+            cleaned = " ".join(trimmed)
+            logger.debug(f"Trimmed response from {response_words} to {word_count} words")
+
+    if len(cleaned.split()) > 40:
         cta_patterns = [
             r'давайте', r'напишите', r'попробуйте', r'посмотрите',
             r'расскажите', r'выбирайте', r'закажите', r'записывайтесь',
             r'свяжитесь', r'обращайтесь', r'звоните', r'пишите',
             r'/\w+', r'хотите\s', r'готовы\s', r'начнём',
-            r'\?', r'могу\s', r'предлагаю',
+            r'\?$', r'могу\s', r'предлагаю', r'начать',
+            r'удобно\s', r'интересно\?',
         ]
-        has_cta = any(re.search(pat, response_text.lower()) for pat in cta_patterns)
+        has_cta = any(re.search(pat, cleaned.lower()) for pat in cta_patterns)
         if not has_cta:
-            logger.info("Long response without CTA detected")
+            if "?" not in cleaned[-100:]:
+                cleaned += "\n\nРасскажите подробнее о вашем проекте — подберу оптимальное решение)"
+                logger.debug("Added CTA to response without call-to-action")
 
-    return response_text
+    return cleaned
 
 
 class AIClient:
@@ -186,10 +225,12 @@ class AIClient:
         from src.config import get_gemini_client
         self._client = get_gemini_client()
 
-    def select_model_and_config(self, query_context: Optional[str] = None) -> Tuple[str, types.GenerateContentConfig]:
+    def select_model_and_config(self, query_context: Optional[str] = None, dynamic_system_prompt: Optional[str] = None) -> Tuple[str, types.GenerateContentConfig]:
+        sys_prompt = dynamic_system_prompt or SYSTEM_PROMPT
+
         if not query_context:
             return config.fast_model_name, types.GenerateContentConfig(
-                system_instruction=SYSTEM_PROMPT,
+                system_instruction=sys_prompt,
                 max_output_tokens=config.max_tokens,
                 temperature=config.temperature
             )
@@ -198,33 +239,33 @@ class AIClient:
 
         if ctx in ("faq", "greeting", "simple"):
             return config.fast_model_name, types.GenerateContentConfig(
-                system_instruction=SYSTEM_PROMPT,
+                system_instruction=sys_prompt,
                 max_output_tokens=1000,
-                temperature=0.5
+                temperature=config.temperature_precise
             )
         elif ctx in ("objection", "complex", "sales"):
             return config.thinking_model_name, types.GenerateContentConfig(
-                system_instruction=SYSTEM_PROMPT,
+                system_instruction=sys_prompt,
                 max_output_tokens=config.max_tokens,
-                temperature=0.7,
+                temperature=config.temperature,
                 thinking_config=types.ThinkingConfig(thinking_budget=4096)
             )
         elif ctx in ("closing", "decision"):
             return config.thinking_model_name, types.GenerateContentConfig(
-                system_instruction=SYSTEM_PROMPT,
+                system_instruction=sys_prompt,
                 max_output_tokens=config.max_tokens,
-                temperature=0.6,
+                temperature=config.temperature,
                 thinking_config=types.ThinkingConfig(thinking_budget=2048)
             )
         elif ctx in ("creative", "upsell"):
             return config.fast_model_name, types.GenerateContentConfig(
-                system_instruction=SYSTEM_PROMPT,
+                system_instruction=sys_prompt,
                 max_output_tokens=config.max_tokens,
-                temperature=0.8
+                temperature=config.temperature_creative
             )
         else:
             return config.fast_model_name, types.GenerateContentConfig(
-                system_instruction=SYSTEM_PROMPT,
+                system_instruction=sys_prompt,
                 max_output_tokens=config.max_tokens,
                 temperature=config.temperature
             )
@@ -285,14 +326,15 @@ class AIClient:
         thinking_level: str = "medium",
         on_chunk=None,
         max_retries: int = 2,
-        query_context: Optional[str] = None
+        query_context: Optional[str] = None,
+        dynamic_system_prompt: Optional[str] = None
     ) -> str:
         if query_context:
-            model, gen_config = self.select_model_and_config(query_context)
+            model, gen_config = self.select_model_and_config(query_context, dynamic_system_prompt)
         elif thinking_level == "high":
             model = config.thinking_model_name
             gen_config = types.GenerateContentConfig(
-                system_instruction=SYSTEM_PROMPT,
+                system_instruction=dynamic_system_prompt or SYSTEM_PROMPT,
                 max_output_tokens=config.max_tokens,
                 temperature=config.temperature,
                 thinking_config=types.ThinkingConfig(thinking_budget=4096)
@@ -300,7 +342,7 @@ class AIClient:
         else:
             model = config.fast_model_name
             gen_config = types.GenerateContentConfig(
-                system_instruction=SYSTEM_PROMPT,
+                system_instruction=dynamic_system_prompt or SYSTEM_PROMPT,
                 max_output_tokens=config.max_tokens,
                 temperature=config.temperature
             )
@@ -426,14 +468,15 @@ class AIClient:
         thinking_level: str = "medium",
         max_retries: int = 2,
         retry_delay: float = 0.5,
-        query_context: Optional[str] = None
+        query_context: Optional[str] = None,
+        dynamic_system_prompt: Optional[str] = None
     ) -> str:
         if query_context:
-            model, gen_config = self.select_model_and_config(query_context)
+            model, gen_config = self.select_model_and_config(query_context, dynamic_system_prompt)
         elif thinking_level == "high":
             model = config.thinking_model_name
             gen_config = types.GenerateContentConfig(
-                system_instruction=SYSTEM_PROMPT,
+                system_instruction=dynamic_system_prompt or SYSTEM_PROMPT,
                 max_output_tokens=config.max_tokens,
                 temperature=config.temperature,
                 thinking_config=types.ThinkingConfig(thinking_budget=4096)
@@ -441,7 +484,7 @@ class AIClient:
         else:
             model = config.fast_model_name
             gen_config = types.GenerateContentConfig(
-                system_instruction=SYSTEM_PROMPT,
+                system_instruction=dynamic_system_prompt or SYSTEM_PROMPT,
                 max_output_tokens=config.max_tokens,
                 temperature=config.temperature
             )
@@ -514,14 +557,23 @@ class AIClient:
         self,
         messages: List[Dict],
         thinking_level: str = "medium",
-        on_chunk=None
+        on_chunk=None,
+        query_context: Optional[str] = None,
+        dynamic_system_prompt: Optional[str] = None
     ) -> dict:
         """Returns {"text": str, "tool_calls": list[dict], "all_tool_calls": list}"""
         try:
-            model = config.fast_model_name
+            sys_prompt = dynamic_system_prompt or SYSTEM_PROMPT
+            if query_context and query_context in ("objection", "complex", "sales", "closing", "decision"):
+                model = config.thinking_model_name
+            elif thinking_level == "high":
+                model = config.thinking_model_name
+            else:
+                model = config.fast_model_name
+
             tools = types.Tool(function_declarations=TOOL_DECLARATIONS)  # type: ignore[arg-type]
             gen_config = types.GenerateContentConfig(
-                system_instruction=SYSTEM_PROMPT,
+                system_instruction=sys_prompt,
                 max_output_tokens=config.max_tokens,
                 temperature=config.temperature,
                 tools=[tools],
@@ -564,7 +616,8 @@ class AIClient:
         tool_executor,
         thinking_level: str = "medium",
         max_steps: int = 4,
-        query_context: Optional[str] = None
+        query_context: Optional[str] = None,
+        dynamic_system_prompt: Optional[str] = None
     ) -> dict:
         """Multi-step agentic loop: AI calls tools, gets results, decides next action.
         
@@ -583,7 +636,9 @@ class AIClient:
         for step in range(max_steps):
             result = await self.generate_response_with_tools(
                 messages=current_messages,
-                thinking_level=effective_thinking
+                thinking_level=effective_thinking,
+                query_context=query_context,
+                dynamic_system_prompt=dynamic_system_prompt
             )
             
             if not result["tool_calls"]:
@@ -635,7 +690,8 @@ class AIClient:
         final_response = await self.generate_response(
             messages=current_messages,
             thinking_level=effective_thinking,
-            query_context=query_context
+            query_context=query_context,
+            dynamic_system_prompt=dynamic_system_prompt
         )
         
         return {
