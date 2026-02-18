@@ -373,6 +373,19 @@ class BroadcastManager:
         blocked = 0
         content_type = bc.get('content_type', 'text')
 
+        voice_supplement_audio = None
+        try:
+            from src.config import config as app_config
+            if app_config.elevenlabs_api_key:
+                broadcast_text = bc.get('text_content') or bc.get('caption') or ''
+                if broadcast_text:
+                    voice_text = await _generate_broadcast_voice_supplement(broadcast_text)
+                    if voice_text:
+                        from src.handlers.media import generate_voice_response
+                        voice_supplement_audio = await generate_voice_response(voice_text, voice_profile="greeting")
+        except Exception as e:
+            logger.warning(f"Broadcast voice supplement pre-generation failed: {e}")
+
         for i, user_id in enumerate(user_ids):
             try:
                 pm = bc.get('parse_mode') or None
@@ -396,6 +409,13 @@ class BroadcastManager:
                         caption=bc.get('caption') or None,
                         parse_mode=pm
                     )
+
+                if voice_supplement_audio:
+                    try:
+                        await bot.send_voice(chat_id=user_id, voice=voice_supplement_audio)
+                    except Exception as ve:
+                        logger.debug(f"Voice supplement to {user_id} failed: {ve}")
+
                 sent += 1
                 self._update_delivery_status(broadcast_id, user_id, 'sent')
             except Forbidden:
@@ -445,6 +465,58 @@ class BroadcastManager:
                 results.append({'broadcast_id': broadcast_id, **result})
 
         return results
+
+
+async def _generate_broadcast_voice_supplement(text_message: str) -> str:
+    """Generate short emotional voice text for broadcast supplement."""
+    import re as _re
+    try:
+        from google.genai import types as genai_types
+        from src.config import config as app_config, get_gemini_client
+
+        client = get_gemini_client()
+
+        prompt = (
+            "Ты — Алекс, живой консультант WEB4TG Studio. Запиши КОРОТКОЕ голосовое дополнение к рассылке.\n\n"
+            f"ТЕКСТ РАССЫЛКИ:\n{text_message}\n\n"
+            "ЗАДАЧА: Добавь эмоциональное голосовое — НЕ повторяй текст, а дополни личным штрихом.\n"
+            "Это должно создать ощущение 'вау, мне реально записали голосовое к сообщению'.\n\n"
+            "ПРАВИЛА:\n"
+            "- 40-80 символов (3-6 секунд). Одна-две фразы\n"
+            "- 1-2 тега: [warm], [excited], [curious], [confident], [whispers], [friendly]\n"
+            "- Тег ПЕРЕД фразой\n"
+            "- НЕТ markdown, emoji, кавычек\n"
+            "- Верни ТОЛЬКО текст для озвучки"
+        )
+
+        response = await asyncio.to_thread(
+            client.models.generate_content,
+            model=app_config.model_name,
+            contents=[prompt],
+            config=genai_types.GenerateContentConfig(
+                max_output_tokens=150,
+                temperature=0.8
+            )
+        )
+
+        if response.text:
+            result = response.text.strip().strip('"').strip("'").strip('\u201c').strip('\u201d')
+            result = _re.sub(r'\*+', '', result)
+            result = _re.sub(r'#+\s*', '', result)
+            clean_len = len(_re.sub(r'\[\w[\w\s]*?\]\s*', '', result))
+            if 20 < clean_len < 120:
+                return result
+
+    except Exception as e:
+        logger.warning(f"Broadcast voice supplement gen failed: {e}")
+
+    import random
+    fallbacks = [
+        "[warm] Серьёзно, это стоит вашего внимания",
+        "[excited] Короче... не пропустите это",
+        "[friendly] Глянь — думаю тебе зайдёт",
+    ]
+    return random.choice(fallbacks)
 
 
 broadcast_manager = BroadcastManager()

@@ -171,21 +171,87 @@ def _user_prefers_voice(user_id: int) -> bool:
     return False
 
 
-async def _send_voice_follow_up(bot, user_id: int, message: str) -> bool:
+async def _generate_voice_supplement(text_message: str, msg_type: str = "followup") -> str:
+    """Generate a short emotional voice supplement text for a followup/broadcast message."""
+    try:
+        from google.genai import types as genai_types
+        from src.config import config as app_config, get_gemini_client
+
+        client = get_gemini_client()
+
+        prompt = (
+            "Ты — Алекс, живой консультант WEB4TG Studio. Тебе нужно записать КОРОТКОЕ голосовое дополнение к текстовому сообщению.\n\n"
+            f"ТЕКСТ СООБЩЕНИЯ (уже отправлен клиенту текстом):\n{text_message}\n\n"
+            "ЗАДАЧА: Добавь ЭМОЦИОНАЛЬНОЕ голосовое дополнение — НЕ повторяй текст, а дополни его.\n"
+            "Голосовое должно создать ощущение 'мне реально записал живой человек, ему не всё равно'.\n\n"
+            "ЧТО ДЕЛАТЬ:\n"
+            "- Добавь ЛИЧНЫЙ штрих — эмоцию, которую текст не передаёт\n"
+            "- Можно: подчеркнуть главное другими словами, добавить интонацию, показать искренность\n"
+            "- Используй 1-2 тега ElevenLabs v3: [warm], [excited], [curious], [confident], [whispers], [friendly]\n"
+            "- Тег ПЕРЕД фразой: '[warm] Серьёзно, глянь — оно того стоит'\n\n"
+            "СТРОГИЕ ПРАВИЛА:\n"
+            "- 40-80 символов (3-6 секунд). Одна-две фразы МАКСИМУМ\n"
+            "- НЕ повторяй текст — дополняй эмоцией\n"
+            "- НЕТ markdown, emoji, кавычек\n"
+            "- WEB4TG Studio — по-английски\n"
+            "- Верни ТОЛЬКО текст для озвучки"
+        )
+
+        response = await asyncio.to_thread(
+            client.models.generate_content,
+            model=app_config.model_name,
+            contents=[prompt],
+            config=genai_types.GenerateContentConfig(
+                max_output_tokens=150,
+                temperature=0.8
+            )
+        )
+
+        if response.text:
+            import re as _re
+            result = response.text.strip().strip('"').strip("'").strip('\u201c').strip('\u201d')
+            result = _re.sub(r'\*+', '', result)
+            result = _re.sub(r'#+\s*', '', result)
+            result = _re.sub(r'[\U0001F600-\U0001F64F\U0001F300-\U0001F5FF\U0001F680-\U0001F6FF]+', '', result)
+            clean_len = len(_re.sub(r'\[\w[\w\s]*?\]\s*', '', result))
+            if 20 < clean_len < 120:
+                return result
+
+    except Exception as e:
+        logger.warning(f"Voice supplement generation failed: {e}")
+
+    return ""
+
+
+VOICE_SUPPLEMENT_FALLBACKS = [
+    "[warm] Серьёзно, глянь — думаю зайдёт",
+    "[excited] Короче... это реально стоит внимания",
+    "[friendly] Просто послушай — мне кажется это для тебя",
+    "[confident] Я бы на вашем месте точно глянул",
+    "[warm] Правда, подумайте — оно того стоит",
+]
+
+
+async def _send_voice_supplement(bot, user_id: int, text_message: str) -> bool:
+    """Send a short voice supplement AFTER the text message."""
     try:
         from src.config import config
         if not config.elevenlabs_api_key:
             return False
-        from src.handlers.media import generate_voice_response, _make_text_summary
+        from src.handlers.media import generate_voice_response
         from telegram.constants import ChatAction
+
+        voice_text = await _generate_voice_supplement(text_message)
+        if not voice_text:
+            import random
+            voice_text = random.choice(VOICE_SUPPLEMENT_FALLBACKS)
+
         await bot.send_chat_action(chat_id=user_id, action=ChatAction.RECORD_VOICE)
-        voice_audio = await generate_voice_response(message)
+        voice_audio = await generate_voice_response(voice_text, voice_profile="greeting")
         await bot.send_voice(chat_id=user_id, voice=voice_audio)
-        text_summary = _make_text_summary(message)
-        await bot.send_message(chat_id=user_id, text=f"👆 Голосовое сообщение\n\n{text_summary}")
         return True
     except Exception as e:
-        logger.warning(f"Voice follow-up failed for {user_id}: {e}")
+        logger.warning(f"Voice supplement failed for {user_id}: {e}")
         return False
 
 
@@ -227,26 +293,21 @@ async def process_follow_ups(context: ContextTypes.DEFAULT_TYPE) -> None:
                 else:
                     message, ab_variant = result, ""
 
-                voice_sent = False
-                if _user_prefers_voice(fu['user_id']):
-                    voice_sent = await _send_voice_follow_up(
-                        context.bot, fu['user_id'], message
-                    )
-
                 cta_keyboard = _get_followup_cta_keyboard(fu['follow_up_number'])
 
-                if not voice_sent:
-                    await context.bot.send_message(
-                        chat_id=fu['user_id'],
-                        text=message,
-                        reply_markup=cta_keyboard
+                await context.bot.send_message(
+                    chat_id=fu['user_id'],
+                    text=message,
+                    reply_markup=cta_keyboard
+                )
+
+                voice_sent = False
+                try:
+                    voice_sent = await _send_voice_supplement(
+                        context.bot, fu['user_id'], message
                     )
-                else:
-                    await context.bot.send_message(
-                        chat_id=fu['user_id'],
-                        text="👆",
-                        reply_markup=cta_keyboard
-                    )
+                except Exception as ve:
+                    logger.debug(f"Voice supplement skipped for {fu['user_id']}: {ve}")
 
                 follow_up_manager.mark_sent(fu['id'], message, ab_variant=ab_variant)
 
@@ -321,24 +382,21 @@ async def process_proactive_triggers(context: ContextTypes.DEFAULT_TYPE) -> None
                 message = await proactive_engine.generate_trigger_message(trigger)
                 user_id = trigger["user_id"]
 
-                voice_sent = False
-                if _user_prefers_voice(user_id):
-                    voice_sent = await _send_voice_follow_up(context.bot, user_id, message)
-
                 cta_keyboard = _get_trigger_cta_keyboard(trigger["trigger_type"])
 
-                if not voice_sent:
-                    await context.bot.send_message(
-                        chat_id=user_id,
-                        text=message,
-                        reply_markup=cta_keyboard
+                await context.bot.send_message(
+                    chat_id=user_id,
+                    text=message,
+                    reply_markup=cta_keyboard
+                )
+
+                voice_sent = False
+                try:
+                    voice_sent = await _send_voice_supplement(
+                        context.bot, user_id, message
                     )
-                else:
-                    await context.bot.send_message(
-                        chat_id=user_id,
-                        text="👆",
-                        reply_markup=cta_keyboard
-                    )
+                except Exception as ve:
+                    logger.debug(f"Voice supplement skipped for proactive {user_id}: {ve}")
 
                 proactive_engine.record_trigger_sent(
                     user_id, trigger["trigger_type"],
