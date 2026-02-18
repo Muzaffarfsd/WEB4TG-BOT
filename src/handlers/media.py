@@ -1115,10 +1115,13 @@ async def voice_handler(update: Update, context: ContextTypes.DEFAULT_TYPE) -> N
         if config.elevenlabs_api_key:
             resp_len = len(response_text)
 
+            from src.handlers.utils import send_record_voice_action
+            voice_action_task = asyncio.create_task(
+                send_record_voice_action(update.effective_chat, duration=120.0)
+            )
+
             for _v_attempt in range(2):
                 try:
-                    await update.effective_chat.send_action(ChatAction.RECORD_VOICE)
-
                     voice_audio = await generate_voice_bridge(
                         response_text, transcription, voice_profile=voice_profile_for_reply
                     )
@@ -1142,6 +1145,12 @@ async def voice_handler(update: Update, context: ContextTypes.DEFAULT_TYPE) -> N
                     logger.error(f"Voice reply attempt {_v_attempt+1} failed for user {user.id}: {type(e).__name__}: {e}")
                     if _v_attempt == 0:
                         await asyncio.sleep(1)
+
+            voice_action_task.cancel()
+            try:
+                await voice_action_task
+            except asyncio.CancelledError:
+                pass
 
             if not voice_sent:
                 logger.error(f"Voice reply FAILED for user {user.id} after 2 attempts, falling back to text")

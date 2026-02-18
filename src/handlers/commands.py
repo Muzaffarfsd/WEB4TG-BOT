@@ -176,11 +176,21 @@ async def start_handler(update: Update, context: ContextTypes.DEFAULT_TYPE) -> N
         }
         mood_instruction = period_mood.get(time_period, period_mood["afternoon"])
 
+        async def _keep_recording_indicator():
+            try:
+                while True:
+                    await bot_instance.send_chat_action(chat_id=chat_id, action=ChatAction.RECORD_VOICE)
+                    await asyncio.sleep(3.0)
+            except asyncio.CancelledError:
+                pass
+            except Exception:
+                pass
+
+        recording_indicator_task = asyncio.create_task(_keep_recording_indicator())
+
         try:
             from google.genai import types as genai_types
             from src.config import config as app_config, get_gemini_client
-
-            await bot_instance.send_chat_action(chat_id=chat_id, action=ChatAction.RECORD_VOICE)
 
             ai_client_greet = get_gemini_client()
 
@@ -297,23 +307,33 @@ async def start_handler(update: Update, context: ContextTypes.DEFAULT_TYPE) -> N
 
         for _attempt in range(2):
             try:
-                await bot_instance.send_chat_action(chat_id=chat_id, action=ChatAction.RECORD_VOICE)
                 voice_audio = await generate_voice_response(voice_greeting, use_cache=False, voice_profile=greeting_profile)
                 if not voice_audio or len(voice_audio) < 100:
                     raise RuntimeError(f"Voice audio too small: {len(voice_audio) if voice_audio else 0} bytes")
                 await bot_instance.send_voice(chat_id=chat_id, voice=voice_audio)
                 ab_testing.track_event(user.id, "welcome_voice", "voice_sent")
                 logger.info(f"Voice greeting SENT to user {user.id} (period={time_period}, attempt={_attempt+1}, size={len(voice_audio)} bytes)")
+                recording_indicator_task.cancel()
+                try:
+                    await recording_indicator_task
+                except asyncio.CancelledError:
+                    pass
                 return
             except Exception as e:
                 logger.error(f"Voice greeting attempt {_attempt+1} failed for user {user.id}: {type(e).__name__}: {e}")
                 if _attempt == 0:
                     await asyncio.sleep(1)
 
+        recording_indicator_task.cancel()
+        try:
+            await recording_indicator_task
+        except asyncio.CancelledError:
+            pass
         ab_testing.track_event(user.id, "welcome_voice", "voice_failed")
         logger.error(f"Voice greeting FAILED for user {user.id} after 2 attempts")
 
       except Exception as e:
+        recording_indicator_task.cancel()
         logger.error(f"Voice greeting background task CRASHED for user {user.id}: {type(e).__name__}: {e}", exc_info=True)
 
     _voice_task = asyncio.create_task(_send_voice_greeting_background())

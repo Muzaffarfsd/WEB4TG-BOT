@@ -698,7 +698,7 @@ async def message_handler(update: Update, context: ContextTypes.DEFAULT_TYPE) ->
                 messages=messages_for_ai,
                 tool_executor=_tool_executor,
                 thinking_level=thinking_level,
-                max_steps=3,
+                max_steps=4,
                 query_context=query_context or None,
                 dynamic_system_prompt=dynamic_prompt
             )
@@ -833,10 +833,13 @@ async def message_handler(update: Update, context: ContextTypes.DEFAULT_TYPE) ->
                 voice_profile = voice_decision.get("profile", "default")
                 voice_trigger = voice_decision.get("trigger", "unknown")
 
+                from src.handlers.utils import send_record_voice_action
+                voice_action_task = asyncio.create_task(
+                    send_record_voice_action(chat, duration=120.0)
+                )
+
                 for _sv_attempt in range(2):
                     try:
-                        await chat.send_action(ChatAction.RECORD_VOICE)
-
                         voice_audio = await generate_voice_bridge(
                             response, user_message, voice_profile=voice_profile
                         )
@@ -872,6 +875,12 @@ async def message_handler(update: Update, context: ContextTypes.DEFAULT_TYPE) ->
                         logger.warning(f"Smart voice attempt {_sv_attempt+1} failed for user {user.id}: {type(voice_err).__name__}: {voice_err}")
                         if _sv_attempt == 0:
                             await asyncio.sleep(1)
+
+                voice_action_task.cancel()
+                try:
+                    await voice_action_task
+                except asyncio.CancelledError:
+                    pass
 
                 if not smart_voice_sent:
                     logger.error(f"Smart voice FAILED for user {user.id} after 2 attempts (trigger={voice_trigger}), falling back to text")

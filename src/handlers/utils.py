@@ -22,11 +22,23 @@ async def send_typing_action(update: Update, duration: float = 4.0):
         end_time = asyncio.get_event_loop().time() + duration
         while asyncio.get_event_loop().time() < end_time:
             await update.effective_chat.send_action(ChatAction.TYPING)
-            await asyncio.sleep(4.0)
+            await asyncio.sleep(3.0)
     except asyncio.CancelledError:
         pass
     except Exception as e:
         logger.debug(f"Typing action error: {e}")
+
+
+async def send_record_voice_action(chat, duration: float = 60.0):
+    try:
+        end_time = asyncio.get_event_loop().time() + duration
+        while asyncio.get_event_loop().time() < end_time:
+            await chat.send_action(ChatAction.RECORD_VOICE)
+            await asyncio.sleep(3.0)
+    except asyncio.CancelledError:
+        pass
+    except Exception as e:
+        logger.debug(f"Record voice action error: {e}")
 
 
 def _get_time_greeting() -> dict:
