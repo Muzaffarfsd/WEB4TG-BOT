@@ -47,6 +47,12 @@ The bot is developed in Python, leveraging Telegram Bot API 9.4. It features a m
 - **Guardrails**: System prompt rules to prevent unauthorized promises, response validation, and confidence scoring.
 
 ## Recent Changes
+- **2026-02-18**: World-class sales AI upgrade
+  - Expanded knowledge_base.py SYSTEM_PROMPT to 32,650 chars integrating 15+ book methodologies (Cialdini, Kahneman, Voss, SPIN, Challenger, Sandler, Klaff, Heath brothers, Tracy, Blount, Stanley)
+  - Added 5 new psychological detectors to context_builder.py: buying signals (3 levels), Cialdini triggers (5 principles), communication preference (visual/auditory/kinesthetic), multi-intent detection, confidence level scoring
+  - Data integrity enforced: removed unverified statistics, all claims from verified sources only
+  - Resolved "free prototype" vs "no free consulting" conflict — now "free calculation/analysis OK, free development NO"
+  - All 8 core modules compile successfully with 0 errors
 - **2026-02-16**: Full LSP refactoring — fixed 765 type diagnostics across 10 files
   - Added null guards for `update.effective_user`, `update.message`, `update.callback_query` in all handlers
   - Fixed `is_rate_limit_error` function (was missing, now defined in `ai_client.py`)
