@@ -139,7 +139,7 @@ ABBREVIATION_MAP = {
     "Mini App": "мини-апп",
     "Mini Apps": "мини-аппс",
     "Web App": "веб-апп",
-    "WEB4TG": "вэб-фор-тэ-гэ",
+    "WEB4TG": "WEB4TG",
     "HTML": "эйч-ти-эм-эл",
     "CSS": "си-эс-эс",
     "JS": "джей-эс",
