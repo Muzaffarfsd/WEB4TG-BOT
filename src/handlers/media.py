@@ -410,6 +410,10 @@ async def generate_voice_response(text: str, use_cache: bool = False, voice_prof
     voice_text = numbers_to_words(voice_text)
     voice_text = apply_stress_marks(voice_text)
 
+    voice_text = voice_text.rstrip()
+    if voice_text and voice_text[-1] not in '.!?…':
+        voice_text += '.'
+
     if len(voice_text) > 2000:
         _sentence_endings = ['.', '!', '?', '...']
         _best_cut = -1

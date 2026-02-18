@@ -219,9 +219,10 @@ async def start_handler(update: Update, context: ContextTypes.DEFAULT_TYPE) -> N
                     "3. [excited] или [whispers] КРЮЧОК — интрига или ценность. Самая важная часть!\n"
                     "4. [curious] Лёгкий открытый вопрос — чтобы клиент ЗАХОТЕЛ ответить\n\n"
                     "СТРОГИЕ ПРАВИЛА:\n"
-                    "- 150-280 символов. Короткое, ёмкое, цепляющее\n"
+                    "- 150-250 символов. Короткое, ёмкое, цепляющее\n"
                     "- Говори как ЖИВОЙ ЧЕЛОВЕК — паузы '...', тире ' — ', междометия\n"
                     "- WEB4TG Studio — по-английски, как бренд\n"
+                    "- ОБЯЗАТЕЛЬНО заканчивай ЗАКОНЧЕННЫМ предложением с вопросительным или восклицательным знаком. Не обрывай мысль на полуслове\n"
                     "- НЕТ: 'чем могу помочь', 'к вашим услугам', 'обращайтесь', 'рассмотреть'\n"
                     "- НЕТ: markdown, emoji, кавычек\n"
                     "- Верни ТОЛЬКО текст для озвучки"
@@ -256,6 +257,7 @@ async def start_handler(update: Update, context: ContextTypes.DEFAULT_TYPE) -> N
                     "СТРОГИЕ ПРАВИЛА:\n"
                     "- 130-200 символов. Как голосовое другу — короткое, ёмкое, живое\n"
                     "- WEB4TG Studio — по-английски как бренд\n"
+                    "- ОБЯЗАТЕЛЬНО заканчивай ЗАКОНЧЕННЫМ предложением с вопросительным или восклицательным знаком. Не обрывай мысль на полуслове\n"
                     "- НЕТ: 'чем могу помочь', 'к вашим услугам', 'обращайтесь', описание услуг\n"
                     "- НЕТ: markdown, emoji, кавычки, списки\n"
                     "- Паузы '...' и тире ' — ' для живой речи\n"
@@ -327,6 +329,10 @@ async def start_handler(update: Update, context: ContextTypes.DEFAULT_TYPE) -> N
                 clean_text = expand_abbreviations(clean_text)
                 clean_text = numbers_to_words(clean_text)
                 clean_text = apply_stress_marks(clean_text)
+
+                clean_text = clean_text.rstrip()
+                if clean_text and clean_text[-1] not in '.!?…':
+                    clean_text += '?'
 
                 profile = _VP.get(greeting_profile, _VP["greeting"])
                 output_format = _select_output_format(len(clean_text))
