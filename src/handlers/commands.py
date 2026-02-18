@@ -188,6 +188,7 @@ async def start_handler(update: Update, context: ContextTypes.DEFAULT_TYPE) -> N
 
         recording_indicator_task = asyncio.create_task(_keep_recording_indicator())
 
+        voice_greeting = None
         try:
             from google.genai import types as genai_types
             from src.config import config as app_config, get_gemini_client
@@ -260,14 +261,18 @@ async def start_handler(update: Update, context: ContextTypes.DEFAULT_TYPE) -> N
                     "- Паузы '...' и тире ' — ' для живой речи\n"
                     "- Верни ТОЛЬКО текст для озвучки"
                 )
-            greet_response = await asyncio.to_thread(
-                ai_client_greet.models.generate_content,
-                model=app_config.model_name,
-                contents=[greet_prompt],
-                config=genai_types.GenerateContentConfig(
-                    max_output_tokens=500,
-                    temperature=0.85
-                )
+
+            greet_response = await asyncio.wait_for(
+                asyncio.to_thread(
+                    ai_client_greet.models.generate_content,
+                    model=app_config.model_name,
+                    contents=[greet_prompt],
+                    config=genai_types.GenerateContentConfig(
+                        max_output_tokens=500,
+                        temperature=0.85
+                    )
+                ),
+                timeout=20.0
             )
             voice_greeting = greet_response.text.strip() if greet_response.text else None
             logger.info(f"Voice greeting: AI generated text for user {user.id}: {voice_greeting[:200] if voice_greeting else 'EMPTY'}")
@@ -283,8 +288,11 @@ async def start_handler(update: Update, context: ContextTypes.DEFAULT_TYPE) -> N
                     logger.warning(f"Voice greeting: AI text too short after cleanup ({len(voice_greeting) if voice_greeting else 0} chars), using fallback")
                     voice_greeting = None
 
+        except asyncio.TimeoutError:
+            logger.warning(f"Voice greeting: AI text generation timed out after 20s for user {user.id}, using fallback")
+            voice_greeting = None
         except Exception as e:
-            logger.warning(f"AI greeting generation failed: {e}", exc_info=True)
+            logger.warning(f"AI greeting generation failed: {type(e).__name__}: {e}", exc_info=True)
             voice_greeting = None
 
         if not voice_greeting:
@@ -305,14 +313,34 @@ async def start_handler(update: Update, context: ContextTypes.DEFAULT_TYPE) -> N
 
         greeting_profile = "greeting"
 
-        logger.info(f"Voice greeting: text ready ({len(voice_greeting)} chars), starting TTS for user {user.id}")
+        logger.info(f"Voice greeting: text ready ({len(voice_greeting)} chars), starting TTS for user {user.id}: '{voice_greeting[:150]}'")
+
+        from src.handlers.media import _clean_text_for_voice, _generate_voice_streaming_async, _select_output_format, VOICE_PROFILES as _VP
+        from src.handlers.utils import naturalize_speech, expand_abbreviations, numbers_to_words, apply_stress_marks
 
         for _attempt in range(2):
             try:
-                logger.info(f"Voice greeting: TTS attempt {_attempt+1} for user {user.id}, text='{voice_greeting[:100]}...'")
-                voice_audio = await generate_voice_response(voice_greeting, use_cache=False, voice_profile=greeting_profile, skip_enhance=True)
+                logger.info(f"Voice greeting: ElevenLabs attempt {_attempt+1} for user {user.id}")
+
+                clean_text = _clean_text_for_voice(voice_greeting)
+                clean_text = naturalize_speech(clean_text)
+                clean_text = expand_abbreviations(clean_text)
+                clean_text = numbers_to_words(clean_text)
+                clean_text = apply_stress_marks(clean_text)
+
+                profile = _VP.get(greeting_profile, _VP["greeting"])
+                output_format = _select_output_format(len(clean_text))
+
+                logger.info(f"Voice greeting: calling ElevenLabs TTS, text={len(clean_text)} chars, format={output_format}")
+
+                voice_audio = await asyncio.wait_for(
+                    _generate_voice_streaming_async(clean_text, profile, output_format),
+                    timeout=30.0
+                )
+
                 if not voice_audio or len(voice_audio) < 100:
                     raise RuntimeError(f"Voice audio too small: {len(voice_audio) if voice_audio else 0} bytes")
+
                 logger.info(f"Voice greeting: TTS success, {len(voice_audio)} bytes, sending to Telegram for user {user.id}")
                 await bot_instance.send_voice(chat_id=chat_id, voice=voice_audio)
                 ab_testing.track_event(user.id, "welcome_voice", "voice_sent")
@@ -323,6 +351,10 @@ async def start_handler(update: Update, context: ContextTypes.DEFAULT_TYPE) -> N
                 except asyncio.CancelledError:
                     pass
                 return
+            except asyncio.TimeoutError:
+                logger.error(f"Voice greeting attempt {_attempt+1} TIMED OUT for user {user.id} (30s)")
+                if _attempt == 0:
+                    await asyncio.sleep(1)
             except Exception as e:
                 logger.error(f"Voice greeting attempt {_attempt+1} failed for user {user.id}: {type(e).__name__}: {e}", exc_info=True)
                 if _attempt == 0:
@@ -337,7 +369,10 @@ async def start_handler(update: Update, context: ContextTypes.DEFAULT_TYPE) -> N
         logger.error(f"Voice greeting FAILED for user {user.id} after 2 attempts")
 
       except Exception as e:
-        recording_indicator_task.cancel()
+        try:
+            recording_indicator_task.cancel()
+        except Exception:
+            pass
         logger.error(f"Voice greeting background task CRASHED for user {user.id}: {type(e).__name__}: {e}", exc_info=True)
 
     _voice_task = asyncio.create_task(_send_voice_greeting_background())
