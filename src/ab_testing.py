@@ -60,6 +60,48 @@ WELCOME_TESTS = {
         variant_b="friendly",
         description="Follow-up message tone: professional vs friendly"
     ),
+    "followup_step_1": ABTest(
+        name="followup_step_1",
+        variant_a="a",
+        variant_b="b",
+        description="Follow-up #1: прямой vs мягкий"
+    ),
+    "followup_step_2": ABTest(
+        name="followup_step_2",
+        variant_a="a",
+        variant_b="b",
+        description="Follow-up #2: кейс-цифры vs сторителлинг"
+    ),
+    "followup_step_3": ABTest(
+        name="followup_step_3",
+        variant_a="a",
+        variant_b="b",
+        description="Follow-up #3: конкретное предложение vs мягкое"
+    ),
+    "followup_step_4": ABTest(
+        name="followup_step_4",
+        variant_a="a",
+        variant_b="b",
+        description="Follow-up #4: срочность vs упущенная выгода"
+    ),
+    "followup_step_5": ABTest(
+        name="followup_step_5",
+        variant_a="a",
+        variant_b="b",
+        description="Follow-up #5: провокация vs эмпатия"
+    ),
+    "followup_step_6": ABTest(
+        name="followup_step_6",
+        variant_a="a",
+        variant_b="b",
+        description="Follow-up #6: прямой breakup vs тёплый"
+    ),
+    "followup_step_7": ABTest(
+        name="followup_step_7",
+        variant_a="a",
+        variant_b="b",
+        description="Follow-up #7: новость vs ностальгия"
+    ),
 }
 
 WELCOME_VARIANTS = {

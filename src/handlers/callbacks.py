@@ -34,7 +34,16 @@ async def callback_handler(update: Update, context: ContextTypes.DEFAULT_TYPE) -
     
     user_id = query.from_user.id
     data = query.data
-    
+
+    _followup_cta_callbacks = {"menu_portfolio", "menu_calculator", "book_consultation", "menu_ai_agent", "menu_services"}
+    if data in _followup_cta_callbacks:
+        try:
+            from src.followup import follow_up_manager
+            follow_up_manager.track_cta_click(user_id)
+            follow_up_manager.handle_silent_activity(user_id, activity_type="cta_click")
+        except Exception:
+            pass
+
     if data == "open_app":
         await query.message.reply_text(
             "Вот что могу показать:",

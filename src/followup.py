@@ -234,6 +234,37 @@ FOLLOW_UP_PROMPTS = {
 Напиши ТОЛЬКО текст, без кавычек.""",
 }
 
+FOLLOW_UP_AB_VARIANTS = {
+    1: {
+        "a": "СТИЛЬ: Прямой и экспертный. Начни с конкретного факта или цифры. Будь уверенным. Пример: '{name}, нашёл кое-что по твоей нише — {niche_insight}. Думаю, тебе будет полезно'",
+        "b": "СТИЛЬ: Мягкий и заботливый. Начни с заботы о клиенте. Покажи что помнишь о нём. Пример: '{name}, вспомнил про наш разговор. Как продвигаются дела с {topic}? Кстати, нашёл одну интересную идею для тебя'"
+    },
+    2: {
+        "a": "СТИЛЬ: Прямой с кейсом и цифрами. Конкретный результат. Пример: 'Свежий результат: {case_result}. У тебя похожая ситуация — можем повторить'",
+        "b": "СТИЛЬ: Сторителлинг. Расскажи историю клиента эмоционально. Пример: 'Тут один владелец {similar_business} написал нам: \"Это изменило мой бизнес\". За месяц {case_result}'"
+    },
+    3: {
+        "a": "СТИЛЬ: Конкретное предложение с дедлайном. 'Я УЖЕ подготовил для тебя {deliverable}. Могу скинуть прямо сейчас — глянешь за 2 минуты'",
+        "b": "СТИЛЬ: Мягкое предложение без давления. 'Набросал пару идей для твоего проекта. Ни к чему не обязывает — просто мысли. Интересно?'"
+    },
+    4: {
+        "a": "СТИЛЬ: Чёткая срочность с обоснованием. 'У нас освободился слот — берём 2 проекта до {deadline}. После этого очередь 3 недели'",
+        "b": "СТИЛЬ: Мягкий FOMO через упущенную выгоду. 'Посчитал — каждый месяц без приложения ты теряешь примерно {lost_amount}. Просто к размышлению'"
+    },
+    5: {
+        "a": "СТИЛЬ: Провокационный инсайт. Удиви фактом. 'Знаешь, что 78% твоих конкурентов уже используют {trend}? Вот что это значит для тебя...'",
+        "b": "СТИЛЬ: Эмпатия + новый угол. 'Понимаю, сейчас много всего. Но вот что заметил — {observation}. Может стоит взглянуть с этой стороны?'"
+    },
+    6: {
+        "a": "СТИЛЬ: Прямой breakup. 'Не буду больше писать. Если когда-нибудь решишь — просто напиши, помогу разобраться'",
+        "b": "СТИЛЬ: Тёплый breakup с подарком. 'Понимаю, сейчас не до этого. Оставляю для тебя {gift} — пригодится когда будешь готов. Удачи!'"
+    },
+    7: {
+        "a": "СТИЛЬ: Свежая новость. 'Появилось кое-что новое — {new_feature}. Думаю, это как раз то, что тебе нужно'",
+        "b": "СТИЛЬ: Ностальгический. 'Давно не общались! Вспомнил наш разговор про {topic}. С тех пор у нас появилось {new_value}'"
+    },
+}
+
 
 def _build_client_signals(user_id: int) -> str:
     signals = []
@@ -246,11 +277,11 @@ def _build_client_signals(user_id: int) -> str:
             elif lead.score and lead.score >= 25:
                 signals.append("СИГНАЛ: Тёплый лид (средний интерес)")
 
-            if lead.industry:
-                signals.append(f"НИША клиента: {lead.industry}")
+            if lead.business_type:
+                signals.append(f"НИША клиента: {lead.business_type}")
 
-            if lead.budget_range:
-                signals.append(f"БЮДЖЕТ: {lead.budget_range}")
+            if lead.budget:
+                signals.append(f"БЮДЖЕТ: {lead.budget}")
 
             tags = getattr(lead, 'tags', None)
             if tags:
@@ -273,9 +304,9 @@ def _build_client_signals(user_id: int) -> str:
 
     try:
         from src.propensity import propensity_scorer
-        score_data = propensity_scorer.calculate_score(user_id)
-        if score_data and score_data.get("score"):
-            signals.append(f"PROPENSITY SCORE: {score_data['score']}/100")
+        score = propensity_scorer.get_score(user_id)
+        if score is not None and score > 0:
+            signals.append(f"PROPENSITY SCORE: {score}/100")
     except Exception:
         pass
 
@@ -287,6 +318,31 @@ def _build_client_signals(user_id: int) -> str:
 class FollowUpManager:
     def __init__(self):
         self._init_db()
+        self._register_ab_tests()
+
+    def _register_ab_tests(self):
+        try:
+            from src.ab_testing import WELCOME_TESTS, ABTest
+            for i in range(1, 8):
+                test_name = f"followup_step_{i}"
+                if test_name not in WELCOME_TESTS:
+                    descriptions = {
+                        1: "Follow-up #1: прямой vs мягкий",
+                        2: "Follow-up #2: кейс-цифры vs сторителлинг",
+                        3: "Follow-up #3: конкретное предложение vs мягкое",
+                        4: "Follow-up #4: срочность vs упущенная выгода",
+                        5: "Follow-up #5: провокация vs эмпатия",
+                        6: "Follow-up #6: прямой breakup vs тёплый",
+                        7: "Follow-up #7: новость vs ностальгия",
+                    }
+                    WELCOME_TESTS[test_name] = ABTest(
+                        name=test_name,
+                        variant_a="a",
+                        variant_b="b",
+                        description=descriptions.get(i, f"Follow-up #{i} A/B test")
+                    )
+        except Exception as e:
+            logger.debug(f"Failed to register followup A/B tests: {e}")
 
     def _init_db(self):
         if not DATABASE_URL:
@@ -317,9 +373,120 @@ class FollowUpManager:
                     cur.execute("""
                         CREATE INDEX IF NOT EXISTS idx_followups_scheduled ON follow_ups(scheduled_at)
                     """)
+
+                    cur.execute("ALTER TABLE follow_ups ADD COLUMN IF NOT EXISTS ab_variant VARCHAR(5)")
+                    cur.execute("ALTER TABLE follow_ups ADD COLUMN IF NOT EXISTS cta_clicked BOOLEAN DEFAULT FALSE")
+                    cur.execute("ALTER TABLE follow_ups ADD COLUMN IF NOT EXISTS click_timestamp TIMESTAMP")
+
+                    cur.execute("""
+                        CREATE TABLE IF NOT EXISTS successful_followups (
+                            id SERIAL PRIMARY KEY,
+                            follow_up_number INTEGER,
+                            message_text TEXT,
+                            ab_variant VARCHAR(5),
+                            niche VARCHAR(50),
+                            created_at TIMESTAMP DEFAULT NOW()
+                        )
+                    """)
             logger.info("Follow-up table initialized")
         except Exception as e:
             logger.error(f"Failed to init follow-up table: {e}")
+
+    def _get_avg_response_time(self, user_id: int) -> Optional[float]:
+        """Average seconds between bot message and user reply."""
+        if not DATABASE_URL:
+            return None
+        try:
+            with get_connection() as conn:
+                with conn.cursor() as cur:
+                    cur.execute("""
+                        SELECT AVG(EXTRACT(EPOCH FROM (u.created_at - b.created_at)))
+                        FROM conversations b
+                        JOIN conversations u ON u.user_id = b.user_id 
+                            AND u.role = 'user' 
+                            AND u.created_at > b.created_at
+                            AND u.created_at < b.created_at + INTERVAL '7 days'
+                        WHERE b.user_id = %s AND b.role = 'assistant'
+                        ORDER BY b.created_at DESC
+                        LIMIT 20
+                    """, (user_id,))
+                    result = cur.fetchone()
+                    return result[0] if result and result[0] else None
+        except:
+            return None
+
+    def _count_consecutive_no_response(self, user_id: int) -> int:
+        """Count consecutive follow-ups without user response."""
+        if not DATABASE_URL:
+            return 0
+        try:
+            with get_connection() as conn:
+                with conn.cursor() as cur:
+                    cur.execute("""
+                        SELECT COUNT(*) FROM follow_ups 
+                        WHERE user_id = %s AND status = 'sent'
+                        AND id > COALESCE(
+                            (SELECT MAX(id) FROM follow_ups WHERE user_id = %s AND status = 'responded'),
+                            0
+                        )
+                    """, (user_id, user_id))
+                    result = cur.fetchone()
+                    return result[0] if result else 0
+        except:
+            return 0
+
+    def _calculate_adaptive_delay(self, user_id: int, follow_up_number: int, base_priority: str) -> Optional[timedelta]:
+        base_schedule = FOLLOW_UP_SCHEDULES[base_priority]
+        if follow_up_number > len(base_schedule):
+            return None
+        base_delay = base_schedule[follow_up_number - 1]
+
+        multiplier = 1.0
+
+        try:
+            from src.propensity import propensity_scorer
+            score = propensity_scorer.get_score(user_id)
+            if score and score >= 70:
+                multiplier *= 0.7
+            elif score and score >= 40:
+                multiplier *= 0.85
+            elif score and score < 20:
+                multiplier *= 1.3
+        except:
+            pass
+
+        try:
+            avg_response_time = self._get_avg_response_time(user_id)
+            if avg_response_time:
+                if avg_response_time < 300:
+                    multiplier *= 0.8
+                elif avg_response_time > 86400:
+                    multiplier *= 1.4
+        except:
+            pass
+
+        consecutive_no_response = self._count_consecutive_no_response(user_id)
+        if consecutive_no_response >= 3:
+            fatigue_factor = 1.5 ** (consecutive_no_response - 2)
+            multiplier *= min(fatigue_factor, 4.0)
+
+        try:
+            with get_connection() as conn:
+                with conn.cursor() as cur:
+                    cur.execute("""
+                        SELECT cta_clicked FROM follow_ups 
+                        WHERE user_id = %s AND status = 'sent'
+                        ORDER BY sent_at DESC LIMIT 1
+                    """, (user_id,))
+                    row = cur.fetchone()
+                    if row and row[0]:
+                        multiplier *= 0.6
+                        logger.info(f"CTA click detected for {user_id}, accelerating next follow-up")
+        except:
+            pass
+
+        adjusted_seconds = base_delay.total_seconds() * multiplier
+        return timedelta(seconds=adjusted_seconds)
 
     def schedule_follow_up(self, user_id: int) -> bool:
         if not DATABASE_URL:
@@ -361,15 +528,13 @@ class FollowUpManager:
                     else:
                         priority = "cold"
 
-                    schedule = FOLLOW_UP_SCHEDULES.get(priority, FOLLOW_UP_SCHEDULES["cold"])
-
-                    if next_number > len(schedule):
-                        return False
-
                     if next_number > 7:
                         return False
 
-                    delay = schedule[next_number - 1]
+                    delay = self._calculate_adaptive_delay(user_id, next_number, priority)
+                    if delay is None:
+                        return False
+
                     scheduled_at = datetime.now() + delay
 
                     try:
@@ -453,7 +618,7 @@ class FollowUpManager:
             with get_connection() as conn:
                 with conn.cursor(cursor_factory=RealDictCursor) as cur:
                     cur.execute("""
-                        SELECT f.id, f.user_id, f.follow_up_number, f.scheduled_at
+                        SELECT f.id, f.user_id, f.follow_up_number, f.scheduled_at, f.ab_variant
                         FROM follow_ups f
                         JOIN leads l ON f.user_id = l.user_id
                         LEFT JOIN bot_users bu ON f.user_id = bu.user_id
@@ -469,7 +634,7 @@ class FollowUpManager:
             logger.error(f"Failed to get due follow-ups: {e}")
             return []
 
-    def mark_sent(self, follow_up_id: int, message_text: str) -> bool:
+    def mark_sent(self, follow_up_id: int, message_text: str, ab_variant: str = "") -> bool:
         if not DATABASE_URL:
             return False
 
@@ -478,9 +643,9 @@ class FollowUpManager:
                 with conn.cursor() as cur:
                     cur.execute("""
                         UPDATE follow_ups 
-                        SET status = 'sent', sent_at = NOW(), message_text = %s
+                        SET status = 'sent', sent_at = NOW(), message_text = %s, ab_variant = %s
                         WHERE id = %s
-                    """, (message_text, follow_up_id))
+                    """, (message_text, ab_variant, follow_up_id))
             return True
         except Exception as e:
             logger.error(f"Failed to mark follow-up {follow_up_id} as sent: {e}")
@@ -498,12 +663,195 @@ class FollowUpManager:
                         SET status = 'responded'
                         WHERE user_id = %s AND status = 'sent'
                     """, (user_id,))
-                    return cur.rowcount
+                    count = cur.rowcount
+
+                    try:
+                        cur.execute("""
+                            SELECT follow_up_number, message_text, ab_variant FROM follow_ups
+                            WHERE user_id = %s AND status = 'responded'
+                            ORDER BY sent_at DESC LIMIT 1
+                        """, (user_id,))
+                        row = cur.fetchone()
+                        if row:
+                            self._save_successful_followup(user_id, row[0], row[1] or "", row[2] or "")
+                    except:
+                        pass
+
+                    return count
         except Exception as e:
             logger.error(f"Failed to mark responded for user {user_id}: {e}")
             return 0
 
-    async def generate_follow_up_message(self, user_id: int, follow_up_number: int) -> str:
+    def track_cta_click(self, user_id: int) -> bool:
+        if not DATABASE_URL:
+            return False
+        try:
+            with get_connection() as conn:
+                with conn.cursor() as cur:
+                    cur.execute("""
+                        UPDATE follow_ups 
+                        SET cta_clicked = TRUE, click_timestamp = NOW()
+                        WHERE id = (
+                            SELECT id FROM follow_ups
+                            WHERE user_id = %s AND status = 'sent'
+                            AND cta_clicked = FALSE
+                            ORDER BY sent_at DESC
+                            LIMIT 1
+                        )
+                    """, (user_id,))
+                    return cur.rowcount > 0
+        except:
+            return False
+
+    def get_step_analytics(self) -> Dict:
+        """Get conversion rate analytics per follow-up step."""
+        if not DATABASE_URL:
+            return {}
+        try:
+            with get_connection() as conn:
+                with conn.cursor(cursor_factory=RealDictCursor) as cur:
+                    cur.execute("""
+                        SELECT 
+                            follow_up_number,
+                            ab_variant,
+                            COUNT(*) as total_sent,
+                            COUNT(*) FILTER (WHERE status = 'responded') as responses,
+                            COUNT(*) FILTER (WHERE cta_clicked = TRUE) as cta_clicks,
+                            ROUND(100.0 * COUNT(*) FILTER (WHERE status = 'responded') / NULLIF(COUNT(*), 0), 1) as response_rate,
+                            ROUND(100.0 * COUNT(*) FILTER (WHERE cta_clicked = TRUE) / NULLIF(COUNT(*), 0), 1) as click_rate
+                        FROM follow_ups
+                        WHERE status IN ('sent', 'responded')
+                        GROUP BY follow_up_number, ab_variant
+                        ORDER BY follow_up_number, ab_variant
+                    """)
+                    rows = cur.fetchall()
+                    analytics = {}
+                    for row in rows:
+                        step = row['follow_up_number']
+                        variant = row['ab_variant'] or 'unknown'
+                        if step not in analytics:
+                            analytics[step] = {}
+                        analytics[step][variant] = {
+                            'sent': row['total_sent'],
+                            'responses': row['responses'],
+                            'cta_clicks': row['cta_clicks'],
+                            'response_rate': float(row['response_rate'] or 0),
+                            'click_rate': float(row['click_rate'] or 0)
+                        }
+                    return analytics
+        except Exception as e:
+            logger.error(f"Failed to get step analytics: {e}")
+            return {}
+
+    def _save_successful_followup(self, user_id: int, follow_up_number: int, message_text: str, ab_variant: str = ""):
+        """Save follow-up that got a response for future AI learning."""
+        if not DATABASE_URL:
+            return
+        try:
+            with get_connection() as conn:
+                with conn.cursor() as cur:
+                    niche = ""
+                    try:
+                        lead = lead_manager.get_lead(user_id)
+                        if lead and lead.business_type:
+                            niche = lead.business_type
+                    except:
+                        pass
+
+                    cur.execute("""
+                        INSERT INTO successful_followups (follow_up_number, message_text, ab_variant, niche)
+                        VALUES (%s, %s, %s, %s)
+                    """, (follow_up_number, message_text[:1000], ab_variant, niche))
+
+                    cur.execute("""
+                        DELETE FROM successful_followups 
+                        WHERE id NOT IN (
+                            SELECT id FROM successful_followups ORDER BY created_at DESC LIMIT 200
+                        )
+                    """)
+        except Exception as e:
+            logger.debug(f"Failed to save successful followup: {e}")
+
+    def get_successful_examples(self, follow_up_number: int, niche: str = "", limit: int = 3) -> str:
+        """Get successful follow-up examples for AI prompt injection."""
+        if not DATABASE_URL:
+            return ""
+        try:
+            with get_connection() as conn:
+                with conn.cursor(cursor_factory=RealDictCursor) as cur:
+                    if niche:
+                        cur.execute("""
+                            SELECT message_text FROM successful_followups
+                            WHERE follow_up_number = %s AND niche = %s
+                            ORDER BY created_at DESC LIMIT %s
+                        """, (follow_up_number, niche, limit))
+                        rows = cur.fetchall()
+                        if rows:
+                            examples = "\n".join([f"• \"{r['message_text'][:200]}\"" for r in rows])
+                            return f"\nПРИМЕРЫ УСПЕШНЫХ FOLLOW-UP (получили ответ):\n{examples}"
+
+                    cur.execute("""
+                        SELECT message_text FROM successful_followups
+                        WHERE follow_up_number = %s
+                        ORDER BY created_at DESC LIMIT %s
+                    """, (follow_up_number, limit))
+                    rows = cur.fetchall()
+                    if rows:
+                        examples = "\n".join([f"• \"{r['message_text'][:200]}\"" for r in rows])
+                        return f"\nПРИМЕРЫ УСПЕШНЫХ FOLLOW-UP (получили ответ):\n{examples}"
+        except:
+            pass
+        return ""
+
+    def handle_silent_activity(self, user_id: int, activity_type: str = "bot_visit") -> bool:
+        """Handle when user visits bot or clicks button without texting.
+        Reschedule follow-up sequence from relevant step instead of resetting."""
+        if not DATABASE_URL:
+            return False
+        try:
+            with get_connection() as conn:
+                with conn.cursor(cursor_factory=RealDictCursor) as cur:
+                    cur.execute("""
+                        SELECT MAX(follow_up_number) as last_step, 
+                               MAX(CASE WHEN status = 'scheduled' THEN id END) as pending_id
+                        FROM follow_ups WHERE user_id = %s
+                    """, (user_id,))
+                    row = cur.fetchone()
+
+                    if not row or not row['last_step']:
+                        return False
+
+                    last_step = row['last_step']
+
+                    if row['pending_id']:
+                        cur.execute("""
+                            UPDATE follow_ups 
+                            SET scheduled_at = NOW() + INTERVAL '1 hour'
+                            WHERE id = %s AND scheduled_at > NOW() + INTERVAL '1 hour'
+                        """, (row['pending_id'],))
+                        if cur.rowcount > 0:
+                            logger.info(f"Accelerated follow-up for user {user_id} due to {activity_type}")
+                            return True
+                    else:
+                        restart_step = min(last_step + 1, 7)
+
+                        if last_step < 7:
+                            cur.execute("""
+                                INSERT INTO follow_ups (user_id, follow_up_number, status, scheduled_at)
+                                VALUES (%s, %s, 'scheduled', NOW() + INTERVAL '2 hours')
+                                ON CONFLICT DO NOTHING
+                            """, (user_id, restart_step))
+                            if cur.rowcount > 0:
+                                logger.info(f"Re-engaged user {user_id} with step {restart_step} due to {activity_type}")
+                                return True
+            return False
+        except Exception as e:
+            logger.debug(f"Silent activity handling failed: {e}")
+            return False
+
+    async def generate_follow_up_message(self, user_id: int, follow_up_number: int) -> tuple:
+        """Generate follow-up message. Returns (message_text, ab_variant)."""
+        variant = ""
         try:
             messages = lead_manager.get_conversation_history(user_id, limit=10)
 
@@ -519,6 +867,27 @@ class FollowUpManager:
             prompt_template = FOLLOW_UP_PROMPTS.get(follow_up_number, FOLLOW_UP_PROMPTS[1])
             prompt = prompt_template.format(context=context, client_signals=client_signals)
 
+            try:
+                from src.ab_testing import ab_testing
+                variant = ab_testing.get_variant(user_id, f"followup_step_{follow_up_number}")
+            except Exception:
+                variant = "a"
+            style_hint = FOLLOW_UP_AB_VARIANTS.get(follow_up_number, {}).get(variant, "")
+            if style_hint:
+                prompt += f"\n\n{style_hint}"
+
+            niche = ""
+            try:
+                lead = lead_manager.get_lead(user_id)
+                if lead and lead.business_type:
+                    niche = lead.business_type
+            except:
+                pass
+
+            successful_examples = self.get_successful_examples(follow_up_number, niche)
+            if successful_examples:
+                prompt += successful_examples
+
             from src.ai_client import ai_client
             result = await ai_client.generate_response(
                 messages=[{"role": "user", "parts": [{"text": prompt}]}],
@@ -528,7 +897,7 @@ class FollowUpManager:
             if result:
                 text = result.strip().strip('"').strip("'")
                 if len(text) > 20:
-                    return text
+                    return text, variant
 
         except Exception as e:
             logger.error(f"Failed to generate follow-up message for user {user_id}: {e}")
@@ -542,7 +911,7 @@ class FollowUpManager:
             6: "Не хочу надоедать, так что оставлю в покое. Но если появятся вопросы — просто напиши, я тут",
             7: "Давно не общались! У нас появился новый формат — MVP за 7 дней. Один клиент окупил за первую неделю. Если хочешь подробности — напиши)",
         }
-        return fallback_messages.get(follow_up_number, fallback_messages[1])
+        return fallback_messages.get(follow_up_number, fallback_messages[1]), variant
 
     def pause_user(self, user_id: int) -> int:
         if not DATABASE_URL:

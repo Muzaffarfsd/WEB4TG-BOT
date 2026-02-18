@@ -219,9 +219,13 @@ async def process_follow_ups(context: ContextTypes.DEFAULT_TYPE) -> None:
         due = follow_up_manager.get_due_follow_ups()
         for fu in due:
             try:
-                message = await follow_up_manager.generate_follow_up_message(
+                result = await follow_up_manager.generate_follow_up_message(
                     fu['user_id'], fu['follow_up_number']
                 )
+                if isinstance(result, tuple):
+                    message, ab_variant = result
+                else:
+                    message, ab_variant = result, ""
 
                 voice_sent = False
                 if _user_prefers_voice(fu['user_id']):
@@ -244,18 +248,19 @@ async def process_follow_ups(context: ContextTypes.DEFAULT_TYPE) -> None:
                         reply_markup=cta_keyboard
                     )
 
-                follow_up_manager.mark_sent(fu['id'], message)
+                follow_up_manager.mark_sent(fu['id'], message, ab_variant=ab_variant)
 
                 from src.leads import lead_manager
                 lead_manager.save_message(fu['user_id'], "assistant", message)
                 lead_manager.log_event("followup_sent", fu['user_id'], {
                     "followup_number": fu['follow_up_number'],
-                    "voice": voice_sent
+                    "voice": voice_sent,
+                    "ab_variant": ab_variant
                 })
 
                 follow_up_manager.schedule_follow_up(fu['user_id'])
 
-                logger.info(f"Sent follow-up #{fu['follow_up_number']} to user {fu['user_id']} (voice={voice_sent})")
+                logger.info(f"Sent follow-up #{fu['follow_up_number']} to user {fu['user_id']} (voice={voice_sent}, variant={ab_variant})")
 
                 await asyncio.sleep(2)
             except Forbidden:
