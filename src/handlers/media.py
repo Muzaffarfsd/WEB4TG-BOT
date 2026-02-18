@@ -812,6 +812,8 @@ def _run_voice_post_processing(user_id: int, transcription: str, session):
 
 async def photo_handler(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
     user = update.effective_user
+    if not user or not update.message:
+        return
     user_id = user.id
 
     if context.user_data.get('broadcast_compose'):
@@ -840,7 +842,7 @@ async def photo_handler(update: Update, context: ContextTypes.DEFAULT_TYPE) -> N
 
     if pending_review_type != "text_photo":
         typing_task = asyncio.create_task(
-            send_typing_action(update, duration=30.0)
+            send_typing_action(update, duration=45.0)
         )
         try:
             photo = update.message.photo[-1] if update.message.photo else None
@@ -859,39 +861,75 @@ async def photo_handler(update: Update, context: ContextTypes.DEFAULT_TYPE) -> N
                 first_name=user.first_name
             )
 
-            user_text = caption if caption else "Клиент отправил изображение. Проанализируй что на нём и ответь как консультант Алекс из WEB4TG Studio. Если это скриншот приложения или дизайн — оцени и предложи улучшения. Если это ТЗ или схема — проанализируй и дай рекомендации."
+            from src.vision_sales import (
+                VISION_CLASSIFICATION_PROMPT,
+                get_image_type_from_caption,
+                build_vision_system_prompt,
+                get_smart_buttons_for_image,
+                get_lead_score_boost,
+                get_intents_for_image,
+                is_hot_image,
+                is_warm_image,
+                build_manager_notification,
+                get_vision_analysis_context,
+                ImageType,
+            )
 
-            session.add_message("user", f"[Фото]{f': {caption}' if caption else ''}", config.max_history_length)
-            lead_manager.save_message(user.id, "user", f"[Фото]{f': {caption}' if caption else ''}")
-            lead_manager.log_event("photo_analysis", user.id)
+            from google.genai import types as genai_types
+            from src.config import get_gemini_client
+            gemini_client = get_gemini_client()
+
+            image_part = genai_types.Part.from_bytes(data=bytes(photo_bytes), mime_type="image/jpeg")
+
+            caption_hint = get_image_type_from_caption(caption)
+
+            if caption_hint:
+                image_type = caption_hint
+            else:
+                try:
+                    classify_response = await asyncio.to_thread(
+                        gemini_client.models.generate_content,
+                        model=config.model_name,
+                        contents=[image_part, genai_types.Part(text=VISION_CLASSIFICATION_PROMPT)],
+                        config=genai_types.GenerateContentConfig(
+                            max_output_tokens=30,
+                            temperature=0.1
+                        )
+                    )
+                    raw_type = (classify_response.text or "general").strip().lower().replace(" ", "_")
+                    valid_types = {e.value for e in ImageType}
+                    image_type = raw_type if raw_type in valid_types else ImageType.GENERAL.value
+                except Exception as classify_err:
+                    logger.warning(f"Image classification failed: {classify_err}")
+                    image_type = ImageType.GENERAL.value
+
+            logger.info(f"Vision analysis for user {user_id}: type={image_type}, caption={caption[:100] if caption else 'none'}")
+
+            user_text = caption if caption else f"Проанализируй это изображение (тип: {image_type})"
+
+            session.add_message("user", f"[Фото: {image_type}]{f': {caption}' if caption else ''}", config.max_history_length)
+            lead_manager.save_message(user.id, "user", f"[Фото: {image_type}]{f': {caption}' if caption else ''}")
+            lead_manager.log_event(f"photo_{image_type}", user.id)
             lead_manager.update_activity(user.id)
 
             from src.context_builder import build_full_context, parse_ai_buttons
             client_context = build_full_context(user.id, user_text, user.username, user.first_name)
 
-            from google import genai
-            from google.genai import types
-            from src.knowledge_base import SYSTEM_PROMPT
+            vision_context = get_vision_analysis_context(image_type)
+            full_client_ctx = f"{vision_context}\n{client_context}" if client_context else vision_context
 
-            from src.config import get_gemini_client
-            gemini_client = get_gemini_client()
+            system_prompt = build_vision_system_prompt(image_type, full_client_ctx)
 
-            image_part = types.Part.from_bytes(data=bytes(photo_bytes), mime_type="image/jpeg")
-            text_part = types.Part(text=user_text)
-
-            context_parts = []
-            if client_context:
-                context_parts.append(types.Part(text=f"[СИСТЕМНЫЙ КОНТЕКСТ — не показывай клиенту]\n{client_context}"))
-
-            all_parts = context_parts + [image_part, text_part]
+            analysis_text = genai_types.Part(text=user_text if caption else "Проанализируй это изображение.")
+            all_parts = [image_part, analysis_text]
 
             response = await asyncio.to_thread(
                 gemini_client.models.generate_content,
                 model=config.model_name,
                 contents=all_parts,
-                config=types.GenerateContentConfig(
-                    system_instruction=SYSTEM_PROMPT,
-                    max_output_tokens=1500,
+                config=genai_types.GenerateContentConfig(
+                    system_instruction=system_prompt,
+                    max_output_tokens=2000,
                     temperature=0.7
                 )
             )
@@ -902,21 +940,70 @@ async def photo_handler(update: Update, context: ContextTypes.DEFAULT_TYPE) -> N
                 clean_text, ai_buttons = parse_ai_buttons(response.text)
                 session.add_message("assistant", clean_text, config.max_history_length)
                 lead_manager.save_message(user.id, "assistant", clean_text)
-                reply_markup = None
-                if ai_buttons:
-                    keyboard_rows = [[InlineKeyboardButton(text, callback_data=cb)] for text, cb in ai_buttons]
-                    reply_markup = InlineKeyboardMarkup(keyboard_rows)
+
+                if not ai_buttons:
+                    smart_btns = get_smart_buttons_for_image(image_type)
+                    ai_buttons = smart_btns[:3]
+
+                keyboard_rows = []
+                for i in range(0, len(ai_buttons), 2):
+                    row = []
+                    for label, cb in ai_buttons[i:i+2]:
+                        row.append(InlineKeyboardButton(label, callback_data=cb))
+                    keyboard_rows.append(row)
+                reply_markup = InlineKeyboardMarkup(keyboard_rows) if keyboard_rows else None
 
                 await update.message.reply_text(clean_text, parse_mode="Markdown", reply_markup=reply_markup)
 
                 from src.handlers.messages import auto_tag_lead, auto_score_lead
-                auto_tag_lead(user.id, user_text)
+                auto_tag_lead(user.id, user_text + f" [photo:{image_type}]")
                 auto_score_lead(user.id, user_text)
+
+                score_boost = get_lead_score_boost(image_type)
+                if score_boost > 5:
+                    try:
+                        from src.propensity import propensity_scorer
+                        propensity_scorer.boost_score(user.id, score_boost, f"photo_{image_type}")
+                    except Exception:
+                        pass
+
+                if is_hot_image(image_type) or is_warm_image(image_type):
+                    manager_text = build_manager_notification(
+                        user.id, user.username, user.first_name, image_type, caption
+                    )
+                    if manager_text and MANAGER_CHAT_ID:
+                        try:
+                            await context.bot.send_message(
+                                chat_id=MANAGER_CHAT_ID,
+                                text=manager_text,
+                                parse_mode="HTML"
+                            )
+                            await context.bot.forward_message(
+                                chat_id=MANAGER_CHAT_ID,
+                                from_chat_id=update.effective_chat.id if update.effective_chat else user_id,
+                                message_id=update.message.message_id
+                            )
+                        except Exception as notify_err:
+                            logger.warning(f"Manager notification failed: {notify_err}")
+
+                try:
+                    from src.feedback_loop import feedback_loop
+                    from src.context_builder import detect_funnel_stage
+                    stage = detect_funnel_stage(user.id, user_text, 0)
+                    feedback_loop.log_response(
+                        user_id=user.id,
+                        message_text=f"[photo:{image_type}] {caption[:200] if caption else ''}",
+                        response_text=clean_text[:500],
+                        variant=f"vision_{image_type}",
+                        funnel_stage=stage,
+                    )
+                except Exception:
+                    pass
             else:
                 await update.message.reply_text("Не удалось проанализировать изображение. Попробуйте описать словами что вам нужно.")
         except Exception as e:
             typing_task.cancel()
-            logger.error(f"Photo analysis error: {e}")
+            logger.error(f"Photo analysis error: {e}", exc_info=True)
             await update.message.reply_text(
                 "Не удалось обработать фото. Опишите словами что вам нужно, я помогу!"
             )

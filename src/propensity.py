@@ -233,6 +233,25 @@ class PropensityScorer:
             logger.error(f"Failed to get score for user {user_id}: {e}")
         return None
 
+    def boost_score(self, user_id: int, boost: int, reason: str = "") -> None:
+        if not DATABASE_URL or boost <= 0:
+            return
+        try:
+            current = self.get_score(user_id)
+            if current is None:
+                self.record_interaction(user_id, "message")
+                current = 0
+            new_score = min(100, current + boost)
+            with get_connection() as conn:
+                with conn.cursor() as cur:
+                    cur.execute(
+                        "UPDATE interaction_metrics SET last_score = %s, score_updated_at = CURRENT_TIMESTAMP WHERE user_id = %s",
+                        (new_score, user_id)
+                    )
+            logger.info(f"Propensity boost for user {user_id}: +{boost} ({reason}), {current}->{new_score}")
+        except Exception as e:
+            logger.error(f"Failed to boost score for user {user_id}: {e}")
+
     def get_top_prospects(self, limit: int = 10) -> List[Dict]:
         if not DATABASE_URL:
             return []

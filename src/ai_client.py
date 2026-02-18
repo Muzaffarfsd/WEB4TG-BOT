@@ -949,6 +949,25 @@ TOOL_DECLARATIONS = [
             },
             "required": ["competitor_type"]
         }
+    },
+    {
+        "name": "request_screenshot",
+        "description": "Попросить клиента прислать скриншот или фото для профессионального анализа. Вызывай когда клиент описывает свой сайт/приложение/бизнес словами, но визуальный анализ даст лучший результат. Также вызывай когда клиент упоминает конкурента — предложи прислать скриншот для детального сравнения.",
+        "parameters": {
+            "type": "object",
+            "properties": {
+                "analysis_type": {
+                    "type": "string",
+                    "enum": ["app_audit", "website_audit", "competitor_analysis", "design_review", "business_photo", "document_review"],
+                    "description": "Тип запрашиваемого анализа: app_audit=аудит приложения, website_audit=аудит сайта, competitor_analysis=анализ конкурента, design_review=ревью дизайна, business_photo=фото бизнеса, document_review=анализ ТЗ/документа"
+                },
+                "reason": {
+                    "type": "string",
+                    "description": "Почему визуальный анализ будет полезен клиенту"
+                }
+            },
+            "required": ["analysis_type", "reason"]
+        }
     }
 ]
 

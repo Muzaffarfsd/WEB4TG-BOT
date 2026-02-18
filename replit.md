@@ -15,7 +15,8 @@ The bot is developed in Python, leveraging Telegram Bot API 9.4. It features a m
 - Button styles are applied through `styled_button_api_kwargs()`.
 
 **Technical Implementations & Feature Specifications:**
-- **AI Integration**: Powered by Gemini 3 Pro Preview with smart multi-model routing, real-time streaming with retry, 17 function calling tools (RAG search, client memory, competitor comparison), response validation/hallucination guard, and graceful degradation.
+- **AI Integration**: Powered by Gemini 3 Pro Preview with smart multi-model routing, real-time streaming with retry, 18 function calling tools (RAG search, client memory, competitor comparison, request_screenshot for proactive visual analysis), response validation/hallucination guard, and graceful degradation.
+- **Multimodal Vision Sales Analysis**: `src/vision_sales.py` — 10 image type classifications (app_screenshot, website_screenshot, competitor_app, design_mockup, business_photo, product_photo, menu_catalog, analytics_screenshot, document_tz, general), sales-oriented prompts per type, smart buttons per image type, lead score boosts (up to +30 for ТЗ/documents), manager notifications for hot/warm leads, integration with context_builder and propensity scoring.
 - **Advanced Sales Intelligence**: Incorporates BANT qualification, decision-maker detection, negotiation stance analysis, 6 advanced closing techniques, competitor handling for 6 types, and dynamic pricing presentation.
 - **Conversation Intelligence**: Features adaptive response length, smart thinking level routing, response diversity tracking, multi-intent handling, dialog repair, decision fatigue prevention, conversation velocity tracking, sentiment trajectory analysis, and question density as an interest signal.
 - **Interactive Tools**: Includes a cost calculator, portfolio with before/after metrics, competitor comparison, FAQ, interactive onboarding quiz, brief generator wizard, package comparison visual, payment calculator with discount, timeline visualization, and savings calculator.
@@ -47,6 +48,13 @@ The bot is developed in Python, leveraging Telegram Bot API 9.4. It features a m
 - **Guardrails**: System prompt rules to prevent unauthorized promises, response validation, and confidence scoring.
 
 ## Recent Changes
+- **2026-02-18**: Phase 3 — Multimodal Vision Sales Analysis
+  - NEW: `src/vision_sales.py` — 10 image types with tailored sales prompts, smart buttons, lead scoring, manager notifications
+  - UPGRADED: `src/handlers/media.py` — photo_handler rewritten with 2-step flow: AI classification → sales-oriented analysis
+  - NEW tool: `request_screenshot` in ai_client.py (18th tool) — AI proactively asks clients for photos for visual analysis
+  - NEW: `PropensityScorer.boost_score()` for image-driven lead scoring boosts
+  - Hot leads (design_mockup, document_tz) trigger instant manager notifications
+  - All modified files compile with 0 errors
 - **2026-02-18**: World-class sales AI upgrade (Round 2 — final)
   - SYSTEM_PROMPT expanded to 36,876 chars (5,434 words) with 20 total methodologies
   - Round 1: Cialdini, Kahneman, Voss, SPIN, Challenger, Sandler, Klaff, Heath, Tracy, Blount, Stanley, Gap Selling, Sales EQ
