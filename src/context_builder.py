@@ -1377,6 +1377,119 @@ def assess_confidence_level(text: str) -> Optional[str]:
     return None
 
 
+JOLT_INDECISION_PATTERNS = [
+    "не могу определиться", "трудно выбрать", "всё нравится но",
+    "боюсь ошибиться", "а вдруг не то выберу", "не хочу пожалеть",
+    "слишком ответственно", "серьёзный шаг", "большое решение",
+    "нужно всё взвесить", "хочу быть уверен на 100",
+    "а если выберу не то", "страшно ошибиться", "не уверен какой",
+    "сложно решиться", "никак не решусь", "колеблюсь",
+    "и тот и тот хорош", "оба варианта", "каждый по-своему",
+]
+
+
+def detect_jolt_indecision(text: str, message_count: int = 0) -> Optional[str]:
+    text_lower = text.lower()
+    has_indecision = any(p in text_lower for p in JOLT_INDECISION_PATTERNS)
+    has_price_objection = any(p in text_lower for p in ["дорого", "бюджет", "денег нет", "не потяну"])
+
+    if has_indecision and not has_price_objection:
+        return "[JOLT: НЕРЕШИТЕЛЬНОСТЬ — это НЕ возражение!]\nКлиент ХОЧЕТ купить, но боится принять решение. Стратегия JOLT:\n• J — Judge: уровень нерешительности ВЫСОКИЙ, клиент нуждается в помощи\n• O — Offer: 'На основе вашей ситуации я рекомендую [конкретный вариант]. Вот почему: [1-2 причины]'\n• L — Limit: 'Из всех вариантов для вас оптимальны только 2. Давайте сравним'\n• T — Take risk off: 'Предоплата 35%, 14 дней правок, возврат если не устроит — риск нулевой'\nНЕ давай больше вариантов! Сузь выбор и дай ОДНУ рекомендацию"
+
+    if message_count > 12 and any(w in text_lower for w in ["какой", "который", "выбрать", "определиться"]):
+        return "[JOLT: ЗАТЯНУВШИЙСЯ ВЫБОР]\nКлиент выбирает слишком долго — признак скрытой нерешительности. Стратегия:\n• Дай одну чёткую рекомендацию: 'Для вашего бизнеса я бы выбрал [X]. Причина: [факт]'\n• Убери риск: 'Начнём с этого, и если понадобится — добавим остальное позже'\n• Социальное доказательство: 'Большинство клиентов в вашей нише выбирают именно этот вариант'"
+    return None
+
+
+RISK_AVERSION_PATTERNS = [
+    "а что если не сработает", "а если не окупится", "боюсь потерять деньги",
+    "не хочу рисковать", "это рискованно", "а если провалится",
+    "страшно вкладывать", "а вдруг зря", "а если не зайдёт",
+    "деньги на ветер", "выброшенные деньги", "не хочу выбросить",
+    "а если клиентам не понравится", "а если не будет заказов",
+    "слишком большой риск", "рисковать не готов", "опасаюсь",
+]
+
+
+def detect_risk_aversion(text: str) -> Optional[str]:
+    text_lower = text.lower()
+    risk_count = sum(1 for p in RISK_AVERSION_PATTERNS if p in text_lower)
+    if risk_count == 0:
+        return None
+
+    if risk_count >= 2:
+        return "[РИСК-АВЕРСИЯ: ВЫСОКАЯ]\nКлиент сильно боится потерять деньги. Максимальная стратегия снятия рисков:\n• Этапная оплата: '35% предоплата → вы видите дизайн → одобряете → 65% только после'\n• Гарантия: 'Возврат предоплаты, если результат не устроит. 14 дней правок бесплатно'\n• ROI до старта: 'Давайте вместе посчитаем окупаемость ДО начала. Если не вижу ROI — честно скажу'\n• Кейс с цифрами: покажи клиента из похожей ниши через search_knowledge_base\n• NEPQ: 'А что будет через полгода, если ничего не менять? Сколько будете терять?'"
+    return "[РИСК-АВЕРСИЯ: УМЕРЕННАЯ]\nКлиент осторожен — нормальная реакция на инвестицию. Стратегия:\n• Подчеркни безопасность: этапная оплата, договор, гарантии\n• Социальное доказательство: кейс из ниши клиента\n• Минимизируй первый шаг: 'Давайте начнём с бесплатного расчёта — увидите полную картину'"
+
+
+MICRO_COMMITMENT_POSITIVE = [
+    "интересно", "расскажите", "покажите", "а можно", "давайте",
+    "хочу узнать", "хорошо", "звучит неплохо", "логично",
+    "согласен", "правильно", "верно", "точно", "именно",
+    "да", "ок", "окей", "понял", "ясно", "продолжайте",
+    "круто", "класс", "нравится", "подходит", "то что нужно",
+]
+
+
+def track_micro_commitments(text: str, message_count: int = 0, session=None) -> Optional[str]:
+    text_lower = text.lower()
+    current_positives = sum(1 for p in MICRO_COMMITMENT_POSITIVE if p in text_lower)
+
+    session_positives = 0
+    if session and hasattr(session, 'messages'):
+        user_msgs = [m for m in session.messages if m.get('role') == 'user']
+        for m in user_msgs[-5:]:
+            msg_text = m.get('parts', [{}])[0].get('text', '').lower()
+            session_positives += sum(1 for p in MICRO_COMMITMENT_POSITIVE if p in msg_text)
+
+    total = current_positives + session_positives
+
+    if total >= 8:
+        return "[MICRO-COMMITMENTS: ВЫСОКИЙ УРОВЕНЬ СОГЛАСИЯ]\nКлиент накопил много маленьких 'да' — идеальный момент для перехода к действию (Persuasive Cascading).\n• Предложи конкретный следующий шаг: бриф, расчёт, созвон\n• 'Раз вам всё подходит — давайте зафиксируем? Что удобнее: обсудить детали сейчас или назначить созвон?'"
+    if total >= 5 and message_count >= 5:
+        return "[MICRO-COMMITMENTS: НАБИРАЕТСЯ MOMENTUM]\nКлиент даёт позитивные сигналы. Продолжай строить цепочку согласий:\n• Задай вопрос, на который легко ответить 'да'\n• 'Вам ведь важно, чтобы клиенты могли заказывать 24/7, верно?'"
+    return None
+
+
+TRUST_POSITIVE_SIGNALS = [
+    "спасибо", "благодарю", "полезно", "помогли", "отлично объяснили",
+    "хороший вопрос", "логично", "убедили", "верю", "доверяю",
+    "профессионально", "видно что разбираетесь", "компетентно",
+    "нравится подход", "приятно общаться", "толковый",
+]
+
+TRUST_NEGATIVE_SIGNALS = [
+    "не верю", "сомневаюсь", "звучит слишком", "мошенники", "обман",
+    "развод", "кинете", "не доверяю", "слишком красиво", "подвох",
+    "вы реальные", "а есть офис", "а есть отзывы настоящие",
+]
+
+
+def score_trust_velocity(text: str, session=None) -> Optional[str]:
+    text_lower = text.lower()
+
+    current_positive = sum(1 for p in TRUST_POSITIVE_SIGNALS if p in text_lower)
+    current_negative = sum(1 for p in TRUST_NEGATIVE_SIGNALS if p in text_lower)
+
+    if current_negative >= 2:
+        return "[TRUST VELOCITY: ПАДАЕТ]\nДоверие клиента снижается — несколько негативных сигналов. СРОЧНО:\n• Максимальная прозрачность: покажи портфолио, договор, отзывы\n• Accusation Audit: 'Понимаю, вы можете думать — вот, ещё один...'\n• Предложи конкретное доказательство: демо, рабочий проект, созвон с командой"
+
+    session_positive = 0
+    if session and hasattr(session, 'messages'):
+        user_msgs = [m for m in session.messages if m.get('role') == 'user']
+        for m in user_msgs[-6:]:
+            msg_text = m.get('parts', [{}])[0].get('text', '').lower()
+            session_positive += sum(1 for p in TRUST_POSITIVE_SIGNALS if p in msg_text)
+
+    total_positive = current_positive + session_positive
+
+    if total_positive >= 4:
+        return "[TRUST VELOCITY: ВЫСОКАЯ]\nКлиент демонстрирует растущее доверие. Хороший момент для:\n• Углубления отношений: предложи персональный разбор его бизнеса\n• Мягкого перехода к сделке: 'Раз мы на одной волне — давайте двинемся дальше?'\n• Upsell: можно предложить расширенный пакет"
+    if current_positive >= 2:
+        return "[TRUST VELOCITY: РАСТЁТ]\nПоложительные сигналы доверия. Поддерживай:\n• Продолжай давать ценность и экспертизу\n• Покажи заботу: 'Хочу убедиться, что вы получите именно то, что нужно'"
+    return None
+
+
 def build_full_context(user_id: int, user_message: str, username: Optional[str] = None, first_name: Optional[str] = None, message_count: int = 0) -> Optional[str]:
     parts = []
 
@@ -1514,6 +1627,22 @@ def build_full_context(user_id: int, user_message: str, username: Optional[str] 
     confidence_ctx = assess_confidence_level(user_message)
     if confidence_ctx:
         parts.append(f"\n{confidence_ctx}")
+
+    jolt_ctx = detect_jolt_indecision(user_message, message_count)
+    if jolt_ctx:
+        parts.append(f"\n{jolt_ctx}")
+
+    risk_ctx = detect_risk_aversion(user_message)
+    if risk_ctx:
+        parts.append(f"\n{risk_ctx}")
+
+    micro_ctx = track_micro_commitments(user_message, message_count, session)
+    if micro_ctx:
+        parts.append(f"\n{micro_ctx}")
+
+    trust_ctx = score_trust_velocity(user_message, session)
+    if trust_ctx:
+        parts.append(f"\n{trust_ctx}")
 
     proactive = get_proactive_value(user_id, funnel_stage)
     if proactive:
