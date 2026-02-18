@@ -143,6 +143,24 @@ def validate_response(response_text: str) -> Tuple[bool, str]:
                 is_valid = False
                 logger.warning(f"Unauthorized discount detected: {pat}")
 
+    ALLOWED_DOMAINS = {
+        "web4tg.com", "t.me", "youtube.com", "www.youtube.com",
+        "instagram.com", "www.instagram.com", "tiktok.com", "www.tiktok.com",
+        "telegram.me",
+    }
+    url_pattern = re.compile(r'(?:\[([^\]]*)\]\()?(?:https?://)([\w.-]+)(/[^\s\)\]]*)?(?:\))?')
+    for match in url_pattern.finditer(cleaned):
+        domain = match.group(2).lower()
+        if domain not in ALLOWED_DOMAINS:
+            is_valid = False
+            full_match = match.group(0)
+            logger.warning(f"Removed hallucinated URL with domain '{domain}': {full_match}")
+            cleaned = cleaned.replace(full_match, "")
+
+    cleaned = re.sub(r'\[Скачать[^\]]*\]\s*', '', cleaned)
+    cleaned = re.sub(r'📄\s*\*?\*?\s*$', '', cleaned, flags=re.MULTILINE)
+    cleaned = re.sub(r'\n{3,}', '\n\n', cleaned)
+
     return (is_valid, cleaned)
 
 
