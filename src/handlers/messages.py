@@ -677,29 +677,6 @@ async def message_handler(update: Update, context: ContextTypes.DEFAULT_TYPE) ->
                                     brief_text.replace("<b>", "").replace("</b>", ""),
                                     reply_markup=brief_keyboard
                                 )
-                    elif action_type == "demo_preview":
-                        try:
-                            import re as _demo_re
-                            match = _demo_re.match(r'\[DEMO_PREVIEW:(\w+):(.*?)\]', action_data or "")
-                            btype = match.group(1) if match else "shop"
-                            bname = match.group(2) if match else ""
-                            from src.demo_preview import generate_preview_for_ai
-                            buf, caption, resolved = generate_preview_for_ai(btype, bname)
-                            from telegram import InlineKeyboardButton, InlineKeyboardMarkup
-                            demo_buttons = InlineKeyboardMarkup([
-                                [InlineKeyboardButton("🧮 Рассчитать стоимость", callback_data="menu_calculator")],
-                                [InlineKeyboardButton("📋 Составить бриф", callback_data="start_brief"),
-                                 InlineKeyboardButton("📦 Сравнить пакеты", callback_data="compare_packages")],
-                            ])
-                            await message.reply_photo(
-                                photo=buf,
-                                caption=caption,
-                                parse_mode="Markdown",
-                                reply_markup=demo_buttons,
-                            )
-                            lead_manager.log_event("demo_preview_sent", user.id, {"type": resolved, "name": bname})
-                        except Exception as demo_err:
-                            logger.warning(f"Demo preview send failed: {demo_err}")
             
             if agentic_result["text"]:
                 response = agentic_result["text"]

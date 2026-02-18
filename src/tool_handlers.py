@@ -425,20 +425,6 @@ async def execute_tool_call(tool_name: str, args: dict, user_id: int, username: 
             "💡 Хотите сравнить с конкретной альтернативой?"
         )
 
-    elif tool_name == "generate_demo_preview":
-        btype = args.get("business_type", "shop")
-        bname = args.get("business_name", "")
-        try:
-            from src.demo_preview import generate_preview_for_ai
-            buf, caption, resolved_type = generate_preview_for_ai(btype, bname)
-            _track_propensity(user_id, 'tool_demo_preview')
-            _track_proactive(user_id, 'demo_preview_generated', business_type=resolved_type)
-            _track_outcome(user_id, 'demo_preview')
-            return f"[DEMO_PREVIEW:{resolved_type}:{bname}]\n{caption}"
-        except Exception as e:
-            logger.error(f"Demo preview generation failed: {e}")
-            return "Не удалось сгенерировать превью. Но я могу описать как будет выглядеть ваше приложение словами!"
-
     elif tool_name == "request_screenshot":
         analysis_type = args.get("analysis_type", "app_audit")
         reason = args.get("reason", "Визуальный анализ поможет дать точные рекомендации")

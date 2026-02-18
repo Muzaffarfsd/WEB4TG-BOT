@@ -52,8 +52,6 @@ def check_status():
 
     print("\n")
     run_vision_demo()
-    print("\n")
-    run_preview_demo()
 
     print("\n" + "=" * 60)
     print("  Ready for Railway deployment (python bot.py)")

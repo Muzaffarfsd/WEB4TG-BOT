@@ -616,9 +616,6 @@ class AIClient:
                 elif tool_result == "[AI_BRIEF_GENERATED]":
                     special_actions.append(("ai_brief", None))
                     step_tool_results.append(f"{tc['name']}: AI сформировал бриф проекта")
-                elif tool_result.startswith("[DEMO_PREVIEW:"):
-                    special_actions.append(("demo_preview", tool_result))
-                    step_tool_results.append(f"{tc['name']}: сгенерирован визуальный превью Mini App")
                 else:
                     step_tool_results.append(f"{tc['name']}: {tool_result}")
                     all_tool_results.append({"tool": tc["name"], "result": tool_result})
@@ -951,24 +948,6 @@ TOOL_DECLARATIONS = [
                 }
             },
             "required": ["competitor_type"]
-        }
-    },
-    {
-        "name": "generate_demo_preview",
-        "description": "Сгенерировать визуальный превью (mock-up изображение) Telegram Mini App для бизнеса клиента. Вызывай когда клиент описал свой бизнес и ты хочешь показать 'Вот как может выглядеть ваш [бизнес] в Telegram'. Мощный инструмент конверсии — клиент видит визуализацию своего приложения. Вызывай ПРОАКТИВНО когда клиент упоминает тип бизнеса.",
-        "parameters": {
-            "type": "object",
-            "properties": {
-                "business_type": {
-                    "type": "string",
-                    "description": "Тип бизнеса: restaurant (ресторан/кафе/кофейня), shop (магазин/бутик), beauty (салон красоты/барбершоп), fitness (фитнес/спортзал), services (услуги/ремонт/клининг), medical (клиника/стоматология), education (курсы/школа), delivery (доставка еды)"
-                },
-                "business_name": {
-                    "type": "string",
-                    "description": "Название бизнеса клиента, если известно. Будет отображено в шапке превью."
-                }
-            },
-            "required": ["business_type"]
         }
     },
     {
