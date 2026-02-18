@@ -211,18 +211,23 @@ async def _generate_voice_streaming_async(voice_text: str, profile: dict, output
     start_time = time.monotonic()
 
     try:
-        audio_stream = await async_client.text_to_speech.stream(
-            voice_id=config.elevenlabs_voice_id,
-            text=voice_text,
-            model_id="eleven_v3",
-            output_format=output_format,
-            optimize_streaming_latency=STREAMING_LATENCY_OPTIMIZATION,
-            voice_settings=VoiceSettings(
+        stream_kwargs = {
+            "voice_id": config.elevenlabs_voice_id,
+            "text": voice_text,
+            "model_id": "eleven_v3",
+            "output_format": output_format,
+            "voice_settings": VoiceSettings(
                 stability=profile["stability"],
                 similarity_boost=profile["similarity_boost"],
                 style=profile["style"],
-            )
-        )
+            ),
+        }
+
+        stream_call = async_client.text_to_speech.stream(**stream_kwargs)
+        if asyncio.iscoroutine(stream_call):
+            audio_stream = await stream_call
+        else:
+            audio_stream = stream_call
 
         chunks = []
         first_chunk_time = None
