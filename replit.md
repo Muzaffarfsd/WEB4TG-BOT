@@ -34,8 +34,8 @@ The bot is developed in Python, leveraging Telegram Bot API 9.4. It features a m
 **System Design Choices (Super Agent Architecture):**
 - **Agentic Loop**: Multi-step tool calling with smart query context routing for chaining tools.
 - **Session & Memory**: Persistent memory (PostgreSQL with 30-day TTL) and auto-summarization using `client_profiles` table for long-term client data.
-- **Context Builder (Hybrid Funnel)**: Uses a 3-signal hybrid funnel (keywords, semantics, score) with backslide detection and 25 context signals.
-- **Knowledge Base**: Optimized prompt with 7 core rules, a 3-brain model, BANT qualification, advanced closing techniques, competitor handling, dynamic pricing, negotiation stance handling, win-back strategy, decision fatigue prevention, response diversity, multi-intent handling, dialog repair, confidence scoring, communication preferences, cultural adaptation, and ethical guardrails.
+- **Context Builder (Hybrid Funnel)**: Uses a 3-signal hybrid funnel (keywords, semantics, score) with backslide detection and 29 context signals (includes JOLT indecision, risk aversion, micro-commitments, trust velocity).
+- **Knowledge Base**: Optimized prompt (36,876 chars, 5,434 words) with 20 methodologies (BANT, MEDDIC, N.E.A.T., JOLT, SPIN, Challenger, Sandler, Cialdini, Kahneman, Voss, Klaff, Gap Selling, Pink ABCs, NEPQ, Sales EQ, Tracy, Blount, Stanley, AI Persuasion Science 2025, Heath SUCCESS), 13 closing techniques, 7 core rules, 3-brain model, competitor handling, dynamic pricing, negotiation stance handling, win-back strategy, decision fatigue prevention, response diversity, multi-intent handling, dialog repair, confidence scoring, communication preferences, cultural adaptation, and ethical guardrails.
 - **RAG Knowledge Base**: PostgreSQL-backed searchable knowledge base with weighted relevance scoring.
 - **Smart Button System**: Context-aware buttons after every AI response based on funnel stage, detected intents, and propensity score.
 - **Response Validation**: Hallucination guard validates prices, timelines, guarantees, and discounts against known data.
@@ -47,12 +47,17 @@ The bot is developed in Python, leveraging Telegram Bot API 9.4. It features a m
 - **Guardrails**: System prompt rules to prevent unauthorized promises, response validation, and confidence scoring.
 
 ## Recent Changes
-- **2026-02-18**: World-class sales AI upgrade
-  - Expanded knowledge_base.py SYSTEM_PROMPT to 32,650 chars integrating 15+ book methodologies (Cialdini, Kahneman, Voss, SPIN, Challenger, Sandler, Klaff, Heath brothers, Tracy, Blount, Stanley)
-  - Added 5 new psychological detectors to context_builder.py: buying signals (3 levels), Cialdini triggers (5 principles), communication preference (visual/auditory/kinesthetic), multi-intent detection, confidence level scoring
+- **2026-02-18**: World-class sales AI upgrade (Round 2 — final)
+  - SYSTEM_PROMPT expanded to 36,876 chars (5,434 words) with 20 total methodologies
+  - Round 1: Cialdini, Kahneman, Voss, SPIN, Challenger, Sandler, Klaff, Heath, Tracy, Blount, Stanley, Gap Selling, Sales EQ
+  - Round 2: +JOLT Effect, +MEDDIC, +N.E.A.T. Selling, +Daniel Pink ABCs, +NEPQ, +AI Persuasion Science 2025
+  - 13 closing techniques (added JOLT close, Negative reverse close, NEPQ commitment close)
+  - 9 new psychological detectors total in context_builder.py (1,719 lines):
+    - Round 1: buying signals (3 levels), Cialdini triggers (5 principles), communication preference, multi-intent, confidence scoring
+    - Round 2: JOLT indecision detection, risk aversion (2 levels), micro-commitment tracking (Persuasive Cascading), trust velocity scoring
+  - 29 total context signals in build_full_context()
   - Data integrity enforced: removed unverified statistics, all claims from verified sources only
-  - Resolved "free prototype" vs "no free consulting" conflict — now "free calculation/analysis OK, free development NO"
-  - All 8 core modules compile successfully with 0 errors
+  - All 8 core modules compile with 0 errors, 11 unit tests pass
 - **2026-02-16**: Full LSP refactoring — fixed 765 type diagnostics across 10 files
   - Added null guards for `update.effective_user`, `update.message`, `update.callback_query` in all handlers
   - Fixed `is_rate_limit_error` function (was missing, now defined in `ai_client.py`)
