@@ -18,6 +18,8 @@ import time
 from datetime import datetime
 from typing import Dict, Optional
 
+from telegram import InlineKeyboardButton, InlineKeyboardMarkup
+
 from reportlab.pdfgen import canvas
 from reportlab.lib.pagesizes import A4
 from reportlab.lib.colors import HexColor, Color, white
@@ -899,7 +901,13 @@ async def generate_and_send_kp(
     discount_pct: int = 0,
 ):
     from telegram import InputFile
+    chat_id = update.effective_chat.id
     try:
+        if ai_text is None:
+            ai_text = ""
+
+        logger.info(f"Building KP PDF: client={client_name}, ai_text_len={len(ai_text)}, discount={discount_pct}%")
+
         pdf_bytes = build_kp_pdf(
             brief_answers=brief_answers,
             client_name=client_name,
@@ -907,18 +915,20 @@ async def generate_and_send_kp(
             discount_pct=discount_pct,
         )
 
-        project_type = PROJECT_TYPE_NAMES.get(brief_answers.get("project_type", ""), "project")
-        filename = f"KP_WEB4TG_{project_type.replace(' ', '_').replace('/', '_')}.pdf"
+        logger.info(f"KP PDF built: {len(pdf_bytes)} bytes")
 
-        chat_id = update.effective_chat.id
+        project_type = brief_answers.get("project_type", "project")
+        safe_name = project_type.replace(" ", "_").replace("/", "_")
+        filename = f"KP_WEB4TG_{safe_name}.pdf"
+
         await context.bot.send_document(
             chat_id=chat_id,
             document=InputFile(io.BytesIO(pdf_bytes), filename=filename),
             caption=(
-                "\ud83d\udcc4 <b>Ваше персональное коммерческое предложение</b>\n\n"
-                "Документ содержит описание проекта, стоимость, "
-                "сроки и порядок работы.\n\n"
-                "Перешлите его коллегам для согласования!"
+                "\ud83d\udcc4 <b>\u0412\u0430\u0448\u0435 \u043f\u0435\u0440\u0441\u043e\u043d\u0430\u043b\u044c\u043d\u043e\u0435 \u043a\u043e\u043c\u043c\u0435\u0440\u0447\u0435\u0441\u043a\u043e\u0435 \u043f\u0440\u0435\u0434\u043b\u043e\u0436\u0435\u043d\u0438\u0435</b>\n\n"
+                "\u0414\u043e\u043a\u0443\u043c\u0435\u043d\u0442 \u0441\u043e\u0434\u0435\u0440\u0436\u0438\u0442 \u043e\u043f\u0438\u0441\u0430\u043d\u0438\u0435 \u043f\u0440\u043e\u0435\u043a\u0442\u0430, \u0441\u0442\u043e\u0438\u043c\u043e\u0441\u0442\u044c, "
+                "\u0441\u0440\u043e\u043a\u0438 \u0438 \u043f\u043e\u0440\u044f\u0434\u043e\u043a \u0440\u0430\u0431\u043e\u0442\u044b.\n\n"
+                "\u041f\u0435\u0440\u0435\u0448\u043b\u0438\u0442\u0435 \u0435\u0433\u043e \u043a\u043e\u043b\u043b\u0435\u0433\u0430\u043c \u0434\u043b\u044f \u0441\u043e\u0433\u043b\u0430\u0441\u043e\u0432\u0430\u043d\u0438\u044f!"
             ),
             parse_mode="HTML",
         )
@@ -927,9 +937,19 @@ async def generate_and_send_kp(
 
     except Exception as e:
         logger.error(f"Failed to generate/send KP PDF: {e}", exc_info=True)
-        chat_id = update.effective_chat.id
-        await context.bot.send_message(
-            chat_id=chat_id,
-            text="Произошла ошибка при генерации PDF. Попробуйте позже.",
-        )
+        try:
+            await context.bot.send_message(
+                chat_id=chat_id,
+                text=(
+                    "\u26a0\ufe0f \u041f\u0440\u043e\u0438\u0437\u043e\u0448\u043b\u0430 \u043e\u0448\u0438\u0431\u043a\u0430 \u043f\u0440\u0438 \u0433\u0435\u043d\u0435\u0440\u0430\u0446\u0438\u0438 PDF.\n\n"
+                    "\u041f\u043e\u043f\u0440\u043e\u0431\u0443\u0439\u0442\u0435 \u0435\u0449\u0451 \u0440\u0430\u0437 \u0438\u043b\u0438 \u043d\u0430\u043f\u0438\u0448\u0438\u0442\u0435 \u043d\u0430\u043c @web4_tg \u2014 \u043c\u044b \u043e\u0442\u043f\u0440\u0430\u0432\u0438\u043c \u043f\u0440\u0435\u0434\u043b\u043e\u0436\u0435\u043d\u0438\u0435 \u0432\u0440\u0443\u0447\u043d\u0443\u044e."
+                ),
+                reply_markup=InlineKeyboardMarkup([
+                    [InlineKeyboardButton("\ud83d\udd04 \u041f\u043e\u043f\u0440\u043e\u0431\u043e\u0432\u0430\u0442\u044c \u0435\u0449\u0451 \u0440\u0430\u0437", callback_data="generate_kp")],
+                    [InlineKeyboardButton("\ud83d\udc68\u200d\ud83d\udcbc \u041e\u0442\u043f\u0440\u0430\u0432\u0438\u0442\u044c \u043c\u0435\u043d\u0435\u0434\u0436\u0435\u0440\u0443", callback_data="brief_send_manager")],
+                    [InlineKeyboardButton("\u25c0\ufe0f \u0413\u043b\u0430\u0432\u043d\u043e\u0435 \u043c\u0435\u043d\u044e", callback_data="menu_back")],
+                ]),
+            )
+        except Exception:
+            pass
         return False

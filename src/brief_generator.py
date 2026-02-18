@@ -2,8 +2,10 @@
 
 Step-by-step project brief creation with 6 questions,
 auto-formatting, and lead creation.
+Persists state to PostgreSQL so briefs survive bot restarts.
 """
 
+import json
 import logging
 import time
 from dataclasses import dataclass, field
@@ -106,19 +108,97 @@ class BriefState:
 class BriefGenerator:
     def __init__(self):
         self._states: Dict[int, BriefState] = {}
+        self._init_db()
+
+    def _init_db(self):
+        try:
+            from src.database import get_connection
+            with get_connection() as conn:
+                with conn.cursor() as cur:
+                    cur.execute("""
+                        CREATE TABLE IF NOT EXISTS brief_states (
+                            user_id BIGINT PRIMARY KEY,
+                            step INTEGER DEFAULT 0,
+                            answers JSONB DEFAULT '{}',
+                            completed BOOLEAN DEFAULT FALSE,
+                            created_at TIMESTAMP DEFAULT NOW(),
+                            updated_at TIMESTAMP DEFAULT NOW()
+                        )
+                    """)
+                conn.commit()
+        except Exception as e:
+            logger.warning(f"Brief states DB init failed (will use in-memory): {e}")
+
+    def _save_to_db(self, state: BriefState):
+        try:
+            from src.database import get_connection
+            with get_connection() as conn:
+                with conn.cursor() as cur:
+                    cur.execute("""
+                        INSERT INTO brief_states (user_id, step, answers, completed, updated_at)
+                        VALUES (%s, %s, %s, %s, NOW())
+                        ON CONFLICT (user_id)
+                        DO UPDATE SET step = EXCLUDED.step,
+                                      answers = EXCLUDED.answers,
+                                      completed = EXCLUDED.completed,
+                                      updated_at = NOW()
+                    """, (state.user_id, state.step, json.dumps(state.answers), state.completed))
+                conn.commit()
+        except Exception as e:
+            logger.warning(f"Failed to save brief state to DB: {e}")
+
+    def _load_from_db(self, user_id: int) -> Optional[BriefState]:
+        try:
+            from src.database import get_connection
+            with get_connection() as conn:
+                with conn.cursor() as cur:
+                    cur.execute("""
+                        SELECT step, answers, completed FROM brief_states
+                        WHERE user_id = %s
+                    """, (user_id,))
+                    row = cur.fetchone()
+                    if row:
+                        answers = row[1] if isinstance(row[1], dict) else json.loads(row[1]) if row[1] else {}
+                        state = BriefState(
+                            user_id=user_id,
+                            step=row[0],
+                            answers=answers,
+                            completed=row[2],
+                        )
+                        self._states[user_id] = state
+                        return state
+        except Exception as e:
+            logger.warning(f"Failed to load brief state from DB: {e}")
+        return None
+
+    def _delete_from_db(self, user_id: int):
+        try:
+            from src.database import get_connection
+            with get_connection() as conn:
+                with conn.cursor() as cur:
+                    cur.execute("DELETE FROM brief_states WHERE user_id = %s", (user_id,))
+                conn.commit()
+        except Exception as e:
+            logger.warning(f"Failed to delete brief state from DB: {e}")
 
     def start_brief(self, user_id: int) -> BriefState:
-        self._states[user_id] = BriefState(user_id=user_id)
-        return self._states[user_id]
+        state = BriefState(user_id=user_id)
+        self._states[user_id] = state
+        self._save_to_db(state)
+        return state
 
     def get_state(self, user_id: int) -> Optional[BriefState]:
-        return self._states.get(user_id)
+        state = self._states.get(user_id)
+        if state:
+            return state
+        return self._load_from_db(user_id)
 
     def clear_state(self, user_id: int) -> None:
         self._states.pop(user_id, None)
+        self._delete_from_db(user_id)
 
     def get_current_step(self, user_id: int) -> Optional[Tuple[str, InlineKeyboardMarkup]]:
-        state = self._states.get(user_id)
+        state = self.get_state(user_id)
         if not state or state.step >= len(BRIEF_STEPS):
             return None
 
@@ -137,7 +217,7 @@ class BriefGenerator:
         return step_data["question"], InlineKeyboardMarkup(buttons)
 
     def process_answer(self, user_id: int, step_id: str, answer: str) -> Optional[BriefState]:
-        state = self._states.get(user_id)
+        state = self.get_state(user_id)
         if not state:
             return None
 
@@ -147,10 +227,11 @@ class BriefGenerator:
         if state.step >= len(BRIEF_STEPS):
             state.completed = True
 
+        self._save_to_db(state)
         return state
 
     def format_brief(self, user_id: int) -> Tuple[str, InlineKeyboardMarkup]:
-        state = self._states.get(user_id)
+        state = self.get_state(user_id)
         if not state or not state.completed:
             return "Бриф не завершён", InlineKeyboardMarkup([])
 
@@ -159,15 +240,22 @@ class BriefGenerator:
             answer = state.answers.get(step["id"], "")
             labels[step["id"]] = step["options"].get(answer, answer)
 
+        dash = "—"
+        pt = labels.get("project_type", dash)
+        au = labels.get("audience", dash)
+        kf = labels.get("key_features", dash)
+        dp = labels.get("design_pref", dash)
+        ig = labels.get("integrations", dash)
+        bt = labels.get("budget_timeline", dash)
         text = (
             "📋 <b>ВАШ БРИФ ПРОЕКТА</b>\n"
             "━━━━━━━━━━━━━━━\n\n"
-            f"📌 <b>Тип проекта:</b> {labels.get('project_type', '—')}\n"
-            f"👥 <b>Аудитория:</b> {labels.get('audience', '—')}\n"
-            f"⚡ <b>Ключевые функции:</b> {labels.get('key_features', '—')}\n"
-            f"🎨 <b>Дизайн:</b> {labels.get('design_pref', '—')}\n"
-            f"🔗 <b>Интеграции:</b> {labels.get('integrations', '—')}\n"
-            f"💰 <b>Приоритет:</b> {labels.get('budget_timeline', '—')}\n\n"
+            f"📌 <b>Тип проекта:</b> {pt}\n"
+            f"👥 <b>Аудитория:</b> {au}\n"
+            f"⚡ <b>Ключевые функции:</b> {kf}\n"
+            f"🎨 <b>Дизайн:</b> {dp}\n"
+            f"🔗 <b>Интеграции:</b> {ig}\n"
+            f"💰 <b>Приоритет:</b> {bt}\n\n"
             "━━━━━━━━━━━━━━━\n\n"
             "✅ <b>Бриф сохранён!</b>\n\n"
             "Нажмите кнопку ниже — AI мгновенно сформирует "
@@ -190,7 +278,7 @@ class BriefGenerator:
         return text, keyboard
 
     def save_to_lead(self, user_id: int, username: str = "", first_name: str = "") -> None:
-        state = self._states.get(user_id)
+        state = self.get_state(user_id)
         if not state:
             return
         try:
@@ -214,7 +302,7 @@ class BriefGenerator:
             logger.warning(f"Failed to save brief to lead: {e}")
 
     def get_brief_summary_for_manager(self, user_id: int) -> str:
-        state = self._states.get(user_id)
+        state = self.get_state(user_id)
         if not state:
             return "Бриф не найден"
 
