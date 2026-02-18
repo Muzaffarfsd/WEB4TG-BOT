@@ -3,6 +3,7 @@
 import time
 import logging
 import os
+import asyncio
 from typing import Dict, Optional, List, Tuple
 from dataclasses import dataclass
 
@@ -48,6 +49,7 @@ class ConversationQAManager:
     def __init__(self):
         self._session_scores: Dict[int, List[float]] = {}
         self._handoff_queue: Dict[int, dict] = {}
+        self._eval_counters: Dict[int, int] = {}
         self._init_db()
 
     def _init_db(self):
@@ -77,6 +79,14 @@ class ConversationQAManager:
                             status VARCHAR(20) DEFAULT 'pending',
                             created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
                             resolved_at TIMESTAMP
+                        )
+                    """)
+                    cur.execute("""
+                        CREATE TABLE IF NOT EXISTS ai_response_evaluations (
+                            id SERIAL PRIMARY KEY,
+                            user_id BIGINT NOT NULL,
+                            scores JSONB,
+                            created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
                         )
                     """)
                     cur.execute("""
@@ -161,6 +171,66 @@ class ConversationQAManager:
                             "engagement": round(quality.engagement_level, 3),
                         })
                     ))
+        except Exception:
+            pass
+
+    async def ai_evaluate_response(
+        self, user_id: int, user_message: str, ai_response: str,
+        context_scenario: str = "", methodology_used: str = ""
+    ) -> Optional[Dict]:
+        if user_id not in self._eval_counters:
+            self._eval_counters[user_id] = 0
+        self._eval_counters[user_id] += 1
+        if self._eval_counters[user_id] % 5 != 0:
+            return None
+
+        try:
+            import google.genai as genai
+            from src.config import config
+
+            eval_prompt = f"""Оцени качество ответа продажника (1-5 по каждому критерию).
+Сообщение клиента: {user_message[:200]}
+Ответ бота: {ai_response[:500]}
+Сценарий: {context_scenario}
+Методология: {methodology_used}
+
+Ответь СТРОГО в формате JSON:
+{{"directive_adherence": X, "cta_present": X, "methodology_match": X, "tone_natural": X, "personalization": X, "comment": "краткий комментарий"}}"""
+
+            client = genai.Client()
+            response = await asyncio.to_thread(
+                client.models.generate_content,
+                model=config.fast_model_name,
+                contents=eval_prompt,
+                config=genai.types.GenerateContentConfig(
+                    max_output_tokens=200,
+                    temperature=0.1
+                )
+            )
+
+            if response.text:
+                import json, re
+                json_match = re.search(r'\{[^}]+\}', response.text)
+                if json_match:
+                    scores = json.loads(json_match.group())
+                    self._save_ai_eval(user_id, scores)
+                    logger.info(f"AI eval for {user_id}: {scores}")
+                    return scores
+        except Exception as e:
+            logger.debug(f"AI evaluation error: {e}")
+        return None
+
+    def _save_ai_eval(self, user_id: int, scores: Dict):
+        if not DATABASE_URL:
+            return
+        try:
+            import json
+            with get_connection() as conn:
+                with conn.cursor() as cur:
+                    cur.execute("""
+                        INSERT INTO ai_response_evaluations (user_id, scores)
+                        VALUES (%s, %s)
+                    """, (user_id, json.dumps(scores)))
         except Exception:
             pass
 

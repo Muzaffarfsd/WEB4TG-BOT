@@ -343,6 +343,11 @@ class FeedbackLoop:
                             f"Outcome '{outcome_type}' (weight={weight}) attributed to "
                             f"{attributed} responses for user {user_id}"
                         )
+                        try:
+                            from src.dialog_rag import dialog_rag
+                            dialog_rag.mark_session_successful(user_id, outcome_type)
+                        except Exception:
+                            pass
                     return attributed > 0
         except Exception as e:
             logger.error(f"Failed to record outcome for user {user_id}: {e}")

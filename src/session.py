@@ -221,7 +221,19 @@ def _init_conversation_table():
             execute_query("ALTER TABLE client_profiles ADD COLUMN IF NOT EXISTS city VARCHAR(50)")
         except Exception as e:
             logger.debug(f"Profile column migration skipped: {e}")
-        logger.info("Conversation history + summaries + client_profiles tables initialized")
+        execute_query("""
+            CREATE TABLE IF NOT EXISTS vision_analyses (
+                id SERIAL PRIMARY KEY,
+                telegram_id BIGINT NOT NULL,
+                image_type VARCHAR(50),
+                analysis_summary TEXT,
+                created_at TIMESTAMP DEFAULT NOW()
+            )
+        """)
+        execute_query(
+            "CREATE INDEX IF NOT EXISTS idx_vision_analyses_tid ON vision_analyses(telegram_id)"
+        )
+        logger.info("Conversation history + summaries + client_profiles + vision_analyses tables initialized")
     except Exception as e:
         logger.warning(f"Failed to init conversation_history table: {e}")
 
@@ -288,6 +300,47 @@ def get_client_profile(user_id: int) -> Optional[Dict]:
         return dict(row) if row else None
     except Exception as e:
         logger.debug(f"Failed to get client profile: {e}")
+        return None
+
+
+def save_vision_context(user_id: int, image_type: str, analysis_text: str):
+    if not DATABASE_URL:
+        return
+    try:
+        from src.database import execute_query
+        execute_query(
+            "INSERT INTO vision_analyses (telegram_id, image_type, analysis_summary) VALUES (%s, %s, %s)",
+            (user_id, image_type[:50], analysis_text[:500])
+        )
+        execute_query(
+            """DELETE FROM vision_analyses WHERE id IN (
+                SELECT id FROM vision_analyses WHERE telegram_id = %s
+                ORDER BY created_at DESC OFFSET 5
+            )""",
+            (user_id,)
+        )
+    except Exception as e:
+        logger.debug(f"Failed to save vision context: {e}")
+
+
+def get_vision_history(user_id: int) -> Optional[str]:
+    if not DATABASE_URL:
+        return None
+    try:
+        from src.database import execute_query
+        rows = execute_query(
+            """SELECT image_type, analysis_summary, created_at FROM vision_analyses
+               WHERE telegram_id = %s ORDER BY created_at DESC LIMIT 5""",
+            (user_id,), fetch=True, dict_cursor=True
+        )
+        if not rows:
+            return None
+        parts = []
+        for row in rows:
+            parts.append(f"[{row['image_type']}] {row['analysis_summary'][:200]}")
+        return "[ИСТОРИЯ ВИЗУАЛЬНОГО АНАЛИЗА]\n" + "\n".join(parts)
+    except Exception as e:
+        logger.debug(f"Failed to get vision history: {e}")
         return None
 
 

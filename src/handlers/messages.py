@@ -52,6 +52,29 @@ CREATIVE_KEYWORDS = [
 ]
 
 
+def _build_returning_client_context(user_id, profile, session):
+    try:
+        if not (session._loaded_from_db and session.message_count <= 1):
+            return None
+        industry = profile.get('industry', 'не указана')
+        budget = profile.get('budget_range', profile.get('budget', 'не обсуждался'))
+        needs = profile.get('needs', 'не выявлены')
+        business_name = profile.get('business_name', '')
+        ctx = (
+            "[ВОЗВРАЩЕНИЕ КЛИЕНТА — персонализируй приветствие!]\n"
+            "Клиент уже обращался ранее.\n"
+            f"Ниша: {industry}\n"
+            f"Бюджет: {budget}\n"
+            f"Потребности: {needs}\n"
+            f"Имя: {business_name}\n"
+            "► Стратегия: \"Рад снова вас видеть! Мы обсуждали [тема] — готовы продолжить?\"\n"
+            "► НЕ начинай сначала — продолжай с того места, где остановились"
+        )
+        return ctx
+    except Exception:
+        return None
+
+
 def detect_query_context(message_text: str) -> str:
     text_lower = message_text.lower()
 
@@ -597,6 +620,24 @@ async def message_handler(update: Update, context: ContextTypes.DEFAULT_TYPE) ->
         message_count=session.message_count
     )
 
+    try:
+        from src.session import get_client_profile
+        profile = get_client_profile(user.id)
+        if profile:
+            returning_ctx = _build_returning_client_context(user.id, profile, session)
+            if returning_ctx:
+                context_signals["returning_context"] = returning_ctx
+    except Exception:
+        pass
+
+    try:
+        from src.session import get_vision_history
+        vision_hist = get_vision_history(user.id)
+        if vision_hist:
+            context_signals["vision_history"] = vision_hist
+    except Exception:
+        pass
+
     lang_suffix = get_prompt_suffix(user_lang)
 
     adaptive_hint = get_adaptive_length_hint(session)
@@ -614,6 +655,7 @@ async def message_handler(update: Update, context: ContextTypes.DEFAULT_TYPE) ->
         query_context=query_context or None,
         adaptive_hint=adaptive_hint or None,
         lang_suffix=lang_suffix or None,
+        user_id=user.id,
     )
 
     typing_task = asyncio.create_task(
@@ -758,7 +800,7 @@ async def message_handler(update: Update, context: ContextTypes.DEFAULT_TYPE) ->
             logger.info(f"Response validation corrected issues for user {user.id}")
             response = cleaned
 
-        response = check_response_quality(response, user_message)
+        response = check_response_quality(response, user_message, query_context=query_context or "")
 
         response, ai_buttons = parse_ai_buttons(response)
 
@@ -817,6 +859,8 @@ async def message_handler(update: Update, context: ContextTypes.DEFAULT_TYPE) ->
         _msg_count_snap = session.message_count
         _sess_msgs_snap = len(session.messages)
 
+        _query_ctx_snap = query_context or ""
+
         async def _post_response_analytics(uid, u_msg, resp, msg_count, sess_msgs_len):
             try:
                 auto_tag_lead(uid, u_msg)
@@ -861,6 +905,17 @@ async def message_handler(update: Update, context: ContextTypes.DEFAULT_TYPE) ->
                 )
             except Exception as e:
                 logger.debug(f"QA scoring skipped: {e}")
+
+            try:
+                await qa_manager.ai_evaluate_response(
+                    user_id=uid,
+                    user_message=u_msg,
+                    ai_response=resp,
+                    context_scenario=_query_ctx_snap,
+                    methodology_used=""
+                )
+            except Exception as e:
+                logger.debug(f"AI evaluation skipped: {e}")
 
         asyncio.create_task(_post_response_analytics(
             user.id, user_message, response, _msg_count_snap, _sess_msgs_snap

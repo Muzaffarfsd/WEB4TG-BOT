@@ -146,7 +146,29 @@ def validate_response(response_text: str) -> Tuple[bool, str]:
     return (is_valid, cleaned)
 
 
-def check_response_quality(response_text: str, user_message: str) -> str:
+def _compute_adaptive_word_limit(user_message: str, query_context: str = "") -> int:
+    user_words = len(user_message.split())
+    user_chars = len(user_message)
+
+    if user_words <= 3 or user_chars <= 15:
+        return 50
+    if user_words <= 8 or user_chars <= 40:
+        return 80
+    if query_context in ("faq", "greeting", "simple"):
+        return 80
+    if query_context in ("creative", "upsell"):
+        return 180
+    if query_context in ("objection", "complex", "sales", "closing", "decision"):
+        return 180
+
+    question_marks = user_message.count("?")
+    if question_marks >= 2 or user_words > 30:
+        return 180
+
+    return 120
+
+
+def check_response_quality(response_text: str, user_message: str, query_context: str = "") -> str:
     if not response_text or not response_text.strip():
         return response_text
 
@@ -187,20 +209,20 @@ def check_response_quality(response_text: str, user_message: str) -> str:
 
     response_words = len(cleaned.split())
 
-    MAX_WORDS = 200
-    if response_words > MAX_WORDS:
+    max_words = _compute_adaptive_word_limit(user_message, query_context)
+    if response_words > max_words:
         sentences = re.split(r'(?<=[.!?])\s+', cleaned)
         trimmed = []
         word_count = 0
         for sent in sentences:
             sent_words = len(sent.split())
-            if word_count + sent_words > MAX_WORDS and trimmed:
+            if word_count + sent_words > max_words and trimmed:
                 break
             trimmed.append(sent)
             word_count += sent_words
         if trimmed:
             cleaned = " ".join(trimmed)
-            logger.debug(f"Trimmed response from {response_words} to {word_count} words")
+            logger.debug(f"Adaptive trim: {response_words} → {word_count} words (limit={max_words})")
 
     if len(cleaned.split()) > 40:
         cta_patterns = [
@@ -447,7 +469,7 @@ class AIClient:
                     is_valid, cleaned = validate_response(full_text)
                     if not is_valid:
                         logger.warning("Response validation found issues, using cleaned version")
-                    return check_response_quality(cleaned, user_message)
+                    return check_response_quality(cleaned, user_message, query_context=query_context or "")
 
             except Exception as e:
                 error_type = type(e).__name__
@@ -536,7 +558,7 @@ class AIClient:
                 is_valid, cleaned = validate_response(response.text)
                 if not is_valid:
                     logger.warning("Response validation found issues, using cleaned version")
-                return check_response_quality(cleaned, user_message)
+                return check_response_quality(cleaned, user_message, query_context=query_context or "")
             else:
                 logger.warning("Empty response from Gemini")
                 return "Извините, не удалось сформировать ответ. Попробуйте переформулировать вопрос."
@@ -557,7 +579,7 @@ class AIClient:
                     response = await _generate()
                     if response.text:
                         is_valid, cleaned = validate_response(response.text)
-                        return check_response_quality(cleaned, user_message)
+                        return check_response_quality(cleaned, user_message, query_context=query_context or "")
                 except Exception as fallback_e:
                     logger.error(f"Flash fallback also failed: {fallback_e}")
 

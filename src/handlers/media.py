@@ -941,6 +941,12 @@ async def photo_handler(update: Update, context: ContextTypes.DEFAULT_TYPE) -> N
                 session.add_message("assistant", clean_text, config.max_history_length)
                 lead_manager.save_message(user.id, "assistant", clean_text)
 
+                try:
+                    from src.session import save_vision_context
+                    save_vision_context(user.id, image_type, clean_text[:300])
+                except Exception as e:
+                    logger.debug(f"Vision context save error: {e}")
+
                 if not ai_buttons:
                     smart_btns = get_smart_buttons_for_image(image_type)
                     ai_buttons = smart_btns[:3]
