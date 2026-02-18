@@ -161,6 +161,11 @@ async def callback_handler(update: Update, context: ContextTypes.DEFAULT_TYPE) -
     elif data in ("payment", "pay_card", "pay_bank", "copy_card", "copy_bank",
                    "copy_card_fallback", "copy_bank_fallback", "pay_confirm", "pay_contract"):
         action = data.replace("_fallback", "")
+        try:
+            from src.feedback_loop import feedback_loop
+            feedback_loop.record_outcome(user_id, 'callback_payment')
+        except Exception:
+            pass
         await handle_payment_callback(update, context, action)
     
     elif data == "menu_faq" or data == "faq_back":
@@ -1236,6 +1241,11 @@ async def callback_handler(update: Update, context: ContextTypes.DEFAULT_TYPE) -
                         await query.edit_message_text(text, parse_mode="HTML", reply_markup=keyboard)
 
     elif data == "brief_send_manager":
+        try:
+            from src.feedback_loop import feedback_loop
+            feedback_loop.record_outcome(user_id, 'brief_sent_manager')
+        except Exception:
+            pass
         from src.brief_generator import brief_generator
         import os
         manager_chat_id = os.environ.get("MANAGER_CHAT_ID")
@@ -1389,6 +1399,11 @@ async def callback_handler(update: Update, context: ContextTypes.DEFAULT_TYPE) -
         await query.edit_message_text(text, parse_mode="HTML", reply_markup=keyboard)
 
     elif data == "book_consult":
+        try:
+            from src.feedback_loop import feedback_loop
+            feedback_loop.record_outcome(user_id, 'callback_booking')
+        except Exception:
+            pass
         from src.consultation import consultation_manager
         text, keyboard = consultation_manager.start_booking(user_id)
         await query.edit_message_text(text, parse_mode="HTML", reply_markup=keyboard)
@@ -1411,6 +1426,11 @@ async def callback_handler(update: Update, context: ContextTypes.DEFAULT_TYPE) -
         topic = data.replace("consult_topic_", "")
         text, keyboard = consultation_manager.set_topic(user_id, topic)
         consultation_manager.save_to_lead(user_id)
+        try:
+            from src.feedback_loop import feedback_loop
+            feedback_loop.record_outcome(user_id, 'consultation_booked')
+        except Exception:
+            pass
         await query.edit_message_text(text, parse_mode="HTML", reply_markup=keyboard)
         manager_chat_id = os.environ.get("MANAGER_CHAT_ID")
         if manager_chat_id:

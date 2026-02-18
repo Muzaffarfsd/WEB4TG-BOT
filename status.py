@@ -257,6 +257,8 @@ def run_learning_demo():
         CLOSING_TECHNIQUES,
         NICHE_PATTERNS,
         STYLE_PATTERNS,
+        OUTCOME_WEIGHTS,
+        SESSION_ATTRIBUTION_WINDOW_MINUTES,
         _wilson_score,
         feedback_loop,
     )
@@ -265,6 +267,8 @@ def run_learning_demo():
     print(f"\n  Closing Techniques: {len(CLOSING_TECHNIQUES)} tracked")
     print(f"  Business Niches: {len(NICHE_PATTERNS)} recognized")
     print(f"  Communication Styles: {len(STYLE_PATTERNS)} detected")
+    print(f"  Outcome Weights: {len(OUTCOME_WEIGHTS)} types")
+    print(f"  Session Attribution: {SESSION_ATTRIBUTION_WINDOW_MINUTES} min window")
 
     print("\n" + "-" * 60)
     print("  1. TECHNIQUE DETECTION TEST")
@@ -379,8 +383,23 @@ def run_learning_demo():
               for next conversation
     """)
 
+    print("\n" + "-" * 60)
+    print("  5. OUTCOME WEIGHTS")
     print("-" * 60)
-    print("  SELF-LEARNING LOOP v2: ALL SYSTEMS OPERATIONAL")
+
+    weight_groups = {
+        "HOT (0.8-1.0)": [(k, v) for k, v in OUTCOME_WEIGHTS.items() if v >= 0.8],
+        "WARM (0.4-0.7)": [(k, v) for k, v in OUTCOME_WEIGHTS.items() if 0.4 <= v < 0.8],
+        "COLD (0.1-0.3)": [(k, v) for k, v in OUTCOME_WEIGHTS.items() if v < 0.4],
+    }
+
+    for group_name, items in weight_groups.items():
+        print(f"\n  {group_name}:")
+        for outcome, weight in sorted(items, key=lambda x: -x[1]):
+            print(f"    • {outcome}: {weight}")
+
+    print("-" * 60)
+    print("  SELF-LEARNING LOOP v2.1: ALL SYSTEMS OPERATIONAL")
     print("-" * 60)
 
 

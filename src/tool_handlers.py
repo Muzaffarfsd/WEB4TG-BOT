@@ -41,6 +41,7 @@ async def execute_tool_call(tool_name: str, args: dict, user_id: int, username: 
         prepay = int(total * 0.35)
         _track_propensity(user_id, 'tool_calculator')
         _track_proactive(user_id, 'calculator_used', cost=total, features=", ".join(valid))
+        _track_outcome(user_id, 'calculator_used')
         return (
             "Расчёт стоимости:\n" +
             "\n".join(lines) +
@@ -52,10 +53,12 @@ async def execute_tool_call(tool_name: str, args: dict, user_id: int, username: 
     elif tool_name == "show_portfolio":
         category = args.get("category", "all")
         _track_propensity(user_id, 'tool_portfolio')
+        _track_outcome(user_id, 'portfolio_viewed')
         return f"[PORTFOLIO:{category}]"
 
     elif tool_name == "show_pricing":
         _track_propensity(user_id, 'tool_pricing')
+        _track_outcome(user_id, 'pricing_viewed')
         return "[PRICING]"
 
     elif tool_name == "create_lead":
@@ -100,6 +103,7 @@ async def execute_tool_call(tool_name: str, args: dict, user_id: int, username: 
         roi_percent = int((yearly_extra - app_cost) / app_cost * 100)
         payback_months = max(1, int(app_cost / extra_revenue)) if extra_revenue > 0 else 12
         _track_propensity(user_id, 'tool_roi')
+        _track_outcome(user_id, 'roi_calculated')
 
         return (
             f"📊 Расчёт ROI для: {data['name']}\n\n"
@@ -116,6 +120,7 @@ async def execute_tool_call(tool_name: str, args: dict, user_id: int, username: 
     elif tool_name == "compare_plans":
         plan_type = args.get("plan_type", "packages")
         _track_propensity(user_id, 'tool_compare')
+        _track_outcome(user_id, 'plans_compared')
 
         if plan_type == "packages":
             return (
@@ -226,6 +231,7 @@ async def execute_tool_call(tool_name: str, args: dict, user_id: int, username: 
             **brief_fields,
         })
         _track_propensity(user_id, 'tool_brief')
+        _track_outcome(user_id, 'brief_generated')
 
         return "[AI_BRIEF_GENERATED]"
 
@@ -256,6 +262,7 @@ async def execute_tool_call(tool_name: str, args: dict, user_id: int, username: 
         except Exception as e:
             logger.debug(f"Referral check failed: {e}")
         _track_propensity(user_id, 'tool_discount')
+        _track_outcome(user_id, 'discount_checked')
 
         if discounts:
             return "🎁 Ваши доступные скидки:\n\n" + "\n".join(discounts)
@@ -322,6 +329,7 @@ async def execute_tool_call(tool_name: str, args: dict, user_id: int, username: 
     elif tool_name == "compare_with_competitors":
         competitor_type = args.get("competitor_type", "general")
         _track_propensity(user_id, 'tool_compare_competitors')
+        _track_outcome(user_id, 'competitor_compared')
 
         comparisons = {
             "freelancer": (

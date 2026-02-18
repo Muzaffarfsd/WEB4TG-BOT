@@ -40,7 +40,7 @@ The bot is developed in Python, leveraging Telegram Bot API 9.4. It features a m
 - **RAG Knowledge Base**: PostgreSQL-backed searchable knowledge base with weighted relevance scoring.
 - **Smart Button System**: Context-aware buttons after every AI response based on funnel stage, detected intents, and propensity score.
 - **Response Validation**: Hallucination guard validates prices, timelines, guarantees, and discounts against known data.
-- **Self-Learning Feedback Loop v2**: Active learning system — auto-tags AI responses with closing technique (13 patterns), business niche (10 patterns), communication style (5 patterns); aggregates conversion rates per technique/niche/style with Wilson score confidence; injects adaptive instructions into AI context via `get_adaptive_instructions()`; niche memory with preferred styles and avoid lists; 30-day rolling window with min sample thresholds.
+- **Self-Learning Feedback Loop v2.1**: Active learning with session attribution + outcome weighting. Auto-tags AI responses with closing technique (13 patterns), business niche (10 patterns), communication style (5 patterns). Session attribution credits ALL responses in 1-hour window (not just last). 16 weighted outcome types (consultation=1.0, lead=0.9, calculator=0.5, portfolio=0.3). Wilson score confidence ranking. Niche persistence to client profile. Auto-refresh every 6h. Callback button tracking (booking, payment, brief).
 - **Propensity Scoring**: Composite score (0-100) based on engagement velocity, session depth, tool usage, buying signals, and time decay.
 - **Proactive Engagement**: ProactiveEngagementEngine with behavioral signals + trigger history DB tables, 8 deterministic trigger rules, predictive scoring model, AI message generation, and anti-spam controls.
 - **A/B Dialog Testing**: Chi-square test with auto-winner detection and significance monitoring.
@@ -48,17 +48,20 @@ The bot is developed in Python, leveraging Telegram Bot API 9.4. It features a m
 - **Guardrails**: System prompt rules to prevent unauthorized promises, response validation, and confidence scoring.
 
 ## Recent Changes
-- **2026-02-18**: Phase 4 — Self-Learning Loop v2
-  - UPGRADED: `src/feedback_loop.py` — from passive tracking to active learning
-  - NEW: `response_tags` table — tags each AI response with technique/niche/style
-  - NEW: `niche_style_memory` table — remembers what works per business niche
-  - NEW: `get_adaptive_instructions()` — injects learned insights into AI context
-  - NEW: `get_best_techniques()` — ranks closing techniques by Wilson score confidence
-  - NEW: `get_niche_insights()` — per-niche strategy memory (best style, best/avoid techniques)
-  - INTEGRATED: `context_builder.py` now calls `get_adaptive_instructions()` as 30th context signal
-  - 13 closing technique regex patterns, 10 niche patterns, 5 style patterns
-  - Auto-tagging on every AI response, no performance impact (regex-based, <1ms)
-  - All tests pass: 8/8 techniques, 8/8 niches, Wilson score verified
+- **2026-02-18**: Phase 4 — Self-Learning Loop v2.1 (session attribution + outcome weighting)
+  - UPGRADED: `src/feedback_loop.py` — v2.1 with session attribution, outcome weights, niche persistence
+  - NEW: Session attribution — credits ALL responses in 1-hour window, not just last one
+  - NEW: 16 outcome weights (consultation=1.0 → discount_checked=0.2) for weighted conversion ranking
+  - NEW: `outcome_weight` column in response_outcomes for weighted analysis
+  - NEW: Callback outcome tracking in `src/handlers/callbacks.py` (payment, booking, brief_send)
+  - NEW: All 17 AI tools now record outcomes (was only 3)
+  - NEW: Niche persistence — saves detected niche to client_profiles via session module
+  - NEW: Auto-refresh niche memory every 6 hours (triggered lazily from get_adaptive_instructions)
+  - UPGRADED: `_get_user_niche` checks client_profiles first, then response_tags history
+  - UPGRADED: `get_best_techniques` returns weighted_rate alongside raw_rate
+  - INTEGRATED: `context_builder.py` calls `get_adaptive_instructions()` as 30th context signal
+  - 13 closing technique patterns, 10 niche patterns, 5 style patterns, 16 outcome weights
+  - All tests pass: 8/8 techniques, 8/8 niches, 16/16 weights, Wilson score verified
 - **2026-02-18**: Phase 3 — Multimodal Vision Sales Analysis
   - NEW: `src/vision_sales.py` — 10 image types with tailored sales prompts, smart buttons, lead scoring, manager notifications
   - UPGRADED: `src/handlers/media.py` — photo_handler rewritten with 2-step flow: AI classification → sales-oriented analysis

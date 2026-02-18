@@ -1,12 +1,16 @@
-"""Self-Learning Feedback Loop v2 — learns from outcomes and adapts AI behavior.
+"""Self-Learning Feedback Loop v2.1 — learns from outcomes and adapts AI behavior.
 
 v1: passive tracking (log responses + outcomes)
-v2: active learning:
+v2: active learning with auto-tagging + Wilson score ranking
+v2.1: session attribution + outcome weighting + niche persistence
   - Tags each AI response with detected closing technique + business niche
   - Aggregates conversion rates per technique/niche/style (30-day rolling window)
   - Generates concise adaptive instructions for AI prompt injection
   - Minimum sample sizes to avoid noise (Wilson score confidence)
   - Cached summaries (TTL 5 min) to avoid DB pressure
+  - Session attribution: credits ALL responses in session (1 hour window), not just last
+  - Outcome weighting: high-value actions (booking, lead) weighted higher than low-value (portfolio view)
+  - Niche persistence: saves detected niche to client profile for future sessions
 """
 import logging
 import re
@@ -124,6 +128,27 @@ STYLE_PATTERNS: Dict[str, str] = {
     "skeptical": r"сомнева|не уверен|а вдруг|гарантии|рисков|обман|развод|кидал|не верю|докажите",
 }
 
+OUTCOME_WEIGHTS: Dict[str, float] = {
+    "consultation_booked": 1.0,
+    "lead_created": 0.9,
+    "payment_started": 0.9,
+    "brief_generated": 0.8,
+    "brief_sent_manager": 0.85,
+    "calculator_used": 0.5,
+    "roi_calculated": 0.5,
+    "competitor_compared": 0.4,
+    "plans_compared": 0.4,
+    "pricing_viewed": 0.3,
+    "portfolio_viewed": 0.3,
+    "discount_checked": 0.2,
+    "callback_booking": 0.9,
+    "callback_brief": 0.7,
+    "callback_consultation": 0.9,
+    "callback_payment": 0.8,
+}
+
+SESSION_ATTRIBUTION_WINDOW_MINUTES = 60
+
 _insights_cache: Dict[str, Tuple[float, object]] = {}
 _CACHE_TTL = 300
 
@@ -159,10 +184,15 @@ class FeedbackLoop:
                             funnel_stage VARCHAR(30),
                             propensity_score INT,
                             outcome_type VARCHAR(30) NULL,
+                            outcome_weight REAL DEFAULT 0.0,
                             outcome_at TIMESTAMP NULL,
                             created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
                         )
                     """)
+                    try:
+                        cur.execute("ALTER TABLE response_outcomes ADD COLUMN IF NOT EXISTS outcome_weight REAL DEFAULT 0.0")
+                    except Exception:
+                        pass
                     cur.execute("CREATE INDEX IF NOT EXISTS idx_response_outcomes_user_id ON response_outcomes(user_id)")
                     cur.execute("CREATE INDEX IF NOT EXISTS idx_response_outcomes_outcome_type ON response_outcomes(outcome_type)")
                     cur.execute("CREATE INDEX IF NOT EXISTS idx_response_outcomes_created_at ON response_outcomes(created_at)")
@@ -217,25 +247,28 @@ class FeedbackLoop:
                     response_id = result[0] if result else 0
 
             if response_id > 0:
-                self._auto_tag_response(response_id, message_text or "", response_text or "")
+                self._auto_tag_response(response_id, message_text or "", response_text or "",
+                                        user_id=user_id)
 
             return response_id
         except Exception as e:
             logger.error(f"Failed to log response: {e}")
             return 0
 
-    def _auto_tag_response(self, response_id: int, user_message: str, ai_response: str):
+    def _auto_tag_response(self, response_id: int, user_message: str, ai_response: str,
+                           user_id: Optional[int] = None):
         try:
-            combined = f"{user_message} {ai_response}".lower()
             tags: List[Tuple[str, str, float]] = []
 
             for tech_id, tech_info in CLOSING_TECHNIQUES.items():
                 if re.search(tech_info["patterns"], ai_response, re.IGNORECASE):
                     tags.append(("technique", tech_id, 0.85))
 
+            detected_niche = None
             for niche_id, niche_info in NICHE_PATTERNS.items():
                 if re.search(niche_info["patterns"], user_message, re.IGNORECASE):
                     tags.append(("niche", niche_id, 0.9))
+                    detected_niche = niche_id
 
             for style_id, pattern in STYLE_PATTERNS.items():
                 if re.search(pattern, user_message, re.IGNORECASE):
@@ -251,27 +284,66 @@ class FeedbackLoop:
                             INSERT INTO response_tags (response_id, tag_type, tag_value, confidence)
                             VALUES (%s, %s, %s, %s)
                         """, (response_id, tag_type, tag_value, confidence))
+
+            if detected_niche and user_id:
+                self._save_user_niche(user_id, detected_niche)
         except Exception as e:
             logger.debug(f"Auto-tagging skipped: {e}")
+
+    def _save_user_niche(self, user_id: int, niche: str):
+        try:
+            from src.session import save_client_profile
+            save_client_profile(user_id, industry=NICHE_PATTERNS.get(niche, {}).get("label", niche))
+        except Exception as e:
+            logger.debug(f"Niche persistence skipped: {e}")
 
     def record_outcome(self, user_id: int, outcome_type: str) -> bool:
         if not DATABASE_URL:
             return False
+
+        weight = OUTCOME_WEIGHTS.get(outcome_type, 0.5)
 
         try:
             with get_connection() as conn:
                 with conn.cursor() as cur:
                     cur.execute("""
                         UPDATE response_outcomes
-                        SET outcome_type = %s, outcome_at = NOW()
-                        WHERE id = (
-                            SELECT id FROM response_outcomes
-                            WHERE user_id = %s AND outcome_type IS NULL
-                            ORDER BY created_at DESC
-                            LIMIT 1
+                        SET outcome_type = CASE
+                                WHEN outcome_weight < %s THEN %s
+                                ELSE outcome_type
+                            END,
+                            outcome_weight = GREATEST(outcome_weight, %s),
+                            outcome_at = COALESCE(outcome_at, NOW())
+                        WHERE user_id = %s
+                          AND created_at >= NOW() - INTERVAL '%s minutes'
+                          AND (outcome_type IS NULL OR outcome_weight < %s)
+                        RETURNING id
+                    """, (weight, outcome_type, weight, user_id,
+                          SESSION_ATTRIBUTION_WINDOW_MINUTES, weight))
+                    updated_ids = [row[0] for row in cur.fetchall()]
+
+                    if not updated_ids:
+                        cur.execute("""
+                            UPDATE response_outcomes
+                            SET outcome_type = %s,
+                                outcome_weight = GREATEST(outcome_weight, %s),
+                                outcome_at = NOW()
+                            WHERE id = (
+                                SELECT id FROM response_outcomes
+                                WHERE user_id = %s
+                                  AND (outcome_type IS NULL OR outcome_weight < %s)
+                                ORDER BY created_at DESC
+                                LIMIT 1
+                            )
+                        """, (outcome_type, weight, user_id, weight))
+
+                    attributed = len(updated_ids) if updated_ids else cur.rowcount
+                    if attributed > 0:
+                        logger.debug(
+                            f"Outcome '{outcome_type}' (weight={weight}) attributed to "
+                            f"{attributed} responses for user {user_id}"
                         )
-                    """, (outcome_type, user_id))
-                    return cur.rowcount > 0
+                    return attributed > 0
         except Exception as e:
             logger.error(f"Failed to record outcome for user {user_id}: {e}")
             return False
@@ -280,14 +352,16 @@ class FeedbackLoop:
         if not DATABASE_URL:
             return False
 
+        weight = OUTCOME_WEIGHTS.get(outcome_type, 0.5)
+
         try:
             with get_connection() as conn:
                 with conn.cursor() as cur:
                     cur.execute("""
                         UPDATE response_outcomes
-                        SET outcome_type = %s, outcome_at = NOW()
+                        SET outcome_type = %s, outcome_weight = GREATEST(outcome_weight, %s), outcome_at = NOW()
                         WHERE id = %s
-                    """, (outcome_type, response_id))
+                    """, (outcome_type, weight, response_id))
                     return cur.rowcount > 0
         except Exception as e:
             logger.error(f"Failed to record outcome for response {response_id}: {e}")
@@ -322,7 +396,8 @@ class FeedbackLoop:
                             rt.tag_value AS technique,
                             COUNT(*) AS total,
                             COUNT(ro.outcome_type) AS converted,
-                            ROUND(COUNT(ro.outcome_type)::numeric / NULLIF(COUNT(*), 0) * 100, 1) AS rate
+                            ROUND(COUNT(ro.outcome_type)::numeric / NULLIF(COUNT(*), 0) * 100, 1) AS rate,
+                            ROUND(COALESCE(SUM(ro.outcome_weight), 0)::numeric / NULLIF(COUNT(*), 0) * 100, 1) AS weighted_rate
                         FROM response_tags rt
                         JOIN response_outcomes ro ON rt.response_id = ro.id
                         WHERE rt.tag_type = 'technique'
@@ -330,7 +405,7 @@ class FeedbackLoop:
                           {niche_filter}
                         GROUP BY rt.tag_value
                         HAVING COUNT(*) >= {min_samples}
-                        ORDER BY rate DESC
+                        ORDER BY weighted_rate DESC
                     """, params)
 
                     results = []
@@ -339,6 +414,7 @@ class FeedbackLoop:
                         total = row[1]
                         converted = row[2]
                         raw_rate = float(row[3])
+                        weighted_rate = float(row[4])
                         wilson = round(_wilson_score(converted, total) * 100, 1)
                         tech_info = CLOSING_TECHNIQUES.get(tech_id, {})
                         results.append({
@@ -347,10 +423,11 @@ class FeedbackLoop:
                             "total": total,
                             "converted": converted,
                             "raw_rate": raw_rate,
+                            "weighted_rate": weighted_rate,
                             "wilson_score": wilson,
                         })
 
-                    results.sort(key=lambda x: x["wilson_score"], reverse=True)
+                    results.sort(key=lambda x: (x["weighted_rate"], x["wilson_score"]), reverse=True)
 
             _insights_cache[cache_key] = (time.time(), results)
             return results
@@ -468,6 +545,8 @@ class FeedbackLoop:
         if cached and (time.time() - cached[0]) < 120:
             return cached[1]  # type: ignore
 
+        self.maybe_refresh_niche_memory()
+
         parts: List[str] = []
 
         detected_niche = None
@@ -525,6 +604,17 @@ class FeedbackLoop:
         return result
 
     def _get_user_niche(self, user_id: int) -> Optional[str]:
+        try:
+            from src.session import get_client_profile
+            profile = get_client_profile(user_id)
+            if profile and profile.get("industry"):
+                industry = profile["industry"].lower()
+                for niche_id, niche_info in NICHE_PATTERNS.items():
+                    if niche_info["label"].lower() in industry or niche_id in industry:
+                        return niche_id
+        except Exception:
+            pass
+
         if not DATABASE_URL:
             return None
 
@@ -544,6 +634,19 @@ class FeedbackLoop:
                     return row[0] if row else None
         except Exception:
             return None
+
+    _last_niche_refresh: float = 0.0
+    _NICHE_REFRESH_INTERVAL = 6 * 3600
+
+    def maybe_refresh_niche_memory(self):
+        now = time.time()
+        if now - self._last_niche_refresh < self._NICHE_REFRESH_INTERVAL:
+            return
+        self._last_niche_refresh = now
+        try:
+            self.refresh_niche_memory(days=30, min_samples=5)
+        except Exception as e:
+            logger.debug(f"Auto niche refresh skipped: {e}")
 
     def refresh_niche_memory(self, days: int = 30, min_samples: int = 10):
         if not DATABASE_URL:
