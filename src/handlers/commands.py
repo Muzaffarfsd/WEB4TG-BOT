@@ -305,11 +305,15 @@ async def start_handler(update: Update, context: ContextTypes.DEFAULT_TYPE) -> N
 
         greeting_profile = "greeting"
 
+        logger.info(f"Voice greeting: text ready ({len(voice_greeting)} chars), starting TTS for user {user.id}")
+
         for _attempt in range(2):
             try:
-                voice_audio = await generate_voice_response(voice_greeting, use_cache=False, voice_profile=greeting_profile)
+                logger.info(f"Voice greeting: TTS attempt {_attempt+1} for user {user.id}, text='{voice_greeting[:100]}...'")
+                voice_audio = await generate_voice_response(voice_greeting, use_cache=False, voice_profile=greeting_profile, skip_enhance=True)
                 if not voice_audio or len(voice_audio) < 100:
                     raise RuntimeError(f"Voice audio too small: {len(voice_audio) if voice_audio else 0} bytes")
+                logger.info(f"Voice greeting: TTS success, {len(voice_audio)} bytes, sending to Telegram for user {user.id}")
                 await bot_instance.send_voice(chat_id=chat_id, voice=voice_audio)
                 ab_testing.track_event(user.id, "welcome_voice", "voice_sent")
                 logger.info(f"Voice greeting SENT to user {user.id} (period={time_period}, attempt={_attempt+1}, size={len(voice_audio)} bytes)")
@@ -320,7 +324,7 @@ async def start_handler(update: Update, context: ContextTypes.DEFAULT_TYPE) -> N
                     pass
                 return
             except Exception as e:
-                logger.error(f"Voice greeting attempt {_attempt+1} failed for user {user.id}: {type(e).__name__}: {e}")
+                logger.error(f"Voice greeting attempt {_attempt+1} failed for user {user.id}: {type(e).__name__}: {e}", exc_info=True)
                 if _attempt == 0:
                     await asyncio.sleep(1)
 

@@ -144,14 +144,17 @@ async def enhance_voice_text(text: str) -> str:
     client = get_gemini_client()
 
     try:
-        response = await asyncio.to_thread(
-            client.models.generate_content,
-            model=config.model_name,
-            contents=[VOICE_ENHANCE_PROMPT + text],
-            config=types.GenerateContentConfig(
-                max_output_tokens=2000,
-                temperature=0.2
-            )
+        response = await asyncio.wait_for(
+            asyncio.to_thread(
+                client.models.generate_content,
+                model=config.model_name,
+                contents=[VOICE_ENHANCE_PROMPT + text],
+                config=types.GenerateContentConfig(
+                    max_output_tokens=2000,
+                    temperature=0.2
+                )
+            ),
+            timeout=15.0
         )
 
         if response.text:
@@ -198,8 +201,10 @@ async def enhance_voice_text(text: str) -> str:
             final_tag_count = len(re.findall(r'\[\w[\w\s]*?\]', enhanced))
             logger.info(f"Enhance: {len(existing_tags)} -> {final_tag_count} tags")
             return enhanced
+    except asyncio.TimeoutError:
+        logger.warning(f"Voice enhance timed out after 15s, using auto-enhance fallback")
     except Exception as e:
-        logger.error(f"Voice enhance error: {e}")
+        logger.error(f"Voice enhance error: {type(e).__name__}: {e}")
 
     return _auto_enhance_short(text)
 
@@ -300,31 +305,35 @@ async def _generate_voice_streaming_async(voice_text: str, profile: dict, output
     start_time = time.monotonic()
 
     try:
-        stream_kwargs = {
-            "voice_id": config.elevenlabs_voice_id,
-            "text": voice_text,
-            "model_id": "eleven_v3",
-            "output_format": output_format,
-            "voice_settings": VoiceSettings(
-                stability=profile["stability"],
-                similarity_boost=profile["similarity_boost"],
-                style=profile["style"],
-            ),
-        }
+        async def _do_streaming():
+            stream_kwargs = {
+                "voice_id": config.elevenlabs_voice_id,
+                "text": voice_text,
+                "model_id": "eleven_v3",
+                "output_format": output_format,
+                "voice_settings": VoiceSettings(
+                    stability=profile["stability"],
+                    similarity_boost=profile["similarity_boost"],
+                    style=profile["style"],
+                ),
+            }
 
-        stream_call = async_client.text_to_speech.stream(**stream_kwargs)
-        if asyncio.iscoroutine(stream_call):
-            audio_stream = await stream_call
-        else:
-            audio_stream = stream_call
+            stream_call = async_client.text_to_speech.stream(**stream_kwargs)
+            if asyncio.iscoroutine(stream_call):
+                audio_stream = await stream_call
+            else:
+                audio_stream = stream_call
 
-        chunks = []
-        first_chunk_time = None
-        async for chunk in audio_stream:
-            if chunk:
-                if first_chunk_time is None:
-                    first_chunk_time = time.monotonic()
-                chunks.append(chunk)
+            chunks = []
+            first_chunk_time = None
+            async for chunk in audio_stream:
+                if chunk:
+                    if first_chunk_time is None:
+                        first_chunk_time = time.monotonic()
+                    chunks.append(chunk)
+            return chunks, first_chunk_time
+
+        chunks, first_chunk_time = await asyncio.wait_for(_do_streaming(), timeout=30.0)
 
         audio_bytes = b"".join(chunks)
         total_time = time.monotonic() - start_time
@@ -337,6 +346,9 @@ async def _generate_voice_streaming_async(voice_text: str, profile: dict, output
         )
         return audio_bytes
 
+    except asyncio.TimeoutError:
+        logger.warning(f"Async streaming TTS timed out after 30s, falling back to sync")
+        return await _generate_voice_sync_fallback(voice_text, profile, output_format)
     except Exception as e:
         logger.warning(f"Async streaming TTS failed ({type(e).__name__}): {e}, falling back to sync")
         return await _generate_voice_sync_fallback(voice_text, profile, output_format)
@@ -373,7 +385,7 @@ async def _generate_voice_sync_fallback(voice_text: str, profile: dict, output_f
     return audio_bytes
 
 
-async def generate_voice_response(text: str, use_cache: bool = False, voice_profile: str = None) -> bytes:
+async def generate_voice_response(text: str, use_cache: bool = False, voice_profile: str = None, skip_enhance: bool = False) -> bytes:
     global _voice_cache
     
     if not config.elevenlabs_api_key:
@@ -387,7 +399,11 @@ async def generate_voice_response(text: str, use_cache: bool = False, voice_prof
             logger.debug("Using cached voice response")
             return _voice_cache[cache_key]
 
-    voice_text = await enhance_voice_text(clean_text)
+    if skip_enhance:
+        voice_text = clean_text
+        logger.debug("Skipping enhance_voice_text (skip_enhance=True)")
+    else:
+        voice_text = await enhance_voice_text(clean_text)
 
     voice_text = naturalize_speech(voice_text)
     voice_text = expand_abbreviations(voice_text)
