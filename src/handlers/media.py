@@ -2,6 +2,7 @@ import asyncio
 import logging
 import re
 import hashlib
+import time
 from telegram import Update, InlineKeyboardMarkup, InlineKeyboardButton
 from telegram.ext import ContextTypes
 from telegram.constants import ChatAction
@@ -20,7 +21,13 @@ from src.handlers.utils import (
 logger = logging.getLogger(__name__)
 
 _elevenlabs_client = None
+_elevenlabs_async_client = None
 _voice_cache = {}
+
+STREAMING_LATENCY_OPTIMIZATION = 3
+SHORT_TEXT_THRESHOLD = 200
+SHORT_TEXT_FORMAT = "mp3_22050_32"
+LONG_TEXT_FORMAT = "mp3_44100_128"
 
 
 def _get_elevenlabs_client():
@@ -29,6 +36,18 @@ def _get_elevenlabs_client():
         from elevenlabs import ElevenLabs
         _elevenlabs_client = ElevenLabs(api_key=config.elevenlabs_api_key)
     return _elevenlabs_client
+
+
+def _get_async_elevenlabs_client():
+    global _elevenlabs_async_client
+    if _elevenlabs_async_client is None and config.elevenlabs_api_key:
+        try:
+            from elevenlabs import AsyncElevenLabs
+            _elevenlabs_async_client = AsyncElevenLabs(api_key=config.elevenlabs_api_key)
+        except ImportError:
+            logger.warning("AsyncElevenLabs not available, will use sync client with threading")
+            return None
+    return _elevenlabs_async_client
 
 
 VOICE_EMOTION_PROMPT = """Ты эксперт по подготовке текста для озвучки через ElevenLabs v3. Твоя главная цель — сделать речь НЕОТЛИЧИМОЙ от живого человека-консультанта.
@@ -176,11 +195,94 @@ def _detect_voice_profile(text: str) -> dict:
     return VOICE_PROFILES["default"]
 
 
+def _select_output_format(text_length: int) -> str:
+    if text_length <= SHORT_TEXT_THRESHOLD:
+        return SHORT_TEXT_FORMAT
+    return LONG_TEXT_FORMAT
+
+
+async def _generate_voice_streaming_async(voice_text: str, profile: dict, output_format: str) -> bytes:
+    async_client = _get_async_elevenlabs_client()
+    if not async_client:
+        return await _generate_voice_sync_fallback(voice_text, profile, output_format)
+
+    from elevenlabs import VoiceSettings
+
+    start_time = time.monotonic()
+
+    try:
+        audio_stream = await async_client.text_to_speech.stream(
+            voice_id=config.elevenlabs_voice_id,
+            text=voice_text,
+            model_id="eleven_v3",
+            output_format=output_format,
+            optimize_streaming_latency=STREAMING_LATENCY_OPTIMIZATION,
+            voice_settings=VoiceSettings(
+                stability=profile["stability"],
+                similarity_boost=profile["similarity_boost"],
+                style=profile["style"],
+            )
+        )
+
+        chunks = []
+        first_chunk_time = None
+        async for chunk in audio_stream:
+            if chunk:
+                if first_chunk_time is None:
+                    first_chunk_time = time.monotonic()
+                chunks.append(chunk)
+
+        audio_bytes = b"".join(chunks)
+        total_time = time.monotonic() - start_time
+        ttfb = (first_chunk_time - start_time) if first_chunk_time else total_time
+
+        logger.info(
+            f"Streaming TTS: {len(voice_text)} chars → {len(audio_bytes)} bytes, "
+            f"TTFB={ttfb:.2f}s, total={total_time:.2f}s, "
+            f"format={output_format}, chunks={len(chunks)}"
+        )
+        return audio_bytes
+
+    except Exception as e:
+        logger.warning(f"Async streaming TTS failed ({type(e).__name__}): {e}, falling back to sync")
+        return await _generate_voice_sync_fallback(voice_text, profile, output_format)
+
+
+async def _generate_voice_sync_fallback(voice_text: str, profile: dict, output_format: str) -> bytes:
+    el_client = _get_elevenlabs_client()
+    if not el_client:
+        raise RuntimeError("ElevenLabs client not configured")
+
+    from elevenlabs import VoiceSettings
+
+    start_time = time.monotonic()
+
+    audio_generator = await asyncio.to_thread(
+        el_client.text_to_speech.convert,
+        voice_id=config.elevenlabs_voice_id,
+        text=voice_text,
+        model_id="eleven_v3",
+        output_format=output_format,
+        voice_settings=VoiceSettings(
+            stability=profile["stability"],
+            similarity_boost=profile["similarity_boost"],
+            style=profile["style"],
+        )
+    )
+
+    audio_bytes = b"".join(audio_generator)
+    total_time = time.monotonic() - start_time
+    logger.info(
+        f"Sync TTS fallback: {len(voice_text)} chars → {len(audio_bytes)} bytes, "
+        f"total={total_time:.2f}s, format={output_format}"
+    )
+    return audio_bytes
+
+
 async def generate_voice_response(text: str, use_cache: bool = False, voice_profile: str = None) -> bytes:
     global _voice_cache
     
-    el_client = _get_elevenlabs_client()
-    if not el_client:
+    if not config.elevenlabs_api_key:
         raise RuntimeError("ElevenLabs client not configured")
 
     clean_text = _clean_text_for_voice(text)
@@ -210,24 +312,14 @@ async def generate_voice_response(text: str, use_cache: bool = False, voice_prof
     else:
         profile = _detect_voice_profile(voice_text)
 
-    try:
-        from elevenlabs import VoiceSettings
-        
-        audio_generator = await asyncio.to_thread(
-            el_client.text_to_speech.convert,
-            voice_id=config.elevenlabs_voice_id,
-            text=voice_text,
-            model_id="eleven_v3",
-            output_format="mp3_44100_192",
-            voice_settings=VoiceSettings(
-                stability=profile["stability"],
-                similarity_boost=profile["similarity_boost"],
-                style=profile["style"],
-            )
-        )
+    output_format = _select_output_format(len(voice_text))
 
-        audio_bytes = b"".join(audio_generator)
-        
+    try:
+        audio_bytes = await _generate_voice_streaming_async(voice_text, profile, output_format)
+
+        if not audio_bytes:
+            raise RuntimeError("Empty audio response from TTS")
+
         if use_cache:
             cache_key = hashlib.md5(clean_text.encode()).hexdigest()
             _voice_cache[cache_key] = audio_bytes
