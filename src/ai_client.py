@@ -288,7 +288,7 @@ class AIClient:
                 system_instruction=sys_prompt,
                 max_output_tokens=config.max_tokens,
                 temperature=config.temperature,
-                thinking_config=types.ThinkingConfig(thinking_budget=4096)
+                thinking_config=types.ThinkingConfig(thinking_budget=2048)
             )
         elif ctx in ("closing", "decision"):
             return config.thinking_model_name, types.GenerateContentConfig(
@@ -377,7 +377,7 @@ class AIClient:
                 system_instruction=dynamic_system_prompt or SYSTEM_PROMPT,
                 max_output_tokens=config.max_tokens,
                 temperature=config.temperature,
-                thinking_config=types.ThinkingConfig(thinking_budget=4096)
+                thinking_config=types.ThinkingConfig(thinking_budget=2048)
             )
         else:
             model = config.fast_model_name
@@ -531,7 +531,7 @@ class AIClient:
                 system_instruction=dynamic_system_prompt or SYSTEM_PROMPT,
                 max_output_tokens=config.max_tokens,
                 temperature=config.temperature,
-                thinking_config=types.ThinkingConfig(thinking_budget=4096)
+                thinking_config=types.ThinkingConfig(thinking_budget=2048)
             )
         else:
             model = config.fast_model_name

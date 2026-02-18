@@ -698,7 +698,7 @@ async def message_handler(update: Update, context: ContextTypes.DEFAULT_TYPE) ->
                 messages=messages_for_ai,
                 tool_executor=_tool_executor,
                 thinking_level=thinking_level,
-                max_steps=4,
+                max_steps=3,
                 query_context=query_context or None,
                 dynamic_system_prompt=dynamic_prompt
             )
