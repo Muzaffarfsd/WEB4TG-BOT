@@ -467,9 +467,52 @@ class BroadcastManager:
         return results
 
 
+_BC_VALID_TAGS = {"warm", "excited", "curious", "confident", "whispers", "friendly"}
+_BC_CTA_WORDS = {"напиши", "глянь", "ответь", "обсудим", "покажу", "расскажу", "скину", "давай"}
+
+
+def _validate_bc_voice(raw_text: str, _re=None) -> str:
+    """Hard validation: single tag, CTA present, 35-90 chars clean text."""
+    if _re is None:
+        import re as _re
+
+    result = raw_text.strip().strip('"').strip("'").strip('\u201c').strip('\u201d')
+    result = _re.sub(r'\*+', '', result)
+    result = _re.sub(r'#+\s*', '', result)
+    result = _re.sub(r'[\U0001F600-\U0001F64F\U0001F300-\U0001F5FF\U0001F680-\U0001F6FF]+', '', result)
+    result = result.strip()
+
+    tags_found = _re.findall(r'\[(\w+)\]', result)
+    if len(tags_found) > 1:
+        first_tag = tags_found[0]
+        result = _re.sub(r'\[\w+\]\s*', '', result)
+        if first_tag in _BC_VALID_TAGS:
+            result = f"[{first_tag}] {result.strip()}"
+        tags_found = [first_tag] if first_tag in _BC_VALID_TAGS else []
+
+    if tags_found and tags_found[0] not in _BC_VALID_TAGS:
+        result = _re.sub(r'\[\w+\]\s*', '', result).strip()
+
+    clean = _re.sub(r'\[\w[\w\s]*?\]\s*', '', result).strip()
+    if not (35 <= len(clean) <= 90):
+        return ""
+
+    if not any(w in clean.lower() for w in _BC_CTA_WORDS):
+        return ""
+
+    return result
+
+
 async def _generate_broadcast_voice_supplement(text_message: str) -> str:
-    """Generate short emotional voice text for broadcast supplement."""
+    """Generate short voice hook for broadcast — must feel personal, not mass, and pull into dialog about Telegram Mini App."""
     import re as _re
+
+    safe_text = (text_message or "").strip()
+    if len(safe_text) < 10:
+        safe_text = "рассылка о возможностях Telegram Mini App для бизнеса"
+    elif len(safe_text) > 500:
+        safe_text = safe_text[:500] + "..."
+
     try:
         from google.genai import types as genai_types
         from src.config import config as app_config, get_gemini_client
@@ -478,21 +521,33 @@ async def _generate_broadcast_voice_supplement(text_message: str) -> str:
 
         prompt = (
             "Ты — Алекс, живой консультант WEB4TG Studio. Записываешь КОРОТКОЕ голосовое к рассылке.\n\n"
-            f"ТЕКСТ РАССЫЛКИ:\n{text_message}\n\n"
-            "КОНТЕКСТ: Рассылка — инструмент ВОЗВРАТА людей в диалог. Цель — чтобы человек ответил и начал обсуждать разработку Telegram Mini App.\n"
-            "Голосовое — это персональный крючок после текста. Человек видит текст, а потом слышит голос — и думает 'надо ответить'.\n\n"
-            "СТРАТЕГИЯ:\n"
-            "- Создай ощущение что это ЛИЧНО для него, не массовая рассылка\n"
-            "- Добавь интригу, срочность или эксклюзивность — 'у нас тут появилось кое-что новое'\n"
-            "- Звучи как человек который искренне хочет помочь, а не продать\n"
-            "- Цель — вызвать реакцию: 'хм, интересно, напишу-ка ему'\n\n"
-            "ФОРМАТ:\n"
-            "- 1-2 тега: [warm], [excited], [curious], [confident], [whispers], [friendly]\n"
-            "- Тег ПЕРЕД фразой\n"
-            "- 40-80 символов чистого текста\n"
-            "- НЕТ markdown, emoji, кавычек\n"
-            "- WEB4TG Studio — по-английски\n"
-            "- Верни ТОЛЬКО текст для озвучки"
+            f"ТЕКСТ РАССЫЛКИ:\n{safe_text}\n\n"
+            "КОНТЕКСТ: Рассылка идёт МНОГИМ людям, но голосовое должно звучать как ЛИЧНОЕ сообщение.\n"
+            "Цель — вернуть человека в диалог и начать обсуждение разработки Telegram Mini App.\n"
+            "Человек видит текст, потом слышит голос — и думает 'мне лично записали, надо ответить'.\n\n"
+            "ОБЯЗАТЕЛЬНО используй ОДИН психологический триггер:\n"
+            "1. CURIOSITY GAP — 'у меня тут кое-что... напиши, расскажу'\n"
+            "2. SOCIAL PROOF — 'похожие бизнесы уже запустили и результат — wow'\n"
+            "3. FOMO — 'это ненадолго', 'скоро закроем набор'\n"
+            "4. SCARCITY — 'берём 3 проекта в месяц', 'пока есть окно'\n"
+            "5. RECIPROCITY — 'подготовил кое-что для тебя', 'сделал подборку'\n\n"
+            "СТРАТЕГИЧЕСКОЕ ИСПОЛЬЗОВАНИЕ ТЕГОВ (выбери ОДИН):\n"
+            "- [whispers] — эксклюзивность: 'между нами...', 'тебе первому'\n"
+            "- [excited] — срочность и wow: 'это реально крутая штука'\n"
+            "- [curious] — незавершённая мысль: 'я тут подумал...'\n"
+            "- [warm] — личное: 'серьёзно, мне не всё равно'\n"
+            "- [confident] — экспертность: 'я знаю как это сработает'\n"
+            "- [friendly] — лёгкость: 'глянь, без обязательств'\n\n"
+            "ЗАПРЕЩЕНО:\n"
+            "- Повторять текст рассылки\n"
+            "- Банальности: 'это интересно', 'стоит внимания', 'не пропусти'\n"
+            "- Звучать как бот или спам\n"
+            "- Больше одного тега\n\n"
+            "ФОРМАТ: [тег] текст\n"
+            "ДЛИНА: 40-80 символов чистого текста (без тега)\n"
+            "ОБЯЗАТЕЛЬНО мини-CTA в конце: 'напиши', 'ответь', 'глянь', 'давай обсудим'\n"
+            "НЕТ markdown, emoji, кавычек. WEB4TG Studio — по-английски.\n"
+            "Верни ТОЛЬКО текст для озвучки."
         )
 
         response = await asyncio.to_thread(
@@ -500,31 +555,29 @@ async def _generate_broadcast_voice_supplement(text_message: str) -> str:
             model=app_config.model_name,
             contents=[prompt],
             config=genai_types.GenerateContentConfig(
-                max_output_tokens=150,
-                temperature=0.8
+                max_output_tokens=120,
+                temperature=0.7
             )
         )
 
         if response.text:
-            result = response.text.strip().strip('"').strip("'").strip('\u201c').strip('\u201d')
-            result = _re.sub(r'\*+', '', result)
-            result = _re.sub(r'#+\s*', '', result)
-            clean_len = len(_re.sub(r'\[\w[\w\s]*?\]\s*', '', result))
-            if 20 < clean_len < 120:
+            result = _validate_bc_voice(response.text, _re)
+            if result:
                 return result
 
     except Exception as e:
         logger.warning(f"Broadcast voice supplement gen failed: {e}")
 
     import random
-    fallbacks = [
-        "[curious] Слушай, это лично для тебя записываю — глянь, не пожалеешь",
-        "[warm] У меня идея как это может сработать в твоём бизнесе — напиши, обсудим",
-        "[excited] Тут кое-что новое появилось... думаю тебе зайдёт, серьёзно",
-        "[whispers] Между нами — сейчас самое время зайти, условия огонь",
-        "[confident] Я уже вижу как это работает у похожих проектов — давай покажу",
+    _bc_fallbacks = [
+        "[curious] Я тут записал это лично для тебя... просто глянь и напиши что думаешь",
+        "[whispers] Между нами — сейчас самое удачное время зайти, напиши пока открыто",
+        "[warm] Один бизнес как твой недавно запустился и окупился за месяц — покажу, ответь",
+        "[excited] Тут кое-что новое для таких проектов как твой — давай обсудим",
+        "[confident] Я точно знаю как это можно сделать в твоём случае — напиши, расскажу",
+        "[friendly] Сделал подборку идей под твою нишу, бесплатно — глянь, просто ответь",
     ]
-    return random.choice(fallbacks)
+    return random.choice(_bc_fallbacks)
 
 
 broadcast_manager = BroadcastManager()

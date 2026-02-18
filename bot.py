@@ -172,7 +172,15 @@ def _user_prefers_voice(user_id: int) -> bool:
 
 
 async def _generate_voice_supplement(text_message: str, msg_type: str = "followup") -> str:
-    """Generate a short emotional voice supplement text for a followup/broadcast message."""
+    """Generate a short emotional voice supplement — a hook to pull the person back into dialog about Telegram Mini App development."""
+    import re as _re
+
+    safe_text = (text_message or "").strip()
+    if len(safe_text) < 10:
+        safe_text = "общее сообщение о возможностях Telegram Mini App для бизнеса"
+    elif len(safe_text) > 500:
+        safe_text = safe_text[:500] + "..."
+
     try:
         from google.genai import types as genai_types
         from src.config import config as app_config, get_gemini_client
@@ -181,24 +189,32 @@ async def _generate_voice_supplement(text_message: str, msg_type: str = "followu
 
         prompt = (
             "Ты — Алекс, живой консультант WEB4TG Studio. Записываешь КОРОТКОЕ голосовое к текстовому сообщению.\n\n"
-            f"ТЕКСТ (уже отправлен клиенту):\n{text_message}\n\n"
-            "КОНТЕКСТ: Это сообщение для ВОЗВРАТА человека в диалог и подведения к заказу разработки Telegram Mini App.\n"
-            "Твоё голосовое — это крючок, который заставит человека ответить и продолжить разговор.\n\n"
-            "СТРАТЕГИЯ ГОЛОСОВОГО:\n"
-            "- Создай ИНТРИГУ или СРОЧНОСТЬ — 'у меня есть идея для твоего бизнеса', 'тут кое-что поменялось'\n"
-            "- Покажи что помнишь человека — персонализируй на основе текста сообщения\n"
-            "- Дай ощущение что упускает выгоду если не ответит\n"
-            "- Звучи как друг который реально нашёл что-то полезное, а не продажник\n"
-            "- Голос должен вызвать: 'блин, надо ответить, интересно что там'\n\n"
-            "ФОРМАТ:\n"
-            "- 1-2 тега ElevenLabs v3: [warm], [excited], [curious], [confident], [whispers], [friendly]\n"
-            "- Тег ПЕРЕД фразой: '[curious] Слушай, я тут подумал кое-что про твой бизнес...'\n\n"
-            "СТРОГИЕ ПРАВИЛА:\n"
-            "- 40-80 символов чистого текста (3-6 секунд)\n"
-            "- НЕ повторяй текст сообщения — дополняй интригой\n"
-            "- НЕТ markdown, emoji, кавычек\n"
-            "- WEB4TG Studio — по-английски\n"
-            "- Верни ТОЛЬКО текст для озвучки"
+            f"ТЕКСТ (уже отправлен клиенту):\n{safe_text}\n\n"
+            "ЦЕЛЬ: Вернуть человека в диалог и подвести к разработке Telegram Mini App. "
+            "Голосовое — это крючок. Человек прочитал текст, слышит голос — и ОТВЕЧАЕТ.\n\n"
+            "ОБЯЗАТЕЛЬНО используй МИНИМУМ ОДИН психологический триггер:\n"
+            "1. CURIOSITY GAP — незавершённая мысль, 'у меня тут кое-что для тебя... напиши — расскажу'\n"
+            "2. SOCIAL PROOF — 'тут один бизнес похожий на твой уже запустился и результат огонь'\n"
+            "3. FOMO — 'это предложение скоро закроется', 'осталось пару мест на этот месяц'\n"
+            "4. SCARCITY — 'берём только 3 проекта в месяц', 'пока есть окно'\n"
+            "5. RECIPROCITY — 'я тут подготовил кое-что специально для тебя'\n\n"
+            "СТРАТЕГИЧЕСКОЕ ИСПОЛЬЗОВАНИЕ ТЕГОВ (выбери ОДИН самый точный):\n"
+            "- [whispers] — для эксклюзивности и секретов: 'между нами...', 'тебе первому говорю'\n"
+            "- [excited] — для срочности и wow-момента: 'слушай, это реально крутая штука'\n"
+            "- [curious] — для незавершённых мыслей: 'я тут подумал...', 'знаешь что...'\n"
+            "- [warm] — для личного отношения: 'серьёзно, мне не всё равно'\n"
+            "- [confident] — для экспертности: 'я точно знаю как это сработает'\n"
+            "- [friendly] — для лёгкости: 'просто глянь, без обязательств'\n\n"
+            "АНТИПАТТЕРНЫ (НИКОГДА так не делай):\n"
+            "- НЕ повторяй текст сообщения\n"
+            "- НЕ будь банальным: 'это интересно', 'стоит внимания' — ЗАПРЕЩЕНО\n"
+            "- НЕ звучи как продажник или бот\n"
+            "- НЕ используй больше одного тега\n\n"
+            "ФОРМАТ: [тег] текст\n"
+            "ДЛИНА: 40-80 символов чистого текста (без тега). Одна-две фразы.\n"
+            "ОБЯЗАТЕЛЬНО заканчивай мини-CTA: 'напиши', 'глянь', 'ответь', 'давай обсудим'\n"
+            "НЕТ markdown, emoji, кавычек. WEB4TG Studio — по-английски.\n"
+            "Верни ТОЛЬКО текст для озвучки."
         )
 
         response = await asyncio.to_thread(
@@ -206,19 +222,14 @@ async def _generate_voice_supplement(text_message: str, msg_type: str = "followu
             model=app_config.model_name,
             contents=[prompt],
             config=genai_types.GenerateContentConfig(
-                max_output_tokens=150,
-                temperature=0.8
+                max_output_tokens=120,
+                temperature=0.7
             )
         )
 
         if response.text:
-            import re as _re
-            result = response.text.strip().strip('"').strip("'").strip('\u201c').strip('\u201d')
-            result = _re.sub(r'\*+', '', result)
-            result = _re.sub(r'#+\s*', '', result)
-            result = _re.sub(r'[\U0001F600-\U0001F64F\U0001F300-\U0001F5FF\U0001F680-\U0001F6FF]+', '', result)
-            clean_len = len(_re.sub(r'\[\w[\w\s]*?\]\s*', '', result))
-            if 20 < clean_len < 120:
+            result = _validate_voice_supplement(response.text, _re)
+            if result:
                 return result
 
     except Exception as e:
@@ -227,15 +238,79 @@ async def _generate_voice_supplement(text_message: str, msg_type: str = "followu
     return ""
 
 
-VOICE_SUPPLEMENT_FALLBACKS = [
-    "[curious] Слушай, я тут подумал кое-что про твой бизнес... напиши, расскажу",
-    "[warm] Серьёзно, у меня есть идея которая тебе зайдёт — давай обсудим?",
-    "[excited] Тут появилась одна штука... думаю тебе точно стоит глянуть",
-    "[whispers] Между нами — сейчас можно зайти на очень хороших условиях",
-    "[confident] Я вижу как это может сработать в твоём случае — давай покажу",
-    "[friendly] Напиши мне — покажу как это уже работает у похожих бизнесов",
-    "[curious] Кстати, тут кое-что поменялось... думаю тебе будет интересно",
+_VALID_TAGS = {"warm", "excited", "curious", "confident", "whispers", "friendly"}
+_CTA_WORDS = {"напиши", "глянь", "ответь", "обсудим", "покажу", "расскажу", "скину", "давай"}
+
+
+def _validate_voice_supplement(raw_text: str, _re=None) -> str:
+    """Hard validation: single tag, CTA present, 35-90 chars clean text."""
+    if _re is None:
+        import re as _re
+
+    result = raw_text.strip().strip('"').strip("'").strip('\u201c').strip('\u201d')
+    result = _re.sub(r'\*+', '', result)
+    result = _re.sub(r'#+\s*', '', result)
+    result = _re.sub(r'[\U0001F600-\U0001F64F\U0001F300-\U0001F5FF\U0001F680-\U0001F6FF]+', '', result)
+    result = result.strip()
+
+    tags_found = _re.findall(r'\[(\w+)\]', result)
+    if len(tags_found) > 1:
+        first_tag = tags_found[0]
+        result = _re.sub(r'\[\w+\]\s*', '', result)
+        if first_tag in _VALID_TAGS:
+            result = f"[{first_tag}] {result.strip()}"
+        tags_found = [first_tag] if first_tag in _VALID_TAGS else []
+
+    if tags_found and tags_found[0] not in _VALID_TAGS:
+        result = _re.sub(r'\[\w+\]\s*', '', result).strip()
+
+    clean = _re.sub(r'\[\w[\w\s]*?\]\s*', '', result).strip()
+    if not (35 <= len(clean) <= 90):
+        return ""
+
+    clean_lower = clean.lower()
+    has_cta = any(w in clean_lower for w in _CTA_WORDS)
+    if not has_cta:
+        return ""
+
+    return result
+
+
+VOICE_SUPPLEMENT_FALLBACKS_CURIOSITY = [
+    "[curious] Слушай, я тут нашёл кое-что для твоего бизнеса... напиши — расскажу",
+    "[curious] Знаешь что... у меня появилась идея, но лучше голосом — ответь мне",
+    "[curious] Тут одна штука которая может изменить подход к клиентам — давай покажу",
 ]
+VOICE_SUPPLEMENT_FALLBACKS_SOCIAL_PROOF = [
+    "[warm] Один бизнес как твой запустил мини-апп и за месяц окупил вложения — покажу",
+    "[confident] Три проекта похожих на твой уже работают и приносят заказы — давай обсудим",
+    "[excited] Клиент запустился две недели назад — конверсия выросла на 40 процентов, глянь",
+]
+VOICE_SUPPLEMENT_FALLBACKS_FOMO = [
+    "[excited] В этом месяце ещё есть окно — потом очередь на два месяца, напиши",
+    "[whispers] Между нами — текущие условия действуют до конца недели, напиши пока есть",
+    "[excited] Сейчас акция на запуск — через неделю цены вырастут, давай обсудим",
+]
+VOICE_SUPPLEMENT_FALLBACKS_SCARCITY = [
+    "[whispers] Мы берём только три проекта в месяц... одно место осталось, напиши",
+    "[confident] Сейчас свободный слот на разработку — такое бывает раз в два месяца, давай обсудим",
+]
+VOICE_SUPPLEMENT_FALLBACKS_RECIPROCITY = [
+    "[warm] Я тут подготовил расчёт специально под твой бизнес — напиши, скину",
+    "[friendly] Сделал подборку идей с ценами под твою нишу — глянь, это бесплатно, ответь мне",
+    "[warm] Подобрал три кейса из твоей сферы с результатами — давай покажу",
+]
+
+def _get_random_voice_fallback() -> str:
+    import random
+    all_fallbacks = (
+        VOICE_SUPPLEMENT_FALLBACKS_CURIOSITY +
+        VOICE_SUPPLEMENT_FALLBACKS_SOCIAL_PROOF +
+        VOICE_SUPPLEMENT_FALLBACKS_FOMO +
+        VOICE_SUPPLEMENT_FALLBACKS_SCARCITY +
+        VOICE_SUPPLEMENT_FALLBACKS_RECIPROCITY
+    )
+    return random.choice(all_fallbacks)
 
 
 async def _send_voice_supplement(bot, user_id: int, text_message: str) -> bool:
@@ -249,8 +324,7 @@ async def _send_voice_supplement(bot, user_id: int, text_message: str) -> bool:
 
         voice_text = await _generate_voice_supplement(text_message)
         if not voice_text:
-            import random
-            voice_text = random.choice(VOICE_SUPPLEMENT_FALLBACKS)
+            voice_text = _get_random_voice_fallback()
 
         await bot.send_chat_action(chat_id=user_id, action=ChatAction.RECORD_VOICE)
         voice_audio = await generate_voice_response(voice_text, voice_profile="greeting")
