@@ -983,6 +983,22 @@ async def photo_handler(update: Update, context: ContextTypes.DEFAULT_TYPE) -> N
                                 from_chat_id=update.effective_chat.id if update.effective_chat else user_id,
                                 message_id=update.message.message_id
                             )
+                            if is_hot_image(image_type):
+                                try:
+                                    from src.manager_coaching import generate_coaching_briefing
+                                    briefing = generate_coaching_briefing(
+                                        user_id=user.id,
+                                        trigger_type="high_value",
+                                        last_user_message=caption,
+                                    )
+                                    if briefing:
+                                        await context.bot.send_message(
+                                            chat_id=MANAGER_CHAT_ID,
+                                            text=briefing,
+                                            parse_mode="HTML"
+                                        )
+                                except Exception:
+                                    pass
                         except Exception as notify_err:
                             logger.warning(f"Manager notification failed: {notify_err}")
 

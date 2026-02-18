@@ -28,6 +28,7 @@ def check_status():
         ("src.propensity", "Propensity Scorer"),
         ("src.smart_buttons", "Smart Buttons"),
         ("src.feedback_loop", "Self-Learning Loop v2"),
+        ("src.manager_coaching", "Manager Coaching"),
         ("src.tool_handlers", "Tool Handlers (17 tools)"),
         ("src.handlers", "Handlers"),
     ]
@@ -55,6 +56,8 @@ def check_status():
     run_vision_demo()
     print("\n")
     run_learning_demo()
+    print("\n")
+    run_coaching_demo()
 
     print("\n" + "=" * 60)
     print("  Ready for Railway deployment (python bot.py)")
@@ -400,6 +403,91 @@ def run_learning_demo():
 
     print("-" * 60)
     print("  SELF-LEARNING LOOP v2.1: ALL SYSTEMS OPERATIONAL")
+    print("-" * 60)
+
+
+def run_coaching_demo():
+    print("\n" + "=" * 60)
+    print("  DEMO: Manager Coaching Briefing")
+    print("=" * 60)
+
+    from src.manager_coaching import generate_coaching_briefing
+    import re
+
+    test_cases = [
+        {
+            "name": "Фрустрированный клиент с бюджетом",
+            "user_id": 11111,
+            "trigger_type": "frustration",
+            "trigger_reason": "Клиент выразил раздражение",
+            "message": "Сколько стоит? Бюджет до 200 тысяч, надо срочно!"
+        },
+        {
+            "name": "Горячий лид — ЛПР с дизайн-макетом",
+            "user_id": 22222,
+            "trigger_type": "high_value",
+            "trigger_reason": "Прислал макет",
+            "message": "Я владелец ресторана, вот макет нашего приложения из Figma"
+        },
+        {
+            "name": "Холодный клиент без контекста",
+            "user_id": 33333,
+            "trigger_type": None,
+            "trigger_reason": None,
+            "message": None
+        },
+    ]
+
+    for tc in test_cases:
+        print(f"\n  {'─' * 40}")
+        print(f"  СЦЕНАРИЙ: {tc['name']}")
+        print(f"  {'─' * 40}")
+
+        briefing = generate_coaching_briefing(
+            user_id=tc["user_id"],
+            trigger_type=tc["trigger_type"],
+            trigger_reason=tc["trigger_reason"],
+            last_user_message=tc["message"],
+        )
+
+        clean = re.sub(r'<[^>]+>', '', briefing)
+        for line in clean.split('\n'):
+            if line.strip():
+                print(f"  {line}")
+
+        print(f"  [Длина: {len(briefing)} символов]")
+
+    integration_points = [
+        ("conversation_qa.py", "notify_manager_handoff", "Handoff по триггерам"),
+        ("callbacks.py", "request_manager", "Запрос менеджера кнопкой"),
+        ("callbacks.py", "brief_send_manager", "Отправка брифа"),
+        ("callbacks.py", "consult_topic_", "Бронирование консультации"),
+        ("media.py", "photo_handler (hot)", "Горячие фото (макет, ТЗ)"),
+    ]
+
+    print(f"\n  {'─' * 40}")
+    print(f"  ТОЧКИ ИНТЕГРАЦИИ: {len(integration_points)}")
+    print(f"  {'─' * 40}")
+    for file, handler, desc in integration_points:
+        print(f"  ✓ {file} → {handler} — {desc}")
+
+    print(f"\n  СЕКЦИИ ШПАРГАЛКИ:")
+    sections = [
+        "👤 Профиль клиента (лид + long-term profile)",
+        "📊 BANT-квалификация (бюджет, ЛПР, срочность, таймлайн)",
+        "🎯 Воронка + Propensity Score",
+        "⚡ Возражения + сигналы покупки",
+        "🎭 Стиль переговоров",
+        "🚩 Красные флаги (фрустрация, нерешительность, страх)",
+        "🎯 Стратегия закрытия (self-learning + нишевые инсайты)",
+        "💬 Последний диалог (summary/история)",
+        "✅ Следующие шаги (персонализированные)",
+    ]
+    for s in sections:
+        print(f"  • {s}")
+
+    print("\n" + "-" * 60)
+    print("  MANAGER COACHING: ALL SYSTEMS OPERATIONAL")
     print("-" * 60)
 
 

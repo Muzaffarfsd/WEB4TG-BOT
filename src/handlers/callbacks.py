@@ -67,6 +67,16 @@ async def callback_handler(update: Update, context: ContextTypes.DEFAULT_TYPE) -
                     f"🆔 <code>{user.id}</code>",
                     parse_mode="HTML"
                 )
+                try:
+                    from src.manager_coaching import generate_coaching_briefing
+                    briefing = generate_coaching_briefing(
+                        user_id=user.id,
+                        trigger_type="explicit_request",
+                    )
+                    if briefing:
+                        await context.bot.send_message(int(manager_chat_id), briefing, parse_mode="HTML")
+                except Exception:
+                    pass
             except Exception:
                 pass
     
@@ -1268,6 +1278,13 @@ async def callback_handler(update: Update, context: ContextTypes.DEFAULT_TYPE) -
                     f"{brief_text}",
                     parse_mode="HTML"
                 )
+                try:
+                    from src.manager_coaching import generate_coaching_briefing
+                    briefing = generate_coaching_briefing(user_id=user_id)
+                    if briefing:
+                        await context.bot.send_message(int(manager_chat_id), briefing, parse_mode="HTML")
+                except Exception:
+                    pass
             except Exception:
                 pass
 
@@ -1439,6 +1456,13 @@ async def callback_handler(update: Update, context: ContextTypes.DEFAULT_TYPE) -
                     user_id, query.from_user.username or "", query.from_user.first_name or ""
                 )
                 await context.bot.send_message(int(manager_chat_id), notif, parse_mode="HTML")
+                try:
+                    from src.manager_coaching import generate_coaching_briefing
+                    briefing = generate_coaching_briefing(user_id=user_id)
+                    if briefing:
+                        await context.bot.send_message(int(manager_chat_id), briefing, parse_mode="HTML")
+                except Exception:
+                    pass
             except Exception:
                 pass
 

@@ -295,6 +295,18 @@ class ConversationQAManager:
                 [InlineKeyboardButton("✅ Взять в работу", callback_data=f"handoff_resolve_{user_id}")]
             ])
             await bot.send_message(int(MANAGER_CHAT_ID), text, parse_mode="HTML", reply_markup=keyboard)
+
+            try:
+                from src.manager_coaching import generate_coaching_briefing
+                briefing = generate_coaching_briefing(
+                    user_id=user_id,
+                    trigger_type=trigger_type,
+                    trigger_reason=reason,
+                )
+                if briefing:
+                    await bot.send_message(int(MANAGER_CHAT_ID), briefing, parse_mode="HTML")
+            except Exception as coaching_err:
+                logger.debug(f"Coaching briefing skipped: {coaching_err}")
         except Exception as e:
             logger.error(f"Failed to notify manager about handoff: {e}")
 

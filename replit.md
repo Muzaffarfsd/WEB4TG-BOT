@@ -41,6 +41,7 @@ The bot is developed in Python, leveraging Telegram Bot API 9.4. It features a m
 - **Smart Button System**: Context-aware buttons after every AI response based on funnel stage, detected intents, and propensity score.
 - **Response Validation**: Hallucination guard validates prices, timelines, guarantees, and discounts against known data.
 - **Self-Learning Feedback Loop v2.1**: Active learning with session attribution + outcome weighting. Auto-tags AI responses with closing technique (13 patterns), business niche (10 patterns), communication style (5 patterns). Session attribution credits ALL responses in 1-hour window (not just last). 16 weighted outcome types (consultation=1.0, lead=0.9, calculator=0.5, portfolio=0.3). Wilson score confidence ranking. Niche persistence to client profile. Auto-refresh every 6h. Callback button tracking (booking, payment, brief).
+- **Manager Coaching**: Real-time briefing for managers on handoff — client profile, BANT qualification, funnel stage, pain points, negotiation style, red flags, recommended closing strategy (self-learning powered), conversation summary, next actions. Integrated into 5 notification touchpoints.
 - **Propensity Scoring**: Composite score (0-100) based on engagement velocity, session depth, tool usage, buying signals, and time decay.
 - **Proactive Engagement**: ProactiveEngagementEngine with behavioral signals + trigger history DB tables, 8 deterministic trigger rules, predictive scoring model, AI message generation, and anti-spam controls.
 - **A/B Dialog Testing**: Chi-square test with auto-winner detection and significance monitoring.
@@ -48,6 +49,14 @@ The bot is developed in Python, leveraging Telegram Bot API 9.4. It features a m
 - **Guardrails**: System prompt rules to prevent unauthorized promises, response validation, and confidence scoring.
 
 ## Recent Changes
+- **2026-02-18**: Phase 5 — Real-time Manager Coaching
+  - NEW: `src/manager_coaching.py` — generates comprehensive coaching briefings for managers
+  - 9 sections: profile, BANT, funnel/propensity, objections, negotiation style, red flags, strategy, conversation, next actions
+  - INTEGRATED into 5 notification touchpoints: handoff (conversation_qa), request_manager, brief_send, consultation booking, hot lead photos
+  - Strategy section uses self-learning feedback loop data (best techniques per niche, avoid list)
+  - Red flags: frustration, JOLT indecision, risk aversion detection
+  - Next actions: personalized based on trigger type and missing lead data
+  - Graceful degradation: all sections handle missing data
 - **2026-02-18**: Phase 4 — Self-Learning Loop v2.1 (session attribution + outcome weighting)
   - UPGRADED: `src/feedback_loop.py` — v2.1 with session attribution, outcome weights, niche persistence
   - NEW: Session attribution — credits ALL responses in 1-hour window, not just last one
