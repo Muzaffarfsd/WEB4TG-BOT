@@ -1213,6 +1213,170 @@ def detect_decision_fatigue(text: str, message_count: int) -> Optional[str]:
     return None
 
 
+BUYING_SIGNAL_STRONG = [
+    "когда можно начать", "как оплатить", "выставьте счёт", "давайте начнём",
+    "готов оплатить", "куда переводить", "хочу заказать", "оформляйте",
+    "берём", "подписываю", "присылайте договор", "реквизиты",
+    "когда будет готово", "начинаем", "погнали", "стартуем",
+    "хочу такое же", "мне подходит", "записывайте",
+]
+
+BUYING_SIGNAL_MEDIUM = [
+    "а можно рассрочку", "какая предоплата", "а если оплатить сейчас",
+    "сколько предоплата", "есть рассрочка", "а скидка будет",
+    "а если заказать два", "а оптом дешевле", "когда ближайший слот",
+    "покажите договор", "как выглядит процесс", "что нужно с моей стороны",
+    "а поддержка входит", "а правки бесплатные",
+]
+
+BUYING_SIGNAL_IMAGINING = [
+    "а можно будет потом добавить", "а если клиентов станет больше",
+    "а как это будет выглядеть", "представляю как", "когда запустим",
+    "мои клиенты смогут", "а можно кастомизировать", "а если нам нужно будет",
+    "а что если трафик вырастет", "а мы сможем",
+]
+
+
+def detect_buying_signals(text: str) -> Optional[str]:
+    text_lower = text.lower()
+    strong = sum(1 for p in BUYING_SIGNAL_STRONG if p in text_lower)
+    medium = sum(1 for p in BUYING_SIGNAL_MEDIUM if p in text_lower)
+    imagining = sum(1 for p in BUYING_SIGNAL_IMAGINING if p in text_lower)
+
+    if strong >= 1:
+        return "[BUYING SIGNAL: СИЛЬНЫЙ]\nКлиент готов покупать СЕЙЧАС. Стратегия (Assumptive Close):\n• НЕ продолжай продавать — переходи к оформлению\n• 'Отлично! Давайте зафиксируем детали: [конкретный следующий шаг]'\n• Предложи schedule_consultation или generate_brief\n• Убери последние барьеры: 'Предоплата 35%, 14 дней правок бесплатно'"
+    if medium >= 1:
+        return "[BUYING SIGNAL: СРЕДНИЙ]\nКлиент изучает условия покупки — высокий интерес. Стратегия:\n• Отвечай на вопросы конкретно и быстро\n• После ответа — мягкий push: 'Хотите, составлю предварительный план?'\n• Подчеркни безопасность: рассрочка, договор, гарантия возврата"
+    if imagining >= 1:
+        return "[BUYING SIGNAL: ВООБРАЖЕНИЕ ВЛАДЕНИЯ]\nКлиент уже представляет себя с продуктом (Эффект владения по Канеману). Стратегия:\n• Поддержи визуализацию: 'Да, именно так! И ещё ваши клиенты смогут...'\n• Усиль чувство владения конкретными деталями\n• Мягко к закрытию: 'Давайте прикинем сроки — чтобы это заработало к [дата]?'"
+    return None
+
+
+CIALDINI_CONTEXT = {
+    "reciprocity": {
+        "triggers": ["спасибо за", "полезно", "помогли", "благодарю", "ценная информация"],
+        "hint": "[CIALDINI: ВЗАИМНОСТЬ]\nКлиент благодарит — активирована норма взаимности. Момент для микро-просьбы:\n• 'Рад что помогло! Кстати, если интересно — могу сделать бесплатный расчёт под ваш проект'\n• Или: 'Могу поделиться ещё кейсом из вашей ниши — показать?'"
+    },
+    "commitment": {
+        "triggers": ["да интересно", "покажите", "расскажите", "хочу узнать", "давайте", "ок покажите"],
+        "hint": "[CIALDINI: ПОСЛЕДОВАТЕЛЬНОСТЬ]\nКлиент сказал маленькое 'да' — используй foot-in-the-door:\n• Каждое следующее предложение чуть больше предыдущего\n• 'Раз уже посмотрели цены — давайте прикину ROI для вашего бизнеса? 2 минуты'\n• Цепочка: посмотреть → посчитать → обсудить → заказать"
+    },
+    "scarcity": {
+        "triggers": ["ещё есть места", "успею", "сколько осталось", "акция", "скидка действует"],
+        "hint": "[CIALDINI: ДЕФИЦИТ]\nКлиент реагирует на ограниченность. Используй честно:\n• Реальные ограничения: загрузка команды, сезонные акции\n• 'Сейчас есть слот на этой неделе — обычно очередь 2-3 недели'\n• НЕ создавай ложный дефицит — только реальные ограничения"
+    },
+    "authority": {
+        "triggers": ["а вы эксперты", "давно работаете", "какой опыт", "сертификаты", "квалификация"],
+        "hint": "[CIALDINI: АВТОРИТЕТ]\nКлиент проверяет экспертизу. Покажи авторитет через:\n• Конкретные кейсы с результатами из базы знаний\n• Специализацию: 'Мы делаем ТОЛЬКО Telegram Mini Apps'\n• Количество проектов и отзывы клиентов"
+    },
+    "unity": {
+        "triggers": ["мы из", "наша команда", "наш бизнес", "у нас в городе", "в нашей нише"],
+        "hint": "[CIALDINI: ЕДИНСТВО]\nКлиент идентифицирует себя с группой. Используй:\n• 'Да, для [ниша] это особенно актуально — вот кейс коллеги из вашей сферы'\n• Подчеркни общие ценности и цели\n• 'Мы тоже предприниматели — понимаем как важно...' "
+    },
+}
+
+
+def detect_cialdini_triggers(text: str) -> Optional[str]:
+    text_lower = text.lower()
+    for principle, data in CIALDINI_CONTEXT.items():
+        for trigger in data["triggers"]:
+            if trigger in text_lower:
+                return data["hint"]
+    return None
+
+
+COMM_VISUAL_PATTERNS = [
+    "покажите", "как выглядит", "скриншот", "картинк", "пример визуал",
+    "дизайн", "цвета", "видел", "смотрел", "вижу", "выглядит",
+    "показать", "фото", "демо", "интерфейс", "ui", "макет",
+]
+
+COMM_AUDITORY_PATTERNS = [
+    "расскажите", "объясните", "звучит", "слышал", "поговорить",
+    "обсудить", "созвон", "позвонить", "голосов", "аудио",
+    "послушать", "как звучит", "говорите",
+]
+
+COMM_KINESTHETIC_PATTERNS = [
+    "попробовать", "потрогать", "пощупать", "протестировать",
+    "демо-доступ", "тест", "пилот", "попробую", "потыкать",
+    "руками", "на практике", "в деле", "ощущение",
+]
+
+
+def detect_communication_preference(text: str) -> Optional[str]:
+    text_lower = text.lower()
+    scores = {
+        "visual": sum(1 for p in COMM_VISUAL_PATTERNS if p in text_lower),
+        "auditory": sum(1 for p in COMM_AUDITORY_PATTERNS if p in text_lower),
+        "kinesthetic": sum(1 for p in COMM_KINESTHETIC_PATTERNS if p in text_lower),
+    }
+    best = max(scores, key=lambda k: scores[k])
+    if scores[best] == 0:
+        return None
+    hints = {
+        "visual": "[КОММУНИКАЦИЯ: ВИЗУАЛ]\nКлиент мыслит образами. Стратегия:\n• Используй слова: 'Посмотрите', 'Представьте', 'Вот как это выглядит'\n• Предлагай портфолио, скриншоты, демо\n• Описывай результат визуально: 'Ваши клиенты увидят каталог с фото, корзину, кнопку оплаты'",
+        "auditory": "[КОММУНИКАЦИЯ: АУДИАЛ]\nКлиент предпочитает слушать/обсуждать. Стратегия:\n• Используй слова: 'Расскажу', 'Звучит как', 'Давайте обсудим'\n• Предлагай созвон: schedule_consultation\n• Объясняй процесс пошагово, как историю",
+        "kinesthetic": "[КОММУНИКАЦИЯ: КИНЕСТЕТИК]\nКлиент хочет попробовать. Стратегия:\n• Используй слова: 'Попробуйте', 'Протестируйте', 'Почувствуйте разницу'\n• Предлагай демо-доступ, тестовый период\n• 'Давайте я покажу рабочий проект — сами потыкаете и поймёте'",
+    }
+    return hints[best]
+
+
+MULTI_INTENT_MARKERS = {
+    "price_and_timeline": {
+        "patterns": [("сколько", "когда"), ("цена", "срок"), ("стоимость", "время"), ("прайс", "готов")],
+        "hint": "Клиент спрашивает о цене И сроках — высокий интерес. Ответь на ОБА вопроса конкретно."
+    },
+    "features_and_comparison": {
+        "patterns": [("функции", "сравн"), ("возможности", "отличи"), ("что умеет", "а у")],
+        "hint": "Клиент сравнивает — хочет понять функции И разницу. Дай структурированное сравнение."
+    },
+    "doubt_and_interest": {
+        "patterns": [("сомневаюсь", "интересно"), ("не уверен", "хочу"), ("боюсь", "нравится")],
+        "hint": "Клиент одновременно заинтересован И сомневается. Сначала сними сомнение, потом усиль интерес."
+    },
+}
+
+
+def detect_multi_intent(text: str) -> Optional[str]:
+    text_lower = text.lower()
+    detected = []
+    for intent_name, data in MULTI_INTENT_MARKERS.items():
+        for pair in data["patterns"]:
+            if all(kw in text_lower for kw in pair):
+                detected.append(data["hint"])
+                break
+    if detected:
+        return "[МУЛЬТИ-ИНТЕНТ — несколько вопросов/намерений]\n" + "\n".join(f"• {h}" for h in detected) + "\nОтветь на ВСЕ намерения, не упусти ни одного."
+    return None
+
+
+CONFIDENCE_DATA_SOURCES = {
+    "price_list": ["цена", "стоимость", "сколько стоит", "прайс", "тариф", "пакет", "рассрочка"],
+    "case_study": ["кейс", "пример", "результат", "клиент", "отзыв", "портфолио"],
+    "timeline": ["срок", "сколько времени", "когда будет готово", "дней", "недель"],
+    "guarantee": ["гарантия", "возврат", "договор", "правки", "поддержка"],
+}
+
+SPECULATIVE_TOPICS = [
+    "рынок", "тренд", "прогноз", "будущее", "конкурент", "рост", "статистика",
+    "исследование", "процент", "доля рынка", "аналитика",
+]
+
+
+def assess_confidence_level(text: str) -> Optional[str]:
+    text_lower = text.lower()
+    has_verified = any(
+        any(kw in text_lower for kw in keywords)
+        for keywords in CONFIDENCE_DATA_SOURCES.values()
+    )
+    has_speculative = any(t in text_lower for t in SPECULATIVE_TOPICS)
+
+    if has_speculative and not has_verified:
+        return "[CONFIDENCE: ОСТОРОЖНО]\nВопрос касается прогнозов/рынка — данных в базе может не быть. Стратегия:\n• Отвечай на основе кейсов и прайса (search_knowledge_base)\n• НЕ изобретай статистику\n• 'По нашему опыту с клиентами...' вместо 'По статистике...'\n• Если не знаешь — честно скажи и предложи разобраться"
+    return None
+
+
 def build_full_context(user_id: int, user_message: str, username: Optional[str] = None, first_name: Optional[str] = None, message_count: int = 0) -> Optional[str]:
     parts = []
 
@@ -1330,6 +1494,26 @@ def build_full_context(user_id: int, user_message: str, username: Optional[str] 
     winback_ctx = build_winback_context(user_id)
     if winback_ctx:
         parts.append(f"\n{winback_ctx}")
+
+    buying_ctx = detect_buying_signals(user_message)
+    if buying_ctx:
+        parts.append(f"\n{buying_ctx}")
+
+    cialdini_ctx = detect_cialdini_triggers(user_message)
+    if cialdini_ctx:
+        parts.append(f"\n{cialdini_ctx}")
+
+    comm_ctx = detect_communication_preference(user_message)
+    if comm_ctx:
+        parts.append(f"\n{comm_ctx}")
+
+    multi_ctx = detect_multi_intent(user_message)
+    if multi_ctx:
+        parts.append(f"\n{multi_ctx}")
+
+    confidence_ctx = assess_confidence_level(user_message)
+    if confidence_ctx:
+        parts.append(f"\n{confidence_ctx}")
 
     proactive = get_proactive_value(user_id, funnel_stage)
     if proactive:
