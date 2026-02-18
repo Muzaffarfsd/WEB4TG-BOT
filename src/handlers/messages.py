@@ -822,8 +822,8 @@ async def message_handler(update: Update, context: ContextTypes.DEFAULT_TYPE) ->
         smart_voice_sent = False
         try:
             from src.handlers.media import (
-                should_send_smart_voice, generate_voice_response,
-                generate_voice_bridge, _make_text_summary
+                should_send_smart_voice,
+                generate_voice_bridge
             )
             voice_decision = should_send_smart_voice(
                 user.id, user_message, user_data, response_text=response
@@ -837,34 +837,24 @@ async def message_handler(update: Update, context: ContextTypes.DEFAULT_TYPE) ->
                     try:
                         await chat.send_action(ChatAction.RECORD_VOICE)
 
-                        if voice_mode == "bridge":
-                            voice_audio = await generate_voice_bridge(
-                                response, user_message, voice_profile=voice_profile
-                            )
-                        else:
-                            voice_audio = await generate_voice_response(
-                                response, voice_profile=voice_profile
-                            )
+                        voice_audio = await generate_voice_bridge(
+                            response, user_message, voice_profile=voice_profile
+                        )
 
                         if not voice_audio or len(voice_audio) < 100:
                             raise RuntimeError(f"Voice audio too small: {len(voice_audio) if voice_audio else 0} bytes")
 
                         await message.reply_voice(voice=voice_audio)
 
-                        if voice_mode == "bridge":
-                            if len(response) > 4096:
-                                chunks = [response[i:i+4096] for i in range(0, len(response), 4096)]
-                                for i, chunk in enumerate(chunks):
-                                    if i == len(chunks) - 1:
-                                        await message.reply_text(chunk, reply_markup=reply_markup)
-                                    else:
-                                        await message.reply_text(chunk)
-                            else:
-                                await message.reply_text(response, reply_markup=reply_markup)
+                        if len(response) > 4096:
+                            chunks = [response[i:i+4096] for i in range(0, len(response), 4096)]
+                            for i, chunk in enumerate(chunks):
+                                if i == len(chunks) - 1:
+                                    await message.reply_text(chunk, reply_markup=reply_markup)
+                                else:
+                                    await message.reply_text(chunk)
                         else:
-                            text_summary = _make_text_summary(response)
-                            summary_msg = f"👆 Голосовое сообщение\n\n{text_summary}"
-                            await message.reply_text(summary_msg, reply_markup=reply_markup)
+                            await message.reply_text(response, reply_markup=reply_markup)
 
                         smart_voice_sent = True
                         lead_manager.log_event("smart_voice_sent", user.id, {

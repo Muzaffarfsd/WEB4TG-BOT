@@ -394,12 +394,25 @@ async def generate_voice_response(text: str, use_cache: bool = False, voice_prof
     voice_text = numbers_to_words(voice_text)
     voice_text = apply_stress_marks(voice_text)
 
-    if len(voice_text) > 4500:
-        cut_pos = voice_text[:4500].rfind('.')
-        if cut_pos > 3000:
-            voice_text = voice_text[:cut_pos + 1]
+    if len(voice_text) > 2000:
+        _sentence_endings = ['.', '!', '?', '...']
+        _best_cut = -1
+        for _sep in _sentence_endings:
+            _pos = voice_text[:2000].rfind(_sep)
+            if _pos > _best_cut:
+                _best_cut = _pos
+        if _best_cut > 500:
+            voice_text = voice_text[:_best_cut + 1].strip()
         else:
-            voice_text = voice_text[:4500].rsplit(' ', 1)[0] + '.'
+            _space_pos = voice_text[:2000].rfind(' ')
+            if _space_pos > 500:
+                voice_text = voice_text[:_space_pos].strip()
+                if not voice_text.endswith(('.', '!', '?')):
+                    voice_text += '.'
+            else:
+                voice_text = voice_text[:2000].strip()
+                if not voice_text.endswith(('.', '!', '?')):
+                    voice_text += '.'
 
     if voice_profile and voice_profile in VOICE_PROFILES:
         profile = VOICE_PROFILES[voice_profile]
@@ -824,6 +837,7 @@ async def generate_voice_bridge(full_response: str, user_message: str, voice_pro
         "- НЕТ markdown, emoji, списков\n"
         "- Числа словами: 'сто пятьдесят тысяч'\n"
         "- WEB4TG Studio — по-английски\n"
+        "- ОБЯЗАТЕЛЬНО заканчивай ЗАКОНЧЕННЫМ предложением. Не обрывай мысль на полуслове.\n"
         "- Верни ТОЛЬКО текст для озвучки"
     )
 
@@ -1098,7 +1112,6 @@ async def voice_handler(update: Update, context: ContextTypes.DEFAULT_TYPE) -> N
             reply_markup = InlineKeyboardMarkup(keyboard_rows)
 
         voice_sent = False
-        use_bridge = len(response_text) > 500
         if config.elevenlabs_api_key:
             resp_len = len(response_text)
 
@@ -1106,14 +1119,9 @@ async def voice_handler(update: Update, context: ContextTypes.DEFAULT_TYPE) -> N
                 try:
                     await update.effective_chat.send_action(ChatAction.RECORD_VOICE)
 
-                    if use_bridge:
-                        voice_audio = await generate_voice_bridge(
-                            response_text, transcription, voice_profile=voice_profile_for_reply
-                        )
-                    else:
-                        voice_audio = await generate_voice_response(
-                            response_text, voice_profile=voice_profile_for_reply
-                        )
+                    voice_audio = await generate_voice_bridge(
+                        response_text, transcription, voice_profile=voice_profile_for_reply
+                    )
 
                     if not voice_audio or len(voice_audio) < 100:
                         raise RuntimeError(f"Voice audio too small: {len(voice_audio) if voice_audio else 0} bytes")
@@ -1123,12 +1131,12 @@ async def voice_handler(update: Update, context: ContextTypes.DEFAULT_TYPE) -> N
                     lead_manager.log_event("voice_reply_sent", user.id, {
                         "emotion": client_emotion,
                         "profile": voice_profile_for_reply,
-                        "mode": "bridge" if use_bridge else "full",
+                        "mode": "bridge",
                         "resp_len": resp_len,
                         "audio_size": len(voice_audio),
                         "attempt": _v_attempt + 1
                     })
-                    logger.info(f"Voice reply SENT to user {user.id} (emotion={client_emotion}, profile={voice_profile_for_reply}, mode={'bridge' if use_bridge else 'full'}, attempt={_v_attempt+1}, size={len(voice_audio)})")
+                    logger.info(f"Voice reply SENT to user {user.id} (emotion={client_emotion}, profile={voice_profile_for_reply}, mode=bridge, attempt={_v_attempt+1}, size={len(voice_audio)})")
                     break
                 except Exception as e:
                     logger.error(f"Voice reply attempt {_v_attempt+1} failed for user {user.id}: {type(e).__name__}: {e}")
@@ -1139,20 +1147,15 @@ async def voice_handler(update: Update, context: ContextTypes.DEFAULT_TYPE) -> N
                 logger.error(f"Voice reply FAILED for user {user.id} after 2 attempts, falling back to text")
 
         if voice_sent:
-            if use_bridge:
-                if len(response_text) > 4096:
-                    chunks = [response_text[i:i+4096] for i in range(0, len(response_text), 4096)]
-                    for i, chunk in enumerate(chunks):
-                        if i == len(chunks) - 1:
-                            await update.message.reply_text(chunk, reply_markup=reply_markup)
-                        else:
-                            await update.message.reply_text(chunk)
-                else:
-                    await update.message.reply_text(response_text, reply_markup=reply_markup)
+            if len(response_text) > 4096:
+                chunks = [response_text[i:i+4096] for i in range(0, len(response_text), 4096)]
+                for i, chunk in enumerate(chunks):
+                    if i == len(chunks) - 1:
+                        await update.message.reply_text(chunk, reply_markup=reply_markup)
+                    else:
+                        await update.message.reply_text(chunk)
             else:
-                text_summary = _make_text_summary(response_text)
-                summary_with_note = f"👆 Голосовое сообщение\n\n{text_summary}"
-                await update.message.reply_text(summary_with_note, reply_markup=reply_markup)
+                await update.message.reply_text(response_text, reply_markup=reply_markup)
         else:
             if len(response_text) > 4096:
                 chunks = [response_text[i:i+4096] for i in range(0, len(response_text), 4096)]

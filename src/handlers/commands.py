@@ -154,10 +154,14 @@ async def start_handler(update: Update, context: ContextTypes.DEFAULT_TYPE) -> N
 
     async def _send_voice_greeting_background():
       try:
+        await asyncio.sleep(2)
+
         from src.config import config as _voice_cfg
         if not _voice_cfg.elevenlabs_api_key:
             logger.warning(f"Voice greeting skipped for user {user.id}: ElevenLabs API key not configured")
             return
+
+        logger.info(f"Voice greeting: starting for user {user.id} (chat_id={chat_id})")
 
         from src.handlers.utils import _get_time_greeting
         time_greet = _get_time_greeting()
@@ -256,16 +260,21 @@ async def start_handler(update: Update, context: ContextTypes.DEFAULT_TYPE) -> N
                 )
             )
             voice_greeting = greet_response.text.strip() if greet_response.text else None
+            logger.info(f"Voice greeting: AI generated text for user {user.id}: {voice_greeting[:200] if voice_greeting else 'EMPTY'}")
 
             if voice_greeting:
                 import re as _re
-                voice_greeting = voice_greeting.strip('"').strip("'").strip('"').strip('"')
+                voice_greeting = voice_greeting.strip('"').strip("'").strip('\u201c').strip('\u201d')
                 voice_greeting = _re.sub(r'\*+', '', voice_greeting)
                 voice_greeting = _re.sub(r'#+\s*', '', voice_greeting)
                 voice_greeting = _re.sub(r'[\U0001F600-\U0001F64F\U0001F300-\U0001F5FF\U0001F680-\U0001F6FF]+', '', voice_greeting)
+                voice_greeting = voice_greeting.strip()
+                if not voice_greeting or len(voice_greeting) < 20:
+                    logger.warning(f"Voice greeting: AI text too short after cleanup ({len(voice_greeting) if voice_greeting else 0} chars), using fallback")
+                    voice_greeting = None
 
         except Exception as e:
-            logger.warning(f"AI greeting generation failed: {e}")
+            logger.warning(f"AI greeting generation failed: {e}", exc_info=True)
             voice_greeting = None
 
         if not voice_greeting:
@@ -307,7 +316,8 @@ async def start_handler(update: Update, context: ContextTypes.DEFAULT_TYPE) -> N
       except Exception as e:
         logger.error(f"Voice greeting background task CRASHED for user {user.id}: {type(e).__name__}: {e}", exc_info=True)
 
-    asyncio.create_task(_send_voice_greeting_background())
+    _voice_task = asyncio.create_task(_send_voice_greeting_background())
+    _voice_task.add_done_callback(lambda t: logger.error(f"Voice greeting task exception: {t.exception()}") if t.exception() else None)
 
 
 async def help_handler(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
