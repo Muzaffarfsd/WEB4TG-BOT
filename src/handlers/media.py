@@ -50,102 +50,57 @@ def _get_async_elevenlabs_client():
     return _elevenlabs_async_client
 
 
-VOICE_EMOTION_PROMPT = """Ты эксперт по подготовке текста для озвучки через ElevenLabs v3. Твоя главная цель — сделать речь НЕОТЛИЧИМОЙ от живого человека-консультанта.
+VOICE_ENHANCE_PROMPT = """Ты — Enhance-движок для ElevenLabs v3. Твоя задача: получить чистый текст и ТОЧЕЧНО расставить эмоциональные теги там, где они усилят речь.
 
-ПОЛНЫЙ КАТАЛОГ ТЕГОВ ElevenLabs v3 (ставятся в [квадратных скобках] перед фразой, НЕ произносятся):
+ПРИНЦИП: Как кнопка Enhance в ElevenLabs — анализируешь смысл каждой фразы и добавляешь ТОЛЬКО подходящий тег. Не все теги нужны в каждом тексте. Используй только то, что реально улучшит звучание.
 
-ЭМОЦИИ:
-  [happy] — радость, позитив: "[happy] Отличная новость — ваш проект готов!"
-  [excited] — восторг, энтузиазм: "[excited] Вы не поверите, какой результат!"
-  [sad] — грусть, сочувствие: "[sad] К сожалению, этот вариант не подойдёт..."
-  [angry] — жёсткость, напор (для акцентов): "[angry] Нет, так не пойдёт — надо лучше"
-  [nervous] — волнение, неуверенность: "[nervous] Ну... это довольно рискованно"
-  [frustrated] — досада: "[frustrated] Знаете, конкуренты часто обещают... и не делают"
-  [sorrowful] — сожаление: "[sorrowful] Жаль, что не обратились раньше"
-  [curious] — любопытство, интерес: "[curious] А расскажите подробнее — чем занимаетесь?"
-  [mischievous] — хитринка, игривость: "[mischievous] Ну... у нас есть один секрет"
+ШАГ 1 — АНАЛИЗ: Прочитай текст. Определи эмоциональные точки:
+- Где радость? Где грусть? Где уверенность? Где интрига?
+- Какой общий тон: деловой, дружеский, тёплый, серьёзный?
+- Есть ли смена настроения в тексте?
 
-РЕАКЦИИ И ЗВУКИ:
-  [laughs] — смех: "[laughs] Да, бывает такое!"
-  [giggles] — лёгкий смешок: "[giggles] Ну это классика"
-  [sighs] — вздох (размышление): "[sighs] Ну что ж... давайте разберёмся"
-  [gasps] — удивление: "[gasps] Ого... сто заказов за день?!"
-  [gulps] — глоток (напряжение): для драматической паузы
-  [clears throat] — прочищает горло: для смены темы
+ШАГ 2 — РАССТАНОВКА ТЕГОВ (только нужные, не все подряд):
+Теги в [квадратных скобках] перед фразой. НЕ произносятся. Управляют тоном голоса.
 
-СТИЛИ ПОДАЧИ:
-  [whispers] — шёпот, доверие: "[whispers] Между нами... есть скидка"
-  [shouts] — громко, акцент: для ударных фраз (ОСТОРОЖНО, редко)
-  [cheerfully] — весело, с улыбкой: "[cheerfully] Ну что, начнём?"
-  [flatly] — сухо, без эмоций: для контраста с эмоциональными фразами
-  [deadpan] — серьёзно: для фактов и цифр без приукрас
-  [playfully] — игриво: "[playfully] А хотите покажу фокус?"
-  [sarcastically] — с иронией: для мягкого юмора
-  [hesitant] — с сомнением: "[hesitant] Ну... можно попробовать, но..."
-  [resigned tone] — смирение: "[resigned tone] Ладно, давайте по-другому"
+ДОСТУПНЫЕ ТЕГИ:
+Эмоции: [happy] [excited] [sad] [nervous] [frustrated] [sorrowful] [curious] [mischievous]
+Реакции: [laughs] [giggles] [sighs] [gasps] [clears throat]
+Стили: [whispers] [cheerfully] [flatly] [deadpan] [playfully] [hesitant] [resigned tone]
+Настроение: [warm] [friendly] [calm] [confident]
 
-НАСТРОЕНИЕ И ХАРАКТЕР:
-  [warm] — тёплый, душевный: "[warm] Рад вас слышать!"
-  [friendly] — дружелюбный, открытый: "[friendly] Привет! Как дела?"
-  [calm] — спокойный, уравновешенный: "[calm] Давайте разберёмся без спешки"
-  [confident] — уверенный, экспертный: "[confident] Мы это делали десятки раз"
+КОГДА КАКОЙ ТЕГ (выбирай по смыслу, а не по списку):
+- Приветствие, тёплые слова → [warm] или [friendly]
+- Экспертное мнение, факты → [confident]
+- Хорошая новость, результат → [excited] или [happy]
+- Впечатляющая цифра → [gasps] перед ней
+- Вопрос с интересом → [curious]
+- Сочувствие, проблема → [calm] или [sighs]
+- Секрет, скидка, бонус → [whispers] или [mischievous]
+- Лёгкий юмор → [giggles] или [playfully]
+- Призыв к действию → [cheerfully]
+- Размышление, сомнение → [hesitant]
+- Контраст (было плохо → стало хорошо) → [flatly] потом [excited]
+- Серьёзные цифры без эмоций → [deadpan]
 
-ПРАВИЛА ИСПОЛЬЗОВАНИЯ ТЕГОВ:
-- Тег ставится ПЕРЕД фразой, которую он окрашивает: [excited] Текст фразы
-- Можно комбинировать: [warm] Привет... [excited] У нас новости!
-- Максимум 3-5 тегов на ответ — не каждое предложение
-- Тег действует до следующего тега или конца фразы
-- Теги НЕ произносятся — они управляют тоном голоса
+ПРАВИЛА:
+1. Максимум 2-4 тега на ответ до 300 символов, 3-5 на длинный
+2. НЕ ставь тег на каждое предложение — только на эмоциональные точки
+3. Первый тег — задаёт общий тон (обычно [warm], [friendly] или [confident])
+4. Между тегами должно быть 1-3 предложения без тегов — это нормально
+5. Если текст нейтральный/фактический — хватит 1-2 тегов
+6. НЕ МЕНЯЙ сам текст — только добавляй теги перед фразами
+7. Сохраняй "..." паузы и " — " тире — они важны для ритма
+8. Убери markdown (**, *, #, •, `) и emoji, замени переносы на ". "
+9. Числа оставь как есть
 
-ПРАВИЛА ЖИВОЙ РЕЧИ (приоритет — естественность):
-
-1. ДЫХАНИЕ И РИТМ:
-   - Разбивай длинные предложения на 8-12 слов — человек дышит между фразами
-   - "..." для микро-пауз (раздумье): "Ну вот... получается так"
-   - " — " для смены темы или акцента: "Магазин — это наш конёк"
-   - Чередуй длинные и короткие фразы для живого ритма
-
-2. РЕЧЕВЫЕ МАРКЕРЫ (2-3 на ответ):
-   - Начало: "Смотрите,", "Знаете что,", "Вот что скажу —"
-   - Переходы: "Кстати,", "И ещё момент —", "А вот тут интересно —"
-   - Раздумья: "Хм...", "Ну...", "Как бы это сказать..."
-   - Подтверждение: "Да-да,", "Точно,", "Именно,"
-
-3. ЭМОЦИОНАЛЬНАЯ ПАЛИТРА ПРОДАВЦА:
-   - Приветствие: [warm] или [friendly] — тёплый старт
-   - Представление: [confident] — "мы это умеем"
-   - Цены/факты: [confident] или [deadpan] — уверенность без эмоций
-   - Выгоды/кейсы: [excited] или [happy] — энтузиазм заразителен
-   - Удивительные результаты: [gasps] перед цифрой — "ого, вот это результат"
-   - Вопросы клиенту: [curious] — искренний интерес
-   - Возражения: [calm] → [warm] — спокойствие, потом забота
-   - Упущенная выгода: [sorrowful] или [frustrated] — "жаль что раньше не..."
-   - Секретные бонусы: [whispers] → [mischievous] — эффект доверия
-   - Юмор: [giggles] [playfully] — лёгкость
-   - Сложная тема: [sighs] [hesitant] — "ну... давайте разберёмся"
-   - Переход к действию: [cheerfully] — "ну что, начнём?"
-   - Финал разговора: [warm] — тёплое завершение
-
-4. ИНТОНАЦИОННЫЕ ПРИЁМЫ:
-   - Пауза перед цифрой: "[calm] И вот результат... [excited] плюс сорок процентов!"
-   - Контраст: "[flatly] Конкуренты обещают за месяц. [confident] Мы делаем за две недели."
-   - Шёпот → громко: "[whispers] Между нами... [excited] это лучшее предложение на рынке!"
-   - Перечисление: "Каталог, корзина, оплата — [cheerfully] всё в одном!"
-
-5. ЧИСТКА ТЕКСТА:
-   - Убери ВСЮ markdown разметку: **, *, #, •, `, _
-   - Замени переносы строк на паузы (". " или ", ")
-   - Убери emoji
-   - НЕ удаляй теги в квадратных скобках — они нужны для озвучки!
-   - Числа пиши словами или с пробелами (150 000)
-
-Верни ТОЛЬКО обработанный текст с тегами.
+Верни ТОЛЬКО текст с расставленными тегами. Без комментариев.
 
 Текст:
 """
 
 VOICE_CONTEXT_INSTRUCTION = """
-[ГОЛОСОВОЙ ФОРМАТ] Клиент общается голосовыми. Твой ответ ОЗВУЧАТ через ElevenLabs v3 — пиши КАК ГОВОРИШЬ вслух.
+[ГОЛОСОВОЙ ФОРМАТ] Клиент общается голосовыми. Твой ответ ОЗВУЧАТ — пиши КАК ГОВОРИШЬ вслух.
+Эмоции и интонации будут добавлены автоматически — тебе НЕ нужно ставить теги вроде [warm] или [excited]. Просто пиши живой текст, остальное сделает система.
 
 ГЛАВНОЕ — ты живой консультант Алекс, а не текстовый бот.
 
@@ -153,26 +108,6 @@ VOICE_CONTEXT_INSTRUCTION = """
 - СТРОГО 300-500 символов (20-30 секунд). Это МАКСИМУМ.
 - Одна ключевая мысль на ответ. Не пытайся уместить всё.
 - Если тема сложная — скажи "Могу подробнее рассказать, если интересно".
-
-ЭМОЦИОНАЛЬНЫЕ ТЕГИ ElevenLabs v3 (ОБЯЗАТЕЛЬНО используй 2-4 за ответ):
-Теги в [квадратных скобках] управляют тоном голоса, не произносятся.
-Ставь тег ПЕРЕД фразой, которую он окрашивает.
-
-Какой тег когда:
-- Начало ответа: [warm] [friendly] [cheerfully] — тёплый старт
-- Факты и цены: [confident] [deadpan] — уверенность
-- Кейсы и выгоды: [excited] [happy] — энтузиазм
-- Удивительные цифры: [gasps] — "ого!" перед результатом
-- Вопросы клиенту: [curious] — искренний интерес
-- Возражения: [calm] потом [warm] — спокойствие и забота
-- Сочувствие: [sighs] [sorrowful] — понимание проблемы
-- Секреты/бонусы: [whispers] [mischievous] — доверие
-- Юмор: [giggles] [playfully] [laughs] — лёгкость
-- Сложная тема: [hesitant] [sighs] — размышление
-- Призыв к действию: [cheerfully] [excited] — энергия
-- Финал: [warm] [friendly] — тёплое завершение
-
-Пример: "[warm] Привет! [curious] Расскажите, чем занимаетесь? [excited] У нас как раз есть кое-что интересное..."
 
 СТИЛЬ РЕЧИ:
 - Никакого markdown, emoji, списков с тире или звёздочками
@@ -185,19 +120,23 @@ VOICE_CONTEXT_INSTRUCTION = """
 - Переходы: "Кстати,", "И знаете что —"
 - Эмпатия: "Да, понимаю,", "Логичный вопрос,"
 - Паузы через "..." и " — " для естественного дыхания
+- Чередуй длинные и короткие фразы: "Магазин за сто пятьдесят. Семь-десять дней. Готово."
 
 ЧЕГО ИЗБЕГАТЬ:
 - Шаблонных фраз: "Рад помочь!", "Отличный выбор!"
 - Списков (1. 2. 3.) — это текстовый формат
 - Формальных оборотов: "В рамках нашего сотрудничества..."
-- Больше 5 тегов на ответ — перебор
-- Тегов на КАЖДОЕ предложение — только на ключевые моменты
 """
 
 
-async def analyze_emotions_and_prepare_text(text: str) -> str:
-    if len(text) < 100:
+async def enhance_voice_text(text: str) -> str:
+    existing_tags = re.findall(r'\[\w[\w\s]*?\]', text)
+    if len(existing_tags) >= 2:
+        logger.debug(f"Text already has {len(existing_tags)} tags, skipping enhance")
         return text
+
+    if len(text) < 50:
+        return _auto_enhance_short(text)
 
     from google.genai import types
     from src.config import get_gemini_client
@@ -208,17 +147,84 @@ async def analyze_emotions_and_prepare_text(text: str) -> str:
         response = await asyncio.to_thread(
             client.models.generate_content,
             model=config.model_name,
-            contents=[VOICE_EMOTION_PROMPT + text],
+            contents=[VOICE_ENHANCE_PROMPT + text],
             config=types.GenerateContentConfig(
                 max_output_tokens=2000,
-                temperature=0.3
+                temperature=0.2
             )
         )
 
         if response.text:
-            return response.text.strip()
+            enhanced = response.text.strip()
+            enhanced = enhanced.strip('"').strip("'")
+            enhanced = re.sub(r'\*+', '', enhanced)
+            enhanced = re.sub(r'#+\s*', '', enhanced)
+
+            enhanced_tags = re.findall(r'\[\w[\w\s]*?\]', enhanced)
+            valid_tags = {
+                '[happy]', '[excited]', '[sad]', '[angry]', '[nervous]',
+                '[frustrated]', '[sorrowful]', '[curious]', '[mischievous]',
+                '[laughs]', '[giggles]', '[sighs]', '[gasps]', '[gulps]',
+                '[clears throat]', '[whispers]', '[shouts]', '[cheerfully]',
+                '[flatly]', '[deadpan]', '[playfully]', '[sarcastically]',
+                '[hesitant]', '[resigned tone]', '[warm]', '[friendly]',
+                '[calm]', '[confident]'
+            }
+            bad_tags = [t for t in enhanced_tags if t not in valid_tags]
+            for bt in bad_tags:
+                enhanced = enhanced.replace(bt, '')
+
+            tag_count = len(re.findall(r'\[\w[\w\s]*?\]', enhanced))
+            text_len = len(re.sub(r'\[\w[\w\s]*?\]\s*', '', enhanced))
+            max_tags = 3 if text_len < 300 else 5
+            if tag_count > max_tags:
+                logger.debug(f"Enhance produced {tag_count} tags, capping at {max_tags}")
+                found = 0
+                result = []
+                i = 0
+                while i < len(enhanced):
+                    match = re.match(r'\[(\w[\w\s]*?)\]', enhanced[i:])
+                    if match:
+                        found += 1
+                        if found <= max_tags:
+                            result.append(match.group(0))
+                        i += len(match.group(0))
+                    else:
+                        result.append(enhanced[i])
+                        i += 1
+                enhanced = ''.join(result)
+
+            enhanced = re.sub(r'\s{2,}', ' ', enhanced).strip()
+            final_tag_count = len(re.findall(r'\[\w[\w\s]*?\]', enhanced))
+            logger.info(f"Enhance: {len(existing_tags)} -> {final_tag_count} tags")
+            return enhanced
     except Exception as e:
-        logger.error(f"Emotion analysis error: {e}")
+        logger.error(f"Voice enhance error: {e}")
+
+    return _auto_enhance_short(text)
+
+
+def _auto_enhance_short(text: str) -> str:
+    lower = text.lower()
+
+    if any(w in lower for w in ['привет', 'здравствуй', 'добрый', 'доброе', 'доброй']):
+        if not text.startswith('['):
+            return f'[warm] {text}'
+
+    if any(w in lower for w in ['отлично', 'замечательно', 'круто', 'супер', 'ура', 'класс']):
+        if not text.startswith('['):
+            return f'[excited] {text}'
+
+    if any(w in lower for w in ['понимаю', 'сочувств', 'к сожалению', 'жаль']):
+        if not text.startswith('['):
+            return f'[calm] {text}'
+
+    if any(w in lower for w in ['стоимость', 'цена', 'рублей', 'тысяч', 'гарантия']):
+        if not text.startswith('['):
+            return f'[confident] {text}'
+
+    if not text.startswith('['):
+        return f'[friendly] {text}'
 
     return text
 
@@ -381,7 +387,7 @@ async def generate_voice_response(text: str, use_cache: bool = False, voice_prof
             logger.debug("Using cached voice response")
             return _voice_cache[cache_key]
 
-    voice_text = await analyze_emotions_and_prepare_text(clean_text)
+    voice_text = await enhance_voice_text(clean_text)
 
     voice_text = naturalize_speech(voice_text)
     voice_text = expand_abbreviations(voice_text)
