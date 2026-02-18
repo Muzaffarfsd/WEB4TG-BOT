@@ -905,8 +905,16 @@ async def generate_and_send_kp(
     try:
         if ai_text is None:
             ai_text = ""
+        if not isinstance(ai_text, str):
+            ai_text = str(ai_text)
+        if not isinstance(client_name, str):
+            client_name = str(client_name) if client_name else ""
 
-        logger.info(f"Building KP PDF: client={client_name}, ai_text_len={len(ai_text)}, discount={discount_pct}%")
+        logger.info(
+            f"Building KP PDF: client={client_name!r}, ai_text_len={len(ai_text)}, "
+            f"discount={discount_pct}%, brief_keys={list(brief_answers.keys())}, "
+            f"font={FONT}, font_dirs_checked={_FONT_DIRS}"
+        )
 
         pdf_bytes = build_kp_pdf(
             brief_answers=brief_answers,
@@ -936,7 +944,38 @@ async def generate_and_send_kp(
         return True
 
     except Exception as e:
-        logger.error(f"Failed to generate/send KP PDF: {e}", exc_info=True)
+        logger.error(
+            f"Failed to generate/send KP PDF: {type(e).__name__}: {e} | "
+            f"client={client_name!r}, ai_text_len={len(ai_text) if ai_text else 0}, "
+            f"discount={discount_pct}, brief={brief_answers}, font={FONT}",
+            exc_info=True
+        )
+
+        try:
+            logger.info("Retrying KP PDF without AI text (fallback)")
+            fallback_pdf = build_kp_pdf(
+                brief_answers=brief_answers,
+                client_name=client_name if client_name else "",
+                ai_text="",
+                discount_pct=discount_pct,
+            )
+            project_type = brief_answers.get("project_type", "project")
+            safe_name = project_type.replace(" ", "_").replace("/", "_")
+            filename = f"KP_WEB4TG_{safe_name}.pdf"
+            await context.bot.send_document(
+                chat_id=chat_id,
+                document=InputFile(io.BytesIO(fallback_pdf), filename=filename),
+                caption=(
+                    "\ud83d\udcc4 <b>\u0412\u0430\u0448\u0435 \u043a\u043e\u043c\u043c\u0435\u0440\u0447\u0435\u0441\u043a\u043e\u0435 \u043f\u0440\u0435\u0434\u043b\u043e\u0436\u0435\u043d\u0438\u0435</b>\n\n"
+                    "\u0414\u043e\u043a\u0443\u043c\u0435\u043d\u0442 \u0441\u043e\u0434\u0435\u0440\u0436\u0438\u0442 \u043e\u043f\u0438\u0441\u0430\u043d\u0438\u0435 \u043f\u0440\u043e\u0435\u043a\u0442\u0430, \u0441\u0442\u043e\u0438\u043c\u043e\u0441\u0442\u044c \u0438 \u0441\u0440\u043e\u043a\u0438."
+                ),
+                parse_mode="HTML",
+            )
+            logger.info(f"Fallback KP PDF sent to user {update.effective_user.id}")
+            return True
+        except Exception as fallback_err:
+            logger.error(f"Fallback KP PDF also failed: {type(fallback_err).__name__}: {fallback_err}", exc_info=True)
+
         try:
             await context.bot.send_message(
                 chat_id=chat_id,
