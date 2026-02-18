@@ -446,68 +446,8 @@ async def promo_off_handler(update: Update, context: ContextTypes.DEFAULT_TYPE) 
 
 
 async def generate_daily_digest(bot, admin_chat_id: int) -> None:
-    """Generate and send daily digest to admin."""
-    try:
-        stats = lead_manager.get_stats()
-        lead_analytics = lead_manager.get_analytics_stats()
-
-        funnel_text = analytics.format_stats_message(1)
-
-        total_users = len(broadcast_manager.get_user_ids('all'))
-
-        stars_today = 0
-        stars_amount = 0
-        try:
-            from src.database import execute_one, DATABASE_URL
-            if DATABASE_URL:
-                result = execute_one(
-                    "SELECT COUNT(*) as cnt, COALESCE(SUM(amount), 0) as total FROM star_payments WHERE paid_at > NOW() - INTERVAL '24 hours'"
-                )
-                if result:
-                    stars_today = result[0] if result[0] else 0
-                    stars_amount = result[1] if result[1] else 0
-        except Exception:
-            stars_today = 0
-            stars_amount = 0
-
-        followups_sent = 0
-        try:
-            from src.followup import follow_up_manager
-            fu_stats = follow_up_manager.get_stats()
-            followups_sent = fu_stats.get("sent_today", 0) if fu_stats else 0
-        except Exception:
-            pass
-
-        text = f"""📊 <b>Ежедневная сводка</b>
-
-<b>За последние 24 часа:</b>
-👥 Новых пользователей: {lead_analytics.get('today_users', 0)}
-💬 Сообщений: {lead_analytics.get('total_messages', 0)}
-🎙 Голосовых: {lead_analytics.get('voice_messages', 0)}
-
-<b>Лиды:</b>
-🆕 Новые: {stats.get('new', 0)}
-📞 В работе: {stats.get('contacted', 0)}
-✅ Квалифицированы: {stats.get('qualified', 0)}
-💰 Конвертированы: {stats.get('converted', 0)}
-📈 Всего: {stats.get('total', 0)}
-
-<b>Stars оплаты:</b>
-💫 За 24ч: {stars_today} ({stars_amount} ⭐)
-
-<b>Автоматизация:</b>
-📨 Follow-up отправлено: {followups_sent}
-
-<b>База:</b>
-👥 Всего пользователей: {total_users}
-📅 За неделю: {lead_analytics.get('week_users', 0)}
-
-<i>Автоматический отчёт • каждый день в 09:00</i>"""
-
-        await bot.send_message(chat_id=admin_chat_id, text=text, parse_mode="HTML")
-        logger.info(f"Daily digest sent to admin {admin_chat_id}")
-    except Exception as e:
-        logger.error(f"Failed to send daily digest: {e}")
+    from src.daily_digest import generate_daily_digest as _digest_v2
+    await _digest_v2(bot, admin_chat_id)
 
 
 @admin_required

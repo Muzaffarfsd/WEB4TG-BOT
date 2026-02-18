@@ -49,6 +49,14 @@ The bot is developed in Python, leveraging Telegram Bot API 9.4. It features a m
 - **Guardrails**: System prompt rules to prevent unauthorized promises, response validation, and confidence scoring.
 
 ## Recent Changes
+- **2026-02-18**: Phase 6 — Daily Digest v2 (12 секций)
+  - NEW: `src/daily_digest.py` — полная переработка ежедневной сводки для админа
+  - 12 секций: обзор, propensity pipeline, воронка с конверсиями, drop-off анализ, горячие лиды (топ-5), AI самообучение (техники+конверсия), revenue/LTV/ARPU, proactive engagement, follow-up, vision sales, A/B тесты, тренд vs вчера
+  - Авто-сплит: при >4000 символов разбивает на 2 сообщения (Telegram лимит)
+  - Graceful degradation: каждая секция независима, пропускается при отсутствии данных
+  - Тренд-анализ: дельты vs вчера с процентами и стрелками (📈/📉)
+  - Горячие лиды: топ-5 клиентов с propensity+lead score для немедленного контакта
+  - REPLACED: старый generate_daily_digest в admin.py (6 метрик → 12 секций)
 - **2026-02-18**: Phase 5 — Real-time Manager Coaching
   - NEW: `src/manager_coaching.py` — generates comprehensive coaching briefings for managers
   - 9 sections: profile, BANT, funnel/propensity, objections, negotiation style, red flags, strategy, conversation, next actions

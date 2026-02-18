@@ -29,6 +29,7 @@ def check_status():
         ("src.smart_buttons", "Smart Buttons"),
         ("src.feedback_loop", "Self-Learning Loop v2"),
         ("src.manager_coaching", "Manager Coaching"),
+        ("src.daily_digest", "Daily Digest v2 (12 sections)"),
         ("src.tool_handlers", "Tool Handlers (17 tools)"),
         ("src.handlers", "Handlers"),
     ]
@@ -58,6 +59,8 @@ def check_status():
     run_learning_demo()
     print("\n")
     run_coaching_demo()
+    print("\n")
+    run_digest_demo()
 
     print("\n" + "=" * 60)
     print("  Ready for Railway deployment (python bot.py)")
@@ -489,6 +492,11 @@ def run_coaching_demo():
     print("\n" + "-" * 60)
     print("  MANAGER COACHING: ALL SYSTEMS OPERATIONAL")
     print("-" * 60)
+
+
+def run_digest_demo():
+    from src.daily_digest import format_digest_preview
+    print(format_digest_preview())
 
 
 if __name__ == "__main__":
