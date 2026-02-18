@@ -153,6 +153,12 @@ async def start_handler(update: Update, context: ContextTypes.DEFAULT_TYPE) -> N
     bot_instance = context.bot
 
     async def _send_voice_greeting_background():
+      try:
+        from src.config import config as _voice_cfg
+        if not _voice_cfg.elevenlabs_api_key:
+            logger.warning(f"Voice greeting skipped for user {user.id}: ElevenLabs API key not configured")
+            return
+
         from src.handlers.utils import _get_time_greeting
         time_greet = _get_time_greeting()
         time_word = time_greet["ru"]
@@ -280,15 +286,26 @@ async def start_handler(update: Update, context: ContextTypes.DEFAULT_TYPE) -> N
 
         greeting_profile = "greeting"
 
-        try:
-            await bot_instance.send_chat_action(chat_id=chat_id, action=ChatAction.RECORD_VOICE)
-            voice_audio = await generate_voice_response(voice_greeting, use_cache=False, voice_profile=greeting_profile)
-            await bot_instance.send_voice(chat_id=chat_id, voice=voice_audio)
-            ab_testing.track_event(user.id, "welcome_voice", "voice_sent")
-            logger.info(f"Sent voice greeting to user {user.id} (period={time_period})")
-        except Exception as e:
-            ab_testing.track_event(user.id, "welcome_voice", "voice_failed")
-            logger.warning(f"Failed to send voice greeting: {e}")
+        for _attempt in range(2):
+            try:
+                await bot_instance.send_chat_action(chat_id=chat_id, action=ChatAction.RECORD_VOICE)
+                voice_audio = await generate_voice_response(voice_greeting, use_cache=False, voice_profile=greeting_profile)
+                if not voice_audio or len(voice_audio) < 100:
+                    raise RuntimeError(f"Voice audio too small: {len(voice_audio) if voice_audio else 0} bytes")
+                await bot_instance.send_voice(chat_id=chat_id, voice=voice_audio)
+                ab_testing.track_event(user.id, "welcome_voice", "voice_sent")
+                logger.info(f"Voice greeting SENT to user {user.id} (period={time_period}, attempt={_attempt+1}, size={len(voice_audio)} bytes)")
+                return
+            except Exception as e:
+                logger.error(f"Voice greeting attempt {_attempt+1} failed for user {user.id}: {type(e).__name__}: {e}")
+                if _attempt == 0:
+                    await asyncio.sleep(1)
+
+        ab_testing.track_event(user.id, "welcome_voice", "voice_failed")
+        logger.error(f"Voice greeting FAILED for user {user.id} after 2 attempts")
+
+      except Exception as e:
+        logger.error(f"Voice greeting background task CRASHED for user {user.id}: {type(e).__name__}: {e}", exc_info=True)
 
     asyncio.create_task(_send_voice_greeting_background())
 

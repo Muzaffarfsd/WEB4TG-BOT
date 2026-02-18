@@ -1076,28 +1076,79 @@ async def voice_handler(update: Update, context: ContextTypes.DEFAULT_TYPE) -> N
         except asyncio.CancelledError:
             pass
 
-        voice_sent = False
-        if config.elevenlabs_api_key:
-            try:
-                await update.effective_chat.send_action(ChatAction.RECORD_VOICE)
-                voice_response = await generate_voice_response(response_text)
-                await update.message.reply_voice(voice=voice_response)
-                voice_sent = True
-                lead_manager.log_event("voice_reply_sent", user.id)
-            except Exception as e:
-                logger.error(f"ElevenLabs TTS error ({type(e).__name__}): {e}")
+        _emotion_profile_map = {
+            "confident": "factual",
+            "hesitant": "empathy",
+            "frustrated": "empathy",
+            "excited": "excited",
+            "neutral": "default",
+            "friendly": "greeting",
+            "rushed": "factual",
+            "calm": "default",
+        }
+        voice_profile_for_reply = _emotion_profile_map.get(client_emotion, "default")
+
         reply_markup = None
         if ai_buttons:
             keyboard_rows = [[InlineKeyboardButton(text, callback_data=cb)] for text, cb in ai_buttons]
             reply_markup = InlineKeyboardMarkup(keyboard_rows)
 
-        text_summary = _make_text_summary(response_text)
+        voice_sent = False
+        use_bridge = len(response_text) > 500
+        if config.elevenlabs_api_key:
+            resp_len = len(response_text)
+
+            for _v_attempt in range(2):
+                try:
+                    await update.effective_chat.send_action(ChatAction.RECORD_VOICE)
+
+                    if use_bridge:
+                        voice_audio = await generate_voice_bridge(
+                            response_text, transcription, voice_profile=voice_profile_for_reply
+                        )
+                    else:
+                        voice_audio = await generate_voice_response(
+                            response_text, voice_profile=voice_profile_for_reply
+                        )
+
+                    if not voice_audio or len(voice_audio) < 100:
+                        raise RuntimeError(f"Voice audio too small: {len(voice_audio) if voice_audio else 0} bytes")
+
+                    await update.message.reply_voice(voice=voice_audio)
+                    voice_sent = True
+                    lead_manager.log_event("voice_reply_sent", user.id, {
+                        "emotion": client_emotion,
+                        "profile": voice_profile_for_reply,
+                        "mode": "bridge" if use_bridge else "full",
+                        "resp_len": resp_len,
+                        "audio_size": len(voice_audio),
+                        "attempt": _v_attempt + 1
+                    })
+                    logger.info(f"Voice reply SENT to user {user.id} (emotion={client_emotion}, profile={voice_profile_for_reply}, mode={'bridge' if use_bridge else 'full'}, attempt={_v_attempt+1}, size={len(voice_audio)})")
+                    break
+                except Exception as e:
+                    logger.error(f"Voice reply attempt {_v_attempt+1} failed for user {user.id}: {type(e).__name__}: {e}")
+                    if _v_attempt == 0:
+                        await asyncio.sleep(1)
+
+            if not voice_sent:
+                logger.error(f"Voice reply FAILED for user {user.id} after 2 attempts, falling back to text")
+
         if voice_sent:
-            summary_with_note = f"👆 Голосовое сообщение\n\n{text_summary}"
-            if reply_markup:
-                await update.message.reply_text(summary_with_note, reply_markup=reply_markup)
+            if use_bridge:
+                if len(response_text) > 4096:
+                    chunks = [response_text[i:i+4096] for i in range(0, len(response_text), 4096)]
+                    for i, chunk in enumerate(chunks):
+                        if i == len(chunks) - 1:
+                            await update.message.reply_text(chunk, reply_markup=reply_markup)
+                        else:
+                            await update.message.reply_text(chunk)
+                else:
+                    await update.message.reply_text(response_text, reply_markup=reply_markup)
             else:
-                await update.message.reply_text(summary_with_note)
+                text_summary = _make_text_summary(response_text)
+                summary_with_note = f"👆 Голосовое сообщение\n\n{text_summary}"
+                await update.message.reply_text(summary_with_note, reply_markup=reply_markup)
         else:
             if len(response_text) > 4096:
                 chunks = [response_text[i:i+4096] for i in range(0, len(response_text), 4096)]
@@ -1109,7 +1160,7 @@ async def voice_handler(update: Update, context: ContextTypes.DEFAULT_TYPE) -> N
             else:
                 await update.message.reply_text(response_text, reply_markup=reply_markup)
 
-        logger.info(f"User {user.id}: voice processed (emotion={client_emotion}, voice_reply={'yes' if voice_sent else 'no'}, voice_msg#{context.user_data.get('voice_message_count', 0)})")
+        logger.info(f"User {user.id}: voice processed (emotion={client_emotion}, profile={voice_profile_for_reply}, voice_reply={'yes' if voice_sent else 'no'}, voice_msg#{context.user_data.get('voice_message_count', 0)})")
 
         _run_voice_post_processing(user.id, transcription, session)
 
