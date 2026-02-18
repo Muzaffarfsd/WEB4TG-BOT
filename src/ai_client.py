@@ -415,6 +415,18 @@ class AIClient:
                     full_text = result
 
                 if stream_error[0] and not full_text:
+                    if model != config.fast_model_name and attempt == max_retries:
+                        logger.warning(f"Pro model failed after {max_retries+1} attempts, cascading to Flash: {stream_error[0]}")
+                        model = config.fast_model_name
+                        if gen_config.thinking_config:
+                            gen_config = types.GenerateContentConfig(
+                                system_instruction=gen_config.system_instruction,
+                                max_output_tokens=gen_config.max_output_tokens,
+                                temperature=gen_config.temperature,
+                            )
+                        attempt = -1
+                        max_retries = 1
+                        continue
                     if is_rate_limit_error(stream_error[0]) and attempt < max_retries:
                         delay = 0.5 * (2 ** attempt)
                         logger.info(f"Stream rate limited, retrying in {delay}s (attempt {attempt+1}/{max_retries+1})")
@@ -499,6 +511,9 @@ class AIClient:
                     user_message = parts[0]
                 break
         
+        current_model = model
+        current_config = gen_config
+
         @retry(
             stop=stop_after_attempt(max_retries),
             wait=wait_exponential(multiplier=retry_delay, min=0.5, max=10),
@@ -508,9 +523,9 @@ class AIClient:
         async def _generate():
             response = await asyncio.to_thread(
                 self._client.models.generate_content,
-                model=model,
+                model=current_model,
                 contents=messages,  # type: ignore[arg-type]
-                config=gen_config
+                config=current_config
             )
             return response
         
@@ -530,28 +545,29 @@ class AIClient:
             error_type = type(e).__name__
             error_msg = str(e)
             
-            if is_rate_limit_error(e):
-                logger.warning(f"Gemini rate limit hit: {error_type}: {error_msg}")
-                return self._get_contextual_fallback(user_message)
-            elif "timeout" in error_msg.lower() or "connect" in error_msg.lower():
-                logger.error(f"Gemini connection error: {error_type}: {error_msg}")
+            if current_model != config.fast_model_name:
+                logger.warning(f"Pro model failed ({error_type}), cascading to Flash")
+                current_model = config.fast_model_name
+                current_config = types.GenerateContentConfig(
+                    system_instruction=current_config.system_instruction,
+                    max_output_tokens=current_config.max_output_tokens,
+                    temperature=current_config.temperature,
+                )
                 try:
-                    logger.info("Auto-retrying after timeout...")
-                    response = await asyncio.to_thread(
-                        self._client.models.generate_content,
-                        model=model,
-                        contents=messages,  # type: ignore[arg-type]
-                        config=gen_config
-                    )
+                    response = await _generate()
                     if response.text:
                         is_valid, cleaned = validate_response(response.text)
                         return check_response_quality(cleaned, user_message)
-                except Exception:
-                    pass
-                return self._get_contextual_fallback(user_message)
+                except Exception as fallback_e:
+                    logger.error(f"Flash fallback also failed: {fallback_e}")
+
+            if is_rate_limit_error(e):
+                logger.warning(f"Gemini rate limit hit: {error_type}: {error_msg}")
+            elif "timeout" in error_msg.lower() or "connect" in error_msg.lower():
+                logger.error(f"Gemini connection error: {error_type}: {error_msg}")
             else:
                 logger.error(f"Gemini request failed: {error_type}: {error_msg}")
-                return self._get_contextual_fallback(user_message)
+            return self._get_contextual_fallback(user_message)
     
     async def generate_response_with_tools(
         self,

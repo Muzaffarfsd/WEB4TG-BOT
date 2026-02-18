@@ -10,10 +10,10 @@ class Config:
     elevenlabs_api_key: Optional[str] = None
     elevenlabs_voice_id: str = "rQOBu7YxCDxGiFdTm28w"
     
-    model_name: str = "gemini-2.5-flash"
-    fast_model_name: str = "gemini-2.5-flash"
-    thinking_model_name: str = "gemini-2.5-pro"
-    audio_model_name: str = "gemini-2.5-flash"
+    model_name: str = "gemini-3-flash-preview"
+    fast_model_name: str = "gemini-3-flash-preview"
+    thinking_model_name: str = "gemini-3-pro-preview"
+    audio_model_name: str = "gemini-3-flash-preview"
     max_tokens: int = 2000
     temperature: float = 0.45
     temperature_creative: float = 0.65

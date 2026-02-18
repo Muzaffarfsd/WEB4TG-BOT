@@ -621,7 +621,25 @@ async def message_handler(update: Update, context: ContextTypes.DEFAULT_TYPE) ->
     )
     
     try:
-        thinking_level = "high" if len(user_message) > 200 else "medium"
+        thinking_level = "medium"
+        if len(user_message) > 200:
+            thinking_level = "high"
+
+        propensity_val = context_signals.get("propensity", "")
+        funnel_val = context_signals.get("funnel_stage", "")
+        has_objection = "objection" in context_signals
+        has_buying = "buying_signal" in context_signals
+
+        if has_objection or has_buying:
+            thinking_level = "high"
+            if not query_context:
+                query_context = "objection" if has_objection else "sales"
+        elif "ГОРЯЧИЙ" in propensity_val or funnel_val in ("decision", "negotiation"):
+            thinking_level = "high"
+            if not query_context or query_context in ("faq", "simple"):
+                query_context = "sales"
+        elif funnel_val in ("consideration",) and "ТЁПЛЫЙ" in propensity_val:
+            thinking_level = "high"
 
         response = None
 
