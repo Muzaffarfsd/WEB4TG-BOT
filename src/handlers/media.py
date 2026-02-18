@@ -655,65 +655,204 @@ EMOTION_TO_VOICE_STYLE = {
 
 
 VOICE_SALES_TRIGGERS = {
-    "price_discussion": ["цена", "стоимость", "сколько стоит", "бюджет", "дорого", "дешевле", "скидк"],
+    "price_discussion": ["цена", "стоимость", "сколько стоит", "стоит", "бюджет", "дорого", "дешевле", "скидк", "прайс", "тариф"],
     "objection": ["не уверен", "подумаю", "дорого", "потом", "не знаю", "сомневаюсь", "может быть"],
     "decision": ["готов", "хочу заказать", "давайте", "начинаем", "оплата", "договор", "когда начнём"],
     "closing": ["оплатить", "реквизит", "счёт", "предоплат", "договор подпис"],
 }
 
+VOICE_SENTIMENT_TRIGGERS = {
+    "frustrated": ["не работает", "плохо", "ужас", "разочаров", "обман", "жалоба", "проблем", "зачем"],
+    "excited": ["круто", "отлично", "нравится", "класс", "здорово", "супер", "впечатл", "вау"],
+    "rushed": ["быстро", "некогда", "кратко", "в двух словах", "короче", "суть"],
+}
 
-PROACTIVE_VOICE_COOLDOWN = 600
-PROACTIVE_VOICE_MAX_PER_SESSION = 3
+SMART_VOICE_COOLDOWN = 300
+SMART_VOICE_MAX_PER_SESSION = 5
 
 
-def should_send_proactive_voice(user_id: int, message_text: str, context_user_data: dict) -> bool:
+def should_send_smart_voice(user_id: int, message_text: str, context_user_data: dict, response_text: str = "") -> dict:
+    """Smart voice strategy — decides WHEN and HOW to send voice.
+    
+    Returns dict:
+      {"send": False} — text only
+      {"send": True, "mode": "full", "profile": "..."} — full voice response
+      {"send": True, "mode": "bridge", "profile": "..."} — short voice bridge + text details
+    """
     import time as _time
 
+    result_no = {"send": False}
+
     if not config.elevenlabs_api_key:
-        return False
-    if not context_user_data.get('prefers_voice'):
-        return False
-    if context_user_data.get('voice_message_count', 0) < 1:
-        return False
+        return result_no
 
-    proactive_count = context_user_data.get('proactive_voice_count', 0)
-    if proactive_count >= PROACTIVE_VOICE_MAX_PER_SESSION:
-        return False
+    voice_count = context_user_data.get('smart_voice_count', 0)
+    if voice_count >= SMART_VOICE_MAX_PER_SESSION:
+        return result_no
 
-    last_voice_ts = context_user_data.get('last_proactive_voice_ts', 0)
-    if _time.time() - last_voice_ts < PROACTIVE_VOICE_COOLDOWN:
-        return False
+    last_voice_ts = context_user_data.get('last_smart_voice_ts', 0)
+    if _time.time() - last_voice_ts < SMART_VOICE_COOLDOWN:
+        return result_no
 
-    triggered = False
     lower = message_text.lower()
-    for trigger_words in VOICE_SALES_TRIGGERS.values():
-        if any(w in lower for w in trigger_words):
-            triggered = True
+    resp_len = len(response_text)
+
+    trigger_type = None
+    voice_profile = "default"
+    priority = 0
+
+    for sentiment, words in VOICE_SENTIMENT_TRIGGERS.items():
+        if any(w in lower for w in words):
+            if sentiment == "frustrated":
+                voice_profile = "empathy"
+                trigger_type = "sentiment_frustrated"
+                priority = 90
+            elif sentiment == "excited":
+                voice_profile = "excited"
+                trigger_type = "sentiment_excited"
+                priority = 70
+            elif sentiment == "rushed":
+                trigger_type = "sentiment_rushed"
+                priority = 60
             break
 
-    if not triggered:
+    _sales_priority_map = {
+        "closing": ("closing", "greeting", 100),
+        "decision": ("decision", "excited", 95),
+        "objection": ("objection", "empathy", 85),
+        "price_discussion": ("price", "factual", 80),
+    }
+    if not trigger_type or priority < 80:
+        best_sales = None
+        for category, words in VOICE_SALES_TRIGGERS.items():
+            if any(w in lower for w in words):
+                cat_trigger, cat_profile, cat_prio = _sales_priority_map.get(category, (category, "default", 70))
+                if not best_sales or cat_prio > best_sales[2]:
+                    best_sales = (cat_trigger, cat_profile, cat_prio)
+        if best_sales and best_sales[2] > priority:
+            trigger_type, voice_profile, priority = best_sales
+
+    if not trigger_type or priority < 70:
         try:
             from src.context_builder import detect_funnel_stage
             stage = detect_funnel_stage(user_id, message_text, 0)
             if stage in ("decision", "action"):
-                triggered = True
+                if not trigger_type:
+                    trigger_type = f"funnel_{stage}"
+                    voice_profile = "excited" if stage == "action" else "default"
+                priority = max(priority, 75)
         except Exception:
             pass
 
-    if not triggered:
+    if not trigger_type or priority < 60:
         try:
             from src.propensity import propensity_scorer
             score = propensity_scorer.get_score(user_id)
-            if score and score >= 60:
-                triggered = True
+            if score and score >= 50:
+                if not trigger_type:
+                    trigger_type = "high_propensity"
+                    voice_profile = "default"
+                priority = max(priority, 55 + min(score - 50, 30))
         except Exception:
             pass
 
-    if triggered:
-        context_user_data['last_proactive_voice_ts'] = _time.time()
-        context_user_data['proactive_voice_count'] = proactive_count + 1
+    prefers_voice = context_user_data.get('prefers_voice', False)
+    voice_opted_in = context_user_data.get('voice_opted_in', False)
+    has_sent_voice = context_user_data.get('voice_message_count', 0) > 0
 
-    return triggered
+    if prefers_voice or voice_opted_in or has_sent_voice:
+        priority += 20
+
+    if priority < 55:
+        return result_no
+
+    _detected_rushed = any(w in lower for w in VOICE_SENTIMENT_TRIGGERS.get("rushed", []))
+    mode = "full"
+    if resp_len > 500:
+        mode = "bridge"
+    if _detected_rushed:
+        mode = "bridge"
+    if trigger_type == "sentiment_rushed":
+        voice_profile = "factual"
+
+    context_user_data['last_smart_voice_ts'] = _time.time()
+    context_user_data['smart_voice_count'] = voice_count + 1
+
+    return {
+        "send": True,
+        "mode": mode,
+        "profile": voice_profile,
+        "trigger": trigger_type,
+        "priority": priority,
+    }
+
+
+def should_send_proactive_voice(user_id: int, message_text: str, context_user_data: dict) -> bool:
+    """Legacy wrapper — calls should_send_smart_voice for backward compatibility."""
+    result = should_send_smart_voice(user_id, message_text, context_user_data)
+    return result.get("send", False)
+
+
+async def generate_voice_bridge(full_response: str, user_message: str, voice_profile: str = "default") -> bytes:
+    """Generate short 2-3 sentence voice bridge for long responses.
+    
+    Instead of reading the entire long response, Алекс says the KEY POINT
+    and a CTA, while the full text goes as a regular message.
+    """
+    from google.genai import types as genai_types
+    from src.config import config as app_config, get_gemini_client
+
+    client = get_gemini_client()
+
+    safe_response = full_response[:800] if len(full_response) > 800 else full_response
+
+    prompt = (
+        "Ты — Алекс, живой консультант WEB4TG Studio. Тебе нужно записать КОРОТКОЕ голосовое (15-20 секунд).\n\n"
+        f"КЛИЕНТ СПРОСИЛ:\n{user_message[:200]}\n\n"
+        f"ПОЛНЫЙ ОТВЕТ (отправится текстом):\n{safe_response}\n\n"
+        "ЗАДАЧА: Скажи голосом ТОЛЬКО главную мысль из ответа + подведи к действию.\n"
+        "Полный текст клиент прочитает сам — тебе НЕ нужно пересказывать всё.\n\n"
+        "СТРУКТУРА:\n"
+        "1. Обращение к сути вопроса (1 предложение)\n"
+        "2. Ключевой факт или цифра из ответа (1 предложение)\n"
+        "3. Мини-CTA: 'Детали написал текстом — глянь, и если что, спрашивай'\n\n"
+        "СТИЛЬ:\n"
+        "- Говори как живой человек, не как бот\n"
+        "- Используй 1-2 тега ElevenLabs: [warm], [excited], [curious], [confident], [friendly]\n"
+        "- Тег в начале: '[warm] Слушай, тут вот какая история...'\n"
+        "- 150-300 символов максимум\n"
+        "- НЕТ markdown, emoji, списков\n"
+        "- Числа словами: 'сто пятьдесят тысяч'\n"
+        "- WEB4TG Studio — по-английски\n"
+        "- Верни ТОЛЬКО текст для озвучки"
+    )
+
+    try:
+        response = await asyncio.to_thread(
+            client.models.generate_content,
+            model=app_config.model_name,
+            contents=[prompt],
+            config=genai_types.GenerateContentConfig(
+                max_output_tokens=400,
+                temperature=0.6
+            )
+        )
+
+        if response.text:
+            bridge_text = response.text.strip().strip('"').strip("'").strip('\u201c').strip('\u201d')
+            bridge_text = re.sub(r'\*+', '', bridge_text)
+            bridge_text = re.sub(r'#+\s*', '', bridge_text)
+            bridge_text = re.sub(r'[\U0001F600-\U0001F64F\U0001F300-\U0001F5FF\U0001F680-\U0001F6FF]+', '', bridge_text)
+            clean = re.sub(r'\[\w[\w\s]*?\]\s*', '', bridge_text)
+            if 50 < len(clean) < 400:
+                return await generate_voice_response(bridge_text, voice_profile=voice_profile)
+
+    except Exception as e:
+        logger.warning(f"Voice bridge generation failed: {e}")
+
+    summary = _make_text_summary(full_response, max_len=250)
+    bridge_fallback = f"[warm] {summary}"
+    return await generate_voice_response(bridge_fallback, voice_profile=voice_profile)
 
 
 def _make_text_summary(full_text: str, max_len: int = 300) -> str:
