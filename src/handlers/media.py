@@ -850,9 +850,13 @@ async def generate_voice_bridge(full_response: str, user_message: str, voice_pro
     except Exception as e:
         logger.warning(f"Voice bridge generation failed: {e}")
 
-    summary = _make_text_summary(full_response, max_len=250)
-    bridge_fallback = f"[warm] {summary}"
-    return await generate_voice_response(bridge_fallback, voice_profile=voice_profile)
+    try:
+        summary = _make_text_summary(full_response, max_len=250)
+        bridge_fallback = f"[warm] {summary}"
+        return await generate_voice_response(bridge_fallback, voice_profile=voice_profile)
+    except Exception as fb_err:
+        logger.error(f"Voice bridge fallback also failed: {fb_err}")
+        raise
 
 
 def _make_text_summary(full_text: str, max_len: int = 300) -> str:

@@ -829,49 +829,63 @@ async def message_handler(update: Update, context: ContextTypes.DEFAULT_TYPE) ->
                 user.id, user_message, user_data, response_text=response
             )
             if voice_decision.get("send"):
-                try:
-                    voice_mode = voice_decision.get("mode", "full")
-                    voice_profile = voice_decision.get("profile", "default")
-                    voice_trigger = voice_decision.get("trigger", "unknown")
+                voice_mode = voice_decision.get("mode", "full")
+                voice_profile = voice_decision.get("profile", "default")
+                voice_trigger = voice_decision.get("trigger", "unknown")
 
-                    await chat.send_action(ChatAction.RECORD_VOICE)
+                for _sv_attempt in range(2):
+                    try:
+                        await chat.send_action(ChatAction.RECORD_VOICE)
 
-                    if voice_mode == "bridge":
-                        voice_audio = await generate_voice_bridge(
-                            response, user_message, voice_profile=voice_profile
-                        )
-                        await message.reply_voice(voice=voice_audio)
-
-                        if len(response) > 4096:
-                            chunks = [response[i:i+4096] for i in range(0, len(response), 4096)]
-                            for i, chunk in enumerate(chunks):
-                                if i == len(chunks) - 1:
-                                    await message.reply_text(chunk, reply_markup=reply_markup)
-                                else:
-                                    await message.reply_text(chunk)
+                        if voice_mode == "bridge":
+                            voice_audio = await generate_voice_bridge(
+                                response, user_message, voice_profile=voice_profile
+                            )
                         else:
-                            await message.reply_text(response, reply_markup=reply_markup)
-                    else:
-                        voice_audio = await generate_voice_response(
-                            response, voice_profile=voice_profile
-                        )
+                            voice_audio = await generate_voice_response(
+                                response, voice_profile=voice_profile
+                            )
+
+                        if not voice_audio or len(voice_audio) < 100:
+                            raise RuntimeError(f"Voice audio too small: {len(voice_audio) if voice_audio else 0} bytes")
+
                         await message.reply_voice(voice=voice_audio)
 
-                        text_summary = _make_text_summary(response)
-                        summary_msg = f"👆 Голосовое сообщение\n\n{text_summary}"
-                        await message.reply_text(summary_msg, reply_markup=reply_markup)
+                        if voice_mode == "bridge":
+                            if len(response) > 4096:
+                                chunks = [response[i:i+4096] for i in range(0, len(response), 4096)]
+                                for i, chunk in enumerate(chunks):
+                                    if i == len(chunks) - 1:
+                                        await message.reply_text(chunk, reply_markup=reply_markup)
+                                    else:
+                                        await message.reply_text(chunk)
+                            else:
+                                await message.reply_text(response, reply_markup=reply_markup)
+                        else:
+                            text_summary = _make_text_summary(response)
+                            summary_msg = f"👆 Голосовое сообщение\n\n{text_summary}"
+                            await message.reply_text(summary_msg, reply_markup=reply_markup)
 
-                    smart_voice_sent = True
-                    lead_manager.log_event("smart_voice_sent", user.id, {
-                        "trigger": voice_trigger,
-                        "mode": voice_mode,
-                        "profile": voice_profile,
-                        "priority": voice_decision.get("priority", 0),
-                        "message_preview": user_message[:100]
-                    })
-                except Exception as voice_err:
-                    logger.warning(f"Smart voice failed for user {user.id}: {voice_err}")
-                    smart_voice_sent = False
+                        smart_voice_sent = True
+                        lead_manager.log_event("smart_voice_sent", user.id, {
+                            "trigger": voice_trigger,
+                            "mode": voice_mode,
+                            "profile": voice_profile,
+                            "priority": voice_decision.get("priority", 0),
+                            "audio_size": len(voice_audio),
+                            "attempt": _sv_attempt + 1,
+                            "message_preview": user_message[:100]
+                        })
+                        logger.info(f"Smart voice SENT to user {user.id} (trigger={voice_trigger}, mode={voice_mode}, profile={voice_profile}, attempt={_sv_attempt+1}, size={len(voice_audio)})")
+                        break
+                    except Exception as voice_err:
+                        logger.warning(f"Smart voice attempt {_sv_attempt+1} failed for user {user.id}: {type(voice_err).__name__}: {voice_err}")
+                        if _sv_attempt == 0:
+                            await asyncio.sleep(1)
+
+                if not smart_voice_sent:
+                    logger.error(f"Smart voice FAILED for user {user.id} after 2 attempts (trigger={voice_trigger}), falling back to text")
+                    user_data['smart_voice_count'] = max(0, user_data.get('smart_voice_count', 1) - 1)
         except ImportError:
             pass
 

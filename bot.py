@@ -326,12 +326,26 @@ async def _send_voice_supplement(bot, user_id: int, text_message: str) -> bool:
         if not voice_text:
             voice_text = _get_random_voice_fallback()
 
-        await bot.send_chat_action(chat_id=user_id, action=ChatAction.RECORD_VOICE)
-        voice_audio = await generate_voice_response(voice_text, voice_profile="greeting")
-        await bot.send_voice(chat_id=user_id, voice=voice_audio)
-        return True
+        for _vs_attempt in range(2):
+            try:
+                await bot.send_chat_action(chat_id=user_id, action=ChatAction.RECORD_VOICE)
+                voice_audio = await generate_voice_response(voice_text, voice_profile="greeting")
+
+                if not voice_audio or len(voice_audio) < 100:
+                    raise RuntimeError(f"Voice supplement audio too small: {len(voice_audio) if voice_audio else 0} bytes")
+
+                await bot.send_voice(chat_id=user_id, voice=voice_audio)
+                logger.info(f"Voice supplement SENT to {user_id} ({len(voice_audio)} bytes, attempt {_vs_attempt+1})")
+                return True
+            except Exception as e:
+                logger.warning(f"Voice supplement attempt {_vs_attempt+1} failed for {user_id}: {type(e).__name__}: {e}")
+                if _vs_attempt == 0:
+                    await asyncio.sleep(1)
+
+        logger.error(f"Voice supplement FAILED for {user_id} after 2 attempts")
+        return False
     except Exception as e:
-        logger.warning(f"Voice supplement failed for {user_id}: {e}")
+        logger.warning(f"Voice supplement setup failed for {user_id}: {e}")
         return False
 
 

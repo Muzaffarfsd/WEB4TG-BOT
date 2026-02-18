@@ -382,7 +382,20 @@ class BroadcastManager:
                     voice_text = await _generate_broadcast_voice_supplement(broadcast_text)
                     if voice_text:
                         from src.handlers.media import generate_voice_response
-                        voice_supplement_audio = await generate_voice_response(voice_text, voice_profile="greeting")
+                        for _bc_attempt in range(2):
+                            try:
+                                audio = await generate_voice_response(voice_text, voice_profile="greeting")
+                                if audio and len(audio) > 100:
+                                    voice_supplement_audio = audio
+                                    logger.info(f"Broadcast voice supplement generated: {len(audio)} bytes (attempt {_bc_attempt+1})")
+                                    break
+                                else:
+                                    logger.warning(f"Broadcast voice supplement too small: {len(audio) if audio else 0} bytes")
+                            except Exception as ve:
+                                logger.warning(f"Broadcast voice supplement attempt {_bc_attempt+1} failed: {ve}")
+                                if _bc_attempt == 0:
+                                    import asyncio as _aio
+                                    await _aio.sleep(1)
         except Exception as e:
             logger.warning(f"Broadcast voice supplement pre-generation failed: {e}")
 
