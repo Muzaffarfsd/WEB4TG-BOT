@@ -111,12 +111,15 @@ async def callback_handler(update: Update, context: ContextTypes.DEFAULT_TYPE) -
         )
     
     elif data == "menu_portfolio":
-        await query.edit_message_text(
-            PORTFOLIO_MESSAGE,
-            parse_mode="Markdown",
-            reply_markup=get_portfolio_keyboard()
-        )
+        from src.portfolio_showcase import get_portfolio_menu
+        text, keyboard = get_portfolio_menu()
+        await query.edit_message_text(text, parse_mode="HTML", reply_markup=keyboard)
     
+    elif data == "menu_compare":
+        from src.package_comparison import get_comparison_view
+        text, keyboard = get_comparison_view()
+        await query.edit_message_text(text, parse_mode="HTML", reply_markup=keyboard)
+
     elif data == "menu_calculator":
         analytics.track(user_id, FunnelEvent.CALCULATOR_OPEN)
         calc = calculator_manager.get_calculation(user_id)
@@ -1413,7 +1416,7 @@ async def callback_handler(update: Update, context: ContextTypes.DEFAULT_TYPE) -
         text, keyboard = get_timeline_view(pkg_id)
         await query.edit_message_text(text, parse_mode="HTML", reply_markup=keyboard)
 
-    elif data == "menu_portfolio" or data == "portfolio_cases":
+    elif data == "portfolio_cases":
         from src.portfolio_showcase import get_portfolio_menu
         text, keyboard = get_portfolio_menu()
         await query.edit_message_text(text, parse_mode="HTML", reply_markup=keyboard)
@@ -1424,7 +1427,7 @@ async def callback_handler(update: Update, context: ContextTypes.DEFAULT_TYPE) -
         text, keyboard = get_case_detail(case_id)
         await query.edit_message_text(text, parse_mode="HTML", reply_markup=keyboard)
 
-    elif data == "book_consult":
+    elif data in ("book_consult", "book_consultation"):
         try:
             from src.feedback_loop import feedback_loop
             feedback_loop.record_outcome(user_id, 'callback_booking')
@@ -1596,26 +1599,17 @@ async def callback_handler(update: Update, context: ContextTypes.DEFAULT_TYPE) -
         text, keyboard = buy_gift(user_id, gift_id)
         await query.edit_message_text(text, parse_mode="HTML", reply_markup=keyboard)
 
-    elif data == "request_manager":
-        import os
-        from src.leads import lead_manager, LeadPriority
-        lead_manager.create_lead(user_id=user_id, username=query.from_user.username, first_name=query.from_user.first_name)
-        lead_manager.update_lead(user_id, score=40, priority=LeadPriority.HOT)
+    elif data == "ai_coach_analyze":
         await query.edit_message_text(
-            "📞 <b>Запрос передан менеджеру!</b>\n\nОн свяжется с вами в ближайшее время.",
+            "📊 <b>AI-коуч анализирует ваши диалоги...</b>\n\n"
+            "Для полного анализа обратитесь к менеджеру — он подготовит "
+            "персональные рекомендации по улучшению конверсии.",
             parse_mode="HTML",
-            reply_markup=InlineKeyboardMarkup([[InlineKeyboardButton("◀️ Меню", callback_data="menu_back")]])
+            reply_markup=InlineKeyboardMarkup([
+                [InlineKeyboardButton("👨‍💼 Связаться с менеджером", callback_data="request_manager")],
+                [InlineKeyboardButton("◀️ Назад в меню", callback_data="menu_back")]
+            ])
         )
-        manager_id = os.environ.get("MANAGER_CHAT_ID")
-        if manager_id:
-            try:
-                await context.bot.send_message(
-                    int(manager_id),
-                    f"🔔 Запрос менеджера\n👤 {query.from_user.first_name} (@{query.from_user.username or 'нет'})\n🆔 {user_id}",
-                    parse_mode="HTML"
-                )
-            except Exception:
-                pass
 
     else:
         logger.warning(f"Unknown callback_data: {data} from user {user_id}")
