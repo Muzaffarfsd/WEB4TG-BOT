@@ -40,6 +40,17 @@ FOLLOW_UP_SCHEDULES = {
     ],
 }
 
+FOLLOWUP_SYSTEM_PROMPT = """Ты — Алекс, живой консультант WEB4TG Studio. Пишешь follow-up сообщение клиенту.
+
+КРИТИЧЕСКИЕ ПРАВИЛА:
+- Пиши ТОЛЬКО на русском языке. Ни одного английского слова.
+- Выведи ТОЛЬКО готовый текст сообщения — ничего больше.
+- НЕ пиши свои рассуждения, анализ, план, заметки.
+- НЕ нумеруй варианты (#1, #2...).
+- НЕ используй markdown, списки, заголовки.
+- Максимум 3-4 коротких предложения.
+- Без кавычек вокруг текста."""
+
 FOLLOW_UP_PROMPTS = {
     1: """Ты — Алекс, живой консультант WEB4TG Studio. НЕ бот, НЕ автоответчик.
 
@@ -78,7 +89,7 @@ FOLLOW_UP_PROMPTS = {
 "{client_name}, тут интересная штука — посчитал потенциальную экономию для твоего бизнеса. Результат удивил даже меня, если честно. Скинуть?"
 "Наткнулся на свежее исследование по твоей нише — 67% клиентов уходят к конкуренту, если нет удобного приложения. У тебя как с этим?"
 
-Напиши ТОЛЬКО текст, без кавычек.""",
+ВАЖНО: Пиши ТОЛЬКО на русском. Ни одного английского слова. Выведи ТОЛЬКО готовый текст — без рассуждений, анализа, нумерации вариантов.""",
 
     2: """Ты — Алекс, живой консультант WEB4TG Studio. НЕ бот, НЕ автоответчик.
 
@@ -117,7 +128,7 @@ FOLLOW_UP_PROMPTS = {
 "{client_name}, знаешь что сказал владелец салона после запуска мини-аппа? 'Администратор наконец-то занимается клиентами, а не телефоном'. Записи выросли на 43%. Могу показать демо"
 "Интересный результат — интернет-магазин одежды добавил каталог в Telegram, конверсия в покупку выросла с 2% до 8.5%. Владелица была в шоке. Хочешь глянуть как это выглядит?"
 
-Напиши ТОЛЬКО текст, без кавычек.""",
+ВАЖНО: Пиши ТОЛЬКО на русском. Ни одного английского слова. Выведи ТОЛЬКО готовый текст — без рассуждений, анализа, нумерации вариантов.""",
 
     3: """Ты — Алекс, живой консультант WEB4TG Studio. НЕ бот, НЕ автоответчик.
 
@@ -155,7 +166,7 @@ FOLLOW_UP_PROMPTS = {
 "{client_name}, собрал для тебя подборку из 5 фич, которые лучше всего работают для бизнеса вроде твоего. Ни к чему не обязывает — просто идеи для вдохновения. Скинуть?"
 "Провёл быстрый анализ — у твоих конкурентов нет нормального приложения в Telegram. Это окно возможностей. Подготовил короткий план, как занять эту нишу первым"
 
-Напиши ТОЛЬКО текст, без кавычек.""",
+ВАЖНО: Пиши ТОЛЬКО на русском. Ни одного английского слова. Выведи ТОЛЬКО готовый текст — без рассуждений, анализа, нумерации вариантов.""",
 
     4: """Ты — Алекс, живой консультант WEB4TG Studio. НЕ бот, НЕ автоответчик.
 
@@ -193,7 +204,7 @@ FOLLOW_UP_PROMPTS = {
 "{client_name}, честно — у нас сейчас загрузка 70%, через пару недель будет 100%. Если хочешь стартовать в ближайшее время — лучше забронировать слот сейчас. Ни к чему не обязывает"
 "Заметил интересный тренд — в твоей нише спрос на мини-аппы растёт на 40% в месяц. Те, кто запускаются первыми, снимают сливки. Готов помочь не упустить момент"
 
-Напиши ТОЛЬКО текст, без кавычек.""",
+ВАЖНО: Пиши ТОЛЬКО на русском. Ни одного английского слова. Выведи ТОЛЬКО готовый текст — без рассуждений, анализа, нумерации вариантов.""",
 
     5: """Ты — Алекс, живой консультант WEB4TG Studio. НЕ бот, НЕ автоответчик.
 
@@ -231,7 +242,7 @@ FOLLOW_UP_PROMPTS = {
 "{client_name}, тут подумал с другой стороны — ты тратишь время на рутину (звонки, записи, подтверждения), вместо того чтобы развивать бизнес. Мини-апп не просто привлекает клиентов — он освобождает тебя"
 "Разговаривал с владельцем бизнеса похожего на твой. Он сказал: 'Я думал, приложение — это для больших компаний'. Через месяц после запуска перестал так думать. +200к к выручке"
 
-Напиши ТОЛЬКО текст, без кавычек.""",
+ВАЖНО: Пиши ТОЛЬКО на русском. Ни одного английского слова. Выведи ТОЛЬКО готовый текст — без рассуждений, анализа, нумерации вариантов.""",
 
     6: """Ты — Алекс, живой консультант WEB4TG Studio. НЕ бот, НЕ автоответчик.
 
@@ -271,7 +282,7 @@ FOLLOW_UP_PROMPTS = {
 "Видимо, сейчас другие приоритеты — это нормально. Удачи с бизнесом, и помни — я всегда на связи, если что"
 "{client_name}, не буду больше отвлекать. Оставил для тебя расчёт и план — пригодятся когда решишь вернуться к этой идее"
 
-Напиши ТОЛЬКО текст, без кавычек.""",
+ВАЖНО: Пиши ТОЛЬКО на русском. Ни одного английского слова. Выведи ТОЛЬКО готовый текст — без рассуждений, анализа, нумерации вариантов.""",
 
     7: """Ты — Алекс, живой консультант WEB4TG Studio. НЕ бот, НЕ автоответчик.
 
@@ -310,7 +321,7 @@ FOLLOW_UP_PROMPTS = {
 "Привет! Кое-что новое — теперь делаем мини-аппы с интеграцией оплаты прямо в Telegram. Конверсия в покупку выросла в 3 раза по сравнению с сайтом. Подумал, тебе может быть актуально)"
 "{client_name}, свежие данные — в твоей нише мини-аппы стали стандартом, уже 40% бизнесов используют. Мы как раз обновили портфолио — есть 3 кейса, очень похожие на твой бизнес. Глянешь?"
 
-Напиши ТОЛЬКО текст, без кавычек.""",
+ВАЖНО: Пиши ТОЛЬКО на русском. Ни одного английского слова. Выведи ТОЛЬКО готовый текст — без рассуждений, анализа, нумерации вариантов.""",
 }
 
 FOLLOW_UP_AB_VARIANTS = {
@@ -1060,6 +1071,57 @@ class FollowUpManager:
             logger.debug(f"Silent activity handling failed: {e}")
             return False
 
+    def _validate_followup_text(self, text: str) -> Optional[str]:
+        """Validate and clean AI-generated follow-up text.
+        Returns cleaned text or None if text is invalid."""
+        import re
+
+        if not text or len(text) < 15:
+            return None
+
+        text = text.strip().strip('"').strip("'").strip()
+
+        lines = text.split("\n")
+        cleaned_lines = []
+        for line in lines:
+            line = line.strip()
+            if not line:
+                continue
+            if re.match(r'^#\d+[:\.]', line):
+                continue
+            if re.match(r'^(Note|Let|They|I\'ll|Here|This|My|The|We|So|But|And|Or|Now|First|Second|Third|Option|Variant|Style|Approach|Strategy|Analysis|Plan|Focus|Key|Summary|Result|Conclusion)\b', line, re.IGNORECASE):
+                continue
+            if re.match(r'^\d+\.\s*[A-Z]', line):
+                continue
+            if re.match(r'^[-*]\s+[A-Z]', line):
+                continue
+            cleaned_lines.append(line)
+
+        text = " ".join(cleaned_lines) if cleaned_lines else ""
+
+        if not text or len(text) < 15:
+            return None
+
+        ascii_chars = sum(1 for c in text if c.isascii() and c.isalpha())
+        total_alpha = sum(1 for c in text if c.isalpha())
+        if total_alpha > 0 and ascii_chars / total_alpha > 0.4:
+            logger.warning(f"Follow-up rejected: too much English ({ascii_chars}/{total_alpha} = {ascii_chars/total_alpha:.0%})")
+            return None
+
+        if len(text) > 500:
+            sentences = re.split(r'(?<=[.!?])\s+', text)
+            text = " ".join(sentences[:5])
+
+        if text and text[-1] not in ".!?)»\"'" and len(text) > 30:
+            last_sentence_end = max(text.rfind("."), text.rfind("!"), text.rfind("?"), text.rfind(")"))
+            if last_sentence_end > len(text) * 0.5:
+                text = text[:last_sentence_end + 1]
+            else:
+                logger.warning(f"Follow-up rejected: text appears truncated: ...{text[-30:]}")
+                return None
+
+        return text if len(text) >= 15 else None
+
     async def generate_follow_up_message(self, user_id: int, follow_up_number: int) -> tuple:
         """Generate follow-up message. Returns (message_text, ab_variant)."""
         variant = ""
@@ -1113,13 +1175,15 @@ class FollowUpManager:
             from src.ai_client import ai_client
             result = await ai_client.generate_response(
                 messages=[{"role": "user", "parts": [{"text": prompt}]}],
-                thinking_level="low"
+                thinking_level="low",
+                dynamic_system_prompt=FOLLOWUP_SYSTEM_PROMPT
             )
 
             if result:
-                text = result.strip().strip('"').strip("'")
-                if len(text) > 20:
+                text = self._validate_followup_text(result)
+                if text:
                     return text, variant
+                logger.warning(f"Follow-up AI text rejected for user {user_id}, step {follow_up_number}. Raw: {result[:200]}")
 
         except Exception as e:
             logger.error(f"Failed to generate follow-up message for user {user_id}: {e}")
