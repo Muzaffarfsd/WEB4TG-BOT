@@ -317,31 +317,13 @@ async def start_handler(update: Update, context: ContextTypes.DEFAULT_TYPE) -> N
 
         logger.info(f"Voice greeting: text ready ({len(voice_greeting)} chars), starting TTS for user {user.id}: '{voice_greeting[:150]}'")
 
-        from src.handlers.media import _clean_text_for_voice, _generate_voice_streaming_async, _select_output_format, VOICE_PROFILES as _VP
-        from src.handlers.utils import naturalize_speech, expand_abbreviations, numbers_to_words, apply_stress_marks
-
         for _attempt in range(2):
             try:
-                logger.info(f"Voice greeting: ElevenLabs attempt {_attempt+1} for user {user.id}")
-
-                clean_text = _clean_text_for_voice(voice_greeting)
-                clean_text = naturalize_speech(clean_text)
-                clean_text = expand_abbreviations(clean_text)
-                clean_text = numbers_to_words(clean_text)
-                clean_text = apply_stress_marks(clean_text)
-
-                clean_text = clean_text.rstrip()
-                if clean_text and clean_text[-1] not in '.!?…':
-                    clean_text += '?'
-
-                profile = _VP.get(greeting_profile, _VP["greeting"])
-                output_format = _select_output_format(len(clean_text))
-
-                logger.info(f"Voice greeting: calling ElevenLabs TTS, text={len(clean_text)} chars, format={output_format}")
+                logger.info(f"Voice greeting: attempt {_attempt+1} for user {user.id}")
 
                 voice_audio = await asyncio.wait_for(
-                    _generate_voice_streaming_async(clean_text, profile, output_format),
-                    timeout=30.0
+                    generate_voice_response(voice_greeting, use_cache=False, voice_profile=greeting_profile),
+                    timeout=45.0
                 )
 
                 if not voice_audio or len(voice_audio) < 100:
@@ -358,7 +340,7 @@ async def start_handler(update: Update, context: ContextTypes.DEFAULT_TYPE) -> N
                     pass
                 return
             except asyncio.TimeoutError:
-                logger.error(f"Voice greeting attempt {_attempt+1} TIMED OUT for user {user.id} (30s)")
+                logger.error(f"Voice greeting attempt {_attempt+1} TIMED OUT for user {user.id} (45s)")
                 if _attempt == 0:
                     await asyncio.sleep(1)
             except Exception as e:
